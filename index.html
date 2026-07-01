@@ -56,11 +56,13 @@
     wbs: { title: "WBS", icon: "🗂" },
   };
   // 「個人レイヤー」と「チーム管理レイヤー」を明確にゾーン分け（spec §1.4 / §6.4）
+  // マスタ（人・プロジェクト）は業務データであり設定(config)とは別。チーム管理ゾーンの
+  // 一員として「マスタ管理」1枠に集約し、画面内タブで人／プロジェクトを切替する（spec §6.4）。
   const ZONES = [
     { label: "個人", modules: ["todo", "goals"], admin: [] },
     {
       label: "チーム管理", modules: ["skills", "workload", "wbs"],
-      admin: [{ view: "people", label: "👤 人の管理" }, { view: "projects", label: "📁 プロジェクト管理" }],
+      admin: [{ view: "masters", label: "👥 マスタ管理" }],
     },
   ];
   const LEGACY_KEYS = {
@@ -133,10 +135,8 @@
       mountedModule = MK.modules[view];
       mountedModule.mount(main, ctxFor(view));
       setSettings({ lastModule: view });
-    } else if (view === "people") {
-      renderPeople();
-    } else if (view === "projects") {
-      renderProjects();
+    } else if (view === "masters") {
+      renderMasters();
     } else if (view === "settings") {
       renderSettings();
     } else {
@@ -169,9 +169,28 @@
     nav.appendChild(navBtn("⚙ 設定", "settings"));
   }
 
+  // ---- マスタ管理（人・プロジェクトを画面内タブで切替。spec §6.4）----
+  let mastersTab = "people";
+  function renderMasters() {
+    main.appendChild(el("h2", { class: "mk-section-title", text: "マスタ管理" }));
+    const body = el("div", {});
+    const tabs = MK.ui.pillTabs(
+      [{ key: "people", label: "👤 人" }, { key: "projects", label: "📁 プロジェクト" }],
+      mastersTab,
+      (key) => { mastersTab = key; renderMasterTab(body); }
+    );
+    main.appendChild(tabs);
+    main.appendChild(body);
+    renderMasterTab(body);
+  }
+  function renderMasterTab(body) {
+    body.innerHTML = "";
+    if (mastersTab === "projects") renderProjects(body);
+    else renderPeople(body);
+  }
+
   // ---- 人の管理 ----
-  function renderPeople() {
-    main.appendChild(el("h2", { class: "mk-section-title", text: "人の管理" }));
+  function renderPeople(container) {
     const bar = el("div", { class: "mk-toolbar" });
     const nameInput = el("input", { class: "text-input", placeholder: "氏名を入力して追加", style: "max-width:260px;" });
     const addBtn = el("button", { class: "btn btn-primary", text: "追加" });
@@ -179,9 +198,9 @@
     addBtn.addEventListener("click", add);
     nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
     bar.appendChild(nameInput); bar.appendChild(addBtn);
-    main.appendChild(bar);
+    container.appendChild(bar);
     const host = el("div", { class: "card", style: "padding:0;overflow:hidden;" });
-    main.appendChild(host);
+    container.appendChild(host);
     renderPeopleList(host);
   }
   function renderPeopleList(host) {
@@ -221,8 +240,7 @@
   }
 
   // ---- プロジェクト管理 ----
-  function renderProjects() {
-    main.appendChild(el("h2", { class: "mk-section-title", text: "プロジェクト管理" }));
+  function renderProjects(container) {
     const bar = el("div", { class: "mk-toolbar" });
     const nameInput = el("input", { class: "text-input", placeholder: "プロジェクト名を入力して追加", style: "max-width:300px;" });
     const addBtn = el("button", { class: "btn btn-primary", text: "追加" });
@@ -230,9 +248,9 @@
     addBtn.addEventListener("click", add);
     nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
     bar.appendChild(nameInput); bar.appendChild(addBtn);
-    main.appendChild(bar);
+    container.appendChild(bar);
     const host = el("div", { class: "card", style: "padding:0;overflow:hidden;" });
-    main.appendChild(host);
+    container.appendChild(host);
     renderProjectList(host);
   }
   function renderProjectList(host) {
@@ -418,10 +436,9 @@
   function fld(label, control) { return el("div", { class: "field" }, [el("label", { text: label }), control]); }
   function inp(value, type) { return el("input", { class: "text-input", type: type || "text", value: value || "" }); }
 
-  // マスタ変更時、管理画面表示中なら再描画
+  // マスタ変更時、マスタ管理画面表示中なら再描画
   MK.bus.on("masters:changed", () => {
-    if (current === "people") { main.innerHTML = ""; renderPeople(); }
-    if (current === "projects") { main.innerHTML = ""; renderProjects(); }
+    if (current === "masters") { main.innerHTML = ""; renderMasters(); }
   });
 
   // ---- 起動 ----
