@@ -63,12 +63,32 @@
     const stepInput = ui.input({ placeholder: "ステップを入力して追加", onEnter: (v) => { if (v.trim()) { L().addStep(g.id, v); render(); } } });
     const stepCard = ui.card([ui.toolbar([stepInput, ui.button("追加", { variant: "btn-primary", onClick: () => { if (stepInput.value.trim()) { L().addStep(g.id, stepInput.value); render(); } } })])]);
     if (!g.steps.length) stepCard.appendChild(ui.emptyState("ステップがありません"));
-    else { const curId = L().currentStepId(g); g.steps.forEach((s, idx) => stepCard.appendChild(stepRow(g, s, idx, curId))); }
+    else stepCard.appendChild(staircase(g));
 
     host.appendChild(ui.stack([head, stepCard]));
   }
 
-  function stepRow(g, s, idx, curId) {
+  // 目標（頂上）を上・スタートを下とした階段状レイアウト。
+  // 完了ステップが下から積み上がり頂上へ近づくフロー感を出す（case b / Issue #13）。
+  function staircase(g) {
+    const n = g.steps.length;
+    const curId = L().currentStepId(g);
+    const reached = L().isAchieved(g);
+    const wrap = el("div", { class: "mk-staircase" });
+    // 頂上（目標）— 全ステップの上・最も奥（インデント最大）に置く
+    wrap.appendChild(el("div", { class: "mk-summit" + (reached ? " reached" : ""), style: indent(n) }, [
+      el("span", { class: "mk-summit-flag", text: reached ? "🏁" : "🎯" }),
+      el("span", { text: (g.title || "(無題)") + (reached ? " 到達！" : "") }),
+    ]));
+    // 目標寄り（末尾ステップ=上）→ スタート（先頭=下）へ描画
+    for (let i = n - 1; i >= 0; i--) wrap.appendChild(stairRow(g, g.steps[i], i, curId));
+    return wrap;
+  }
+
+  // 段のインデント（先頭=0、上へ行くほど深くして階段状に見せる。過大な段数は頭打ち）。
+  function indent(i) { const unit = 26, cap = 10; return "margin-left:" + Math.min(i, cap) * unit + "px;"; }
+
+  function stairRow(g, s, idx, curId) {
     const done = s.status === "done";
     const current = s.id === curId;
     const dot = el("div", { class: "mk-step-dot", title: done ? "完了を取り消す" : "完了にする", text: done ? "✓" : String(idx + 1) });
@@ -79,10 +99,11 @@
     const grow = el("div", { class: "grow", style: "cursor:pointer;" }, [titleEl].concat(meta));
     grow.addEventListener("click", () => editStep(g, s));
 
-    return el("div", { class: "mk-step" + (done ? " done" : "") + (current ? " current" : "") }, [
+    // 表示は上=目標寄りのため、視覚の上/下に合わせて moveStep 方向を反転（↑=末尾方向=+1、↓=先頭方向=-1）
+    return el("div", { class: "mk-stair" + (done ? " done" : "") + (current ? " current" : ""), style: indent(idx) }, [
       dot, grow,
-      ui.button("↑", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, -1); render(); } }),
-      ui.button("↓", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, 1); render(); } }),
+      ui.button("↑", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, 1); render(); } }),
+      ui.button("↓", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, -1); render(); } }),
       ui.button("削除", { variant: "btn-ghost", onClick: () => { L().removeStep(g.id, s.id); render(); } }),
     ]);
   }
