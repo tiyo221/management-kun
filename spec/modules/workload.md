@@ -17,11 +17,11 @@
 - モジュール内部 ID は既存採番を踏襲（[`spec.md`](../../spec.md) §4.7）。
 
 ## CSV
-なし（JSON のみ）。必要になれば [`spec.md`](../../spec.md) §4.6 の共通規約に沿って追加する。
+なし（JSON のみ）。必要になれば [`import-migration.md`](../import-migration.md) §4.6 の共通規約に沿って追加する。
 
 ## 旧データ移行
 | 旧キー / 形状 | 移行先 |
 |---|---|
 | （旧キー）`{members, tasks, baseline}` | `members` → `mk:people`（名寄せ。閾値/色は `memberSettings`）、他 → `mk:module:workload:v1` |
 
-移行フロー全体は [`spec.md`](../../spec.md) §7、名寄せは §8 を参照。
+移行フロー全体は [`import-migration.md`](../import-migration.md) §7、名寄せは §8 を参照。
