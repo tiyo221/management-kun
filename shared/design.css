@@ -80,6 +80,7 @@ a { color: var(--color-link-blue); }
 }
 .mk-brand { font-weight: 600; font-size: 16px; white-space: nowrap; }
 .mk-brand .mk-logo { margin-right: var(--space-xs); }
+/* ナビは折り返し表示で見切れ対応（横スクロールは廃止。#3） */
 .mk-nav { display: flex; align-items: center; gap: var(--space-xxs); flex: 1; flex-wrap: wrap; min-width: 0; }
 .mk-nav-sep { width: 1px; align-self: stretch; background: var(--color-hairline); margin: 8px var(--space-xs); }
 .mk-nav-group { align-self: center; font-size: 11px; font-weight: 700; color: var(--color-steel); margin: 0 2px 0 var(--space-xs); white-space: nowrap; }
@@ -97,7 +98,7 @@ a { color: var(--color-link-blue); }
 /* レスポンシブ（375 / 768 / 1280 基準。ブレークポイントはここに集約） */
 @media (max-width: 768px) {
   /* ブランド＋アクションを1段目、ナビを全幅の2段目（横スクロール）に落とす意図的レイアウト */
-  .mk-topnav { flex-wrap: wrap; height: auto; min-height: 56px; padding: 8px var(--space-md); gap: var(--space-sm); }
+  .mk-topnav { flex-wrap: wrap; height: auto; min-height: 56px; padding: var(--space-xs) var(--space-md); gap: var(--space-sm); }
   .mk-brand { font-size: 14px; }
   .mk-nav { order: 3; flex-basis: 100%; }
   .mk-actions .btn { padding: 8px 10px; font-size: 13px; }
