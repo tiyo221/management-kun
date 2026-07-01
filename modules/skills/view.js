@@ -87,7 +87,7 @@
     let content;
     if (!ms.length) content = ui.emptyState("メンバーがいません。「人の管理」で追加してください。");
     else if (!vs.length) content = ui.emptyState("表示中のスキルがありません。");
-    else content = matrixTable(ms, vs, (m, s) => ratingSelect(m.id, s.id));
+    else content = matrixTable(ms, vs, (m, s) => el("td", {}, [ratingSelect(m.id, s.id)]));
     root.appendChild(ui.stack([bar, content]));
   }
   function ratingSelect(mid, sid) {
