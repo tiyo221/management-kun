@@ -1,0 +1,6 @@
+# ローカルツール設定（プレビュー等）
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
