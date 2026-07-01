@@ -223,6 +223,18 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-here { font-size: 11px; font-weight: 700; color: var(--color-primary); margin-left: var(--space-xs); }
 .mk-goal-done-banner { background: var(--tint-mint); color: var(--color-charcoal); border-radius: var(--rounded-md); padding: var(--space-sm) var(--space-md); margin-bottom: var(--space-md); font-weight: 600; }
 [data-theme="dark"] .mk-goal-done-banner { background: #1f3b2a; color: #bdf0cf; }
+
+/* 階段UI（目標=頂上を上・スタートを下、完了ステップが積み上がる。Issue #13） */
+.mk-staircase { display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-sm) 0; }
+.mk-summit { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); font-weight: 700; color: var(--color-ink); }
+.mk-summit-flag { font-size: 18px; }
+.mk-summit.reached { color: var(--color-success); }
+.mk-stair { display: flex; gap: var(--space-sm); align-items: center; padding: var(--space-sm) var(--space-md); border: 1px solid var(--color-hairline); border-radius: var(--rounded-md); background: var(--color-canvas); }
+.mk-stair.done { background: var(--tint-mint); border-color: var(--color-success); }
+.mk-stair.current { border-color: var(--color-primary); box-shadow: 0 0 0 1px var(--color-primary); }
+.mk-stair.done .mk-step-dot { background: var(--color-success); border-color: var(--color-success); }
+.mk-stair.current .mk-step-dot { border-color: var(--color-primary); }
+[data-theme="dark"] .mk-stair.done { background: #1f3b2a; border-color: var(--color-success); }
 .mk-stat { display: inline-block; margin-right: var(--space-xxl); }
 .mk-stat .num { font-size: 32px; font-weight: 700; }
 .mk-stat .lbl { font-size: 13px; color: var(--color-steel); }
