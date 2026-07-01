@@ -32,6 +32,7 @@ modules/
 - `document` / `window` / DOM API / `MK.ui` を**参照しない**（サーバーへ持って行ける純粋さを保つ）。
 - 公開はオブジェクトで: `MK.logic = MK.logic || {}; MK.logic["<id>"] = { load, save, …計算/CRUD, exportData, importData, loadSample };`
 - **副作用は save まで。描画（`render`）は呼ばない**（描画は view の責務）。
+- **公開関数には JSDoc を付ける**（`@param`/`@returns`・副作用・`@typedef`。詳細は [`CODING.md`](CODING.md)）。
 
 **view.js（業務計算を持たない）**
 - DOM 生成・イベント・描画のみ。計算・保存は `MK.logic["<id>"]` に委譲し、更新後に自分で `render()` する。
@@ -68,7 +69,7 @@ modules/
 
 ---
 
-## 3. コード規約（要点。詳細は [`CLAUDE.md`](CLAUDE.md)）
+## 3. コード規約（要点。詳細は [`CODING.md`](CODING.md)）
 - Vanilla JS（ES2020+）。ビルド・外部依存・ES Modules・`fetch` を使わない。公開シンボルは `window.MK`。
 - `var` 禁止（`const`/`let`）、比較は `===`/`!==`、イベントは `addEventListener`。
 - 共有化は2か所以上で必要になってから（先回りの抽象化を避ける）。YAGNI。
@@ -102,7 +103,8 @@ modules/
 2. `modules/<id>/view.js` を作成。`const L = () => MK.logic["<id>"];`、`render()` を `MK.ui` ヘルパで組み、`MK.registerModule("<id>", { title, icon, mount, unmount, exportData:()=>L().exportData(), importData:(d,m)=>L().importData(d,m), loadSample:()=>L().loadSample() })`。
 3. [`index.html`](index.html): `<script src="modules/<id>/logic.js">` → `<script src="modules/<id>/view.js">` の順で追加。ナビの `META` にタイトル/アイコン、`ZONES`（個人／チーム管理）の該当グループに `<id>` を登録。
 4. 旧ツール移行が必要なら `index.html` の `migrateLegacy()` に分岐と `LEGACY_KEYS` を追加。
-5. §6 のチェックリストで点検。
+5. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、[`spec.md`](spec.md) §5 のモジュール一覧に行を追加する。
+6. §6 のチェックリストで点検。
 
 ---
 
@@ -111,6 +113,7 @@ modules/
 **構造**
 - [ ] logic と view がファイル分割され、logic は DOM/`document`/`MK.ui` に触れていない。
 - [ ] view に業務計算が無い（計算は logic に委譲）。logic は `render` を呼ばない。
+- [ ] logic の公開関数に JSDoc（`@param`/`@returns`・副作用）が付いている。
 - [ ] ストアは自分の名前空間 `mk:module:<id>` のみ・mount 非依存。マスタは `MK.people`/`MK.projects` 経由。
 
 **UI・レイアウト**
