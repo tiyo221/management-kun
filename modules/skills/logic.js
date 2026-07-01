@@ -242,6 +242,18 @@
     save(d);
   }
 
+  /**
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   */
+  function summary() {
+    const m = members().length, s = skills().length;
+    return { empty: m === 0 && s === 0, stats: [
+      { label: "メンバー", value: m },
+      { label: "スキル項目", value: s },
+    ] };
+  }
+
   MK.logic = MK.logic || {};
-  MK.logic.skills = { load, save, skills, visibleSkills, members, rating, setRating, domainsOrder, avgLevel, countAtLeast, gapOf, clampLv, addSkill, updateSkill, removeSkill, buildSkillsCSVRows, applySkillsCSV, buildRatingsCSVRows, applyRatingsCSV, exportData, importData, loadSample };
+  MK.logic.skills = { load, save, skills, visibleSkills, members, rating, setRating, domainsOrder, avgLevel, countAtLeast, gapOf, clampLv, addSkill, updateSkill, removeSkill, buildSkillsCSVRows, applySkillsCSV, buildRatingsCSVRows, applyRatingsCSV, summary, exportData, importData, loadSample };
 })();

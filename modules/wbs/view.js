@@ -192,6 +192,7 @@
       refreshPeopleDatalist(); render();
     },
     unmount() { closeOpsMenu(); root = null; },
+    summary() { return L().summary(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },
     loadSample() { L().loadSample(); },

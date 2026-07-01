@@ -183,6 +183,20 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-empty { color: var(--color-steel); padding: var(--space-xxl); text-align: center; }
 .mk-done { text-decoration: line-through; color: var(--color-muted); }
 
+/* ---- HOME ダッシュボード（spec §3.6）---- */
+.mk-home-zone { font-size: 15px; font-weight: 600; color: var(--color-steel); margin: var(--space-xl) 0 var(--space-sm); }
+.mk-home-zone:first-of-type { margin-top: var(--space-sm); }
+.mk-home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-md); }
+.mk-home-card { cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.mk-home-card:hover { border-color: var(--color-primary); box-shadow: rgba(15,15,15,.08) 0 4px 16px -6px; }
+.mk-home-card:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.mk-home-card-head { display: flex; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-md); }
+.mk-home-icon { font-size: 20px; }
+.mk-home-title { font-size: 16px; font-weight: 600; }
+.mk-home-stats { display: flex; flex-wrap: wrap; }
+.mk-home-stats .mk-stat .num { font-size: 26px; }
+.mk-home-empty { padding: var(--space-sm) 0; }
+
 /* ---- ダークモード（spec §6.2。DESIGN.md 未定義のため本アプリ独自の派生配色）---- */
 [data-theme="dark"] {
   --color-canvas: #1f1f1f;

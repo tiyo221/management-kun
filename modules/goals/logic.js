@@ -224,6 +224,18 @@
     ] });
   }
 
+  /**
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   */
+  function summary() {
+    const d = dashboardData();
+    return { empty: d.total === 0, stats: [
+      { label: "達成率", value: d.achieveRate + "%" },
+      { label: "目標数", value: d.total },
+    ] };
+  }
+
   MK.logic = MK.logic || {};
-  MK.logic.goals = { load, save, goals, getGoal, progress, isAchieved, currentStepId, addGoal, updateGoal, removeGoal, addStep, updateStep, toggleStep, removeStep, moveStep, dashboardData, exportData, importData, loadSample };
+  MK.logic.goals = { load, save, goals, getGoal, progress, isAchieved, currentStepId, addGoal, updateGoal, removeGoal, addStep, updateStep, toggleStep, removeStep, moveStep, dashboardData, summary, exportData, importData, loadSample };
 })();

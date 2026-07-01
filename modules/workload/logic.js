@@ -226,6 +226,23 @@
     save(d);
   }
 
+  /**
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
+   * 直近4週の各メンバー平均稼働率をチーム平均し、過負荷（state==="over"）人数を数える。
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   */
+  function summary() {
+    const mem = members(), hasTasks = tasks().length > 0;
+    const weeks = weekMondays(4, 0);
+    let sum = 0, over = 0;
+    mem.forEach((m) => { const st = stats(m.id, weeks); sum += st.avg; if (st.state === "over") over++; });
+    const avg = mem.length ? Math.round(sum / mem.length) : 0;
+    return { empty: !hasTasks, stats: [
+      { label: "平均稼働", value: avg + "%" },
+      { label: "過負荷", value: over },
+    ] };
+  }
+
   MK.logic = MK.logic || {};
-  MK.logic.workload = { STATUS, PERIODS, load, save, tasks, members, warnOf, colorOf, effEnd, weekMondays, series, planSeries, stats, addTask, updateTask, removeTask, tasksOf, saveBaseline, clearBaseline, hasBaseline, exportData, importData, loadSample };
+  MK.logic.workload = { STATUS, PERIODS, load, save, tasks, members, warnOf, colorOf, effEnd, weekMondays, series, planSeries, stats, summary, addTask, updateTask, removeTask, tasksOf, saveBaseline, clearBaseline, hasBaseline, exportData, importData, loadSample };
 })();

@@ -199,11 +199,24 @@
     ] });
   }
 
+  /**
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   *   `empty` はデータ皆無（空状態表示）、`stats` は表示する指標の配列。
+   */
+  function summary() {
+    const c = counts(); // counts() は全ステータスを 0 初期化するため c.done は常に数値
+    return { empty: c.all === 0, stats: [
+      { label: "未完", value: c.all - c.done },
+      { label: "全タスク", value: c.all },
+    ] };
+  }
+
   MK.logic = MK.logic || {};
   MK.logic.todo = {
     STATUSES, load, save, tasks, counts, filtered,
     addTask, updateTask, toggleDone, removeTask,
-    projectNameOf, resolveProject,
+    projectNameOf, resolveProject, summary,
     exportData, importData, loadSample,
   };
 })();

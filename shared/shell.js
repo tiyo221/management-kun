@@ -30,7 +30,7 @@
   // 設定に載っていないビューは route から拒否し、配布用エントリでチーム系ビューへ
   // 到達できないことを担保する。
   const ALLOWED = (function () {
-    const set = { settings: true };
+    const set = { home: true, settings: true };
     ZONES.forEach((z) => {
       (z.modules || []).forEach((id) => { set[id] = true; });
       (z.admin || []).forEach((a) => { set[a.view] = true; });
@@ -109,7 +109,11 @@
     if (MK.modules[view]) {
       mountedModule = MK.modules[view];
       mountedModule.mount(main, ctxFor(view));
+      // lastModule は「モジュール」だけを記録する（特別ビュー home/masters/settings は記録しない）。
+      // これは startView === "last" のときの復元先＝直近に開いていたモジュール（§3.6）に対応する。
       setSettings({ lastModule: view });
+    } else if (view === "home") {
+      renderHome();
     } else if (view === "masters") {
       renderMasters();
     } else if (view === "settings") {
@@ -131,6 +135,56 @@
     return "settings";
   }
 
+  // ---- HOME（玄関ダッシュボード。spec §3.6）----
+  // ZONES を入力にゾーン別セクション＋モジュールのサマリーカードを描画する。配布プロファイル
+  // （member.html）ではチーム管理ゾーンが ZONES に無いため、自動的に「個人」だけになる。
+  function renderHome() {
+    main.appendChild(el("h2", { class: "mk-section-title", text: "🏠 HOME" }));
+    ZONES.forEach((zone) => {
+      // カタログ（META）未知の id だけ除外する。実装済み／未実装（＝準備中カード）はどちらも出す。
+      const mods = (zone.modules || []).filter((id) => META[id]);
+      if (!mods.length) return;
+      main.appendChild(el("h3", { class: "mk-home-zone", text: zone.label }));
+      const grid = el("div", { class: "mk-home-grid" });
+      mods.forEach((id) => grid.appendChild(homeCard(id)));
+      main.appendChild(grid);
+    });
+  }
+
+  function homeCard(id) {
+    const meta = META[id];
+    const mod = MK.modules[id];
+    const card = el("div", { class: "card mk-home-card", role: "button", tabindex: "0" });
+    card.appendChild(el("div", { class: "mk-home-card-head" }, [
+      el("span", { class: "mk-home-icon", text: meta.icon || "" }),
+      el("span", { class: "mk-home-title", text: meta.title }),
+    ]));
+    if (!mod) {
+      card.appendChild(el("div", { class: "sub", text: "準備中" }));
+    } else {
+      let sum = null;
+      // summary は任意契約。例外・未実装でも HOME 全体を壊さない（カードは「開く」表示）。
+      try { if (typeof mod.summary === "function") sum = mod.summary(); }
+      catch (e) { sum = null; console.warn("summary() failed:", id, e); } // 追跡用に記録（HOME は壊さない）
+      if (!sum || !Array.isArray(sum.stats)) {
+        card.appendChild(el("div", { class: "sub", text: "開く" }));
+      } else if (sum.empty) {
+        card.appendChild(el("div", { class: "mk-home-empty sub", text: "データがありません" }));
+      } else {
+        const row = el("div", { class: "mk-home-stats" });
+        sum.stats.forEach((s) => row.appendChild(el("div", { class: "mk-stat" }, [
+          el("div", { class: "num", text: String(s.value) }),
+          el("div", { class: "lbl", text: s.label }),
+        ])));
+        card.appendChild(row);
+      }
+    }
+    const go = () => route(id);
+    card.addEventListener("click", go);
+    card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    return card;
+  }
+
   function navBtn(label, view) {
     const b = el("button", { class: "pill-tab" + (current === view ? " active" : ""), text: label });
     b.addEventListener("click", () => route(view));
@@ -139,6 +193,8 @@
 
   function renderNav() {
     nav.innerHTML = "";
+    nav.appendChild(navBtn("🏠 HOME", "home"));
+    nav.appendChild(el("div", { class: "mk-nav-sep" }));
     ZONES.forEach((zone, zi) => {
       if (zi > 0) nav.appendChild(el("div", { class: "mk-nav-sep" }));
       nav.appendChild(el("span", { class: "mk-nav-group", text: zone.label }));
@@ -280,6 +336,15 @@
       });
     });
     card.appendChild(sample);
+
+    // 起動画面（spec §3.6）
+    card.appendChild(el("h3", { text: "起動画面" }));
+    card.appendChild(el("p", { class: "sub", text: "オンにすると起動時に前回開いていたモジュールを表示します（オフのときは HOME）。" }));
+    const startCb = el("input", { type: "checkbox" });
+    startCb.checked = getSettings().startView === "last";
+    startCb.addEventListener("change", () => setSettings({ startView: startCb.checked ? "last" : "home" }));
+    const startLabel = el("label", { class: "mk-toolbar", style: "gap:8px;cursor:pointer;" }, [startCb, el("span", { text: "起動時に前回のモジュールを開く" })]);
+    card.appendChild(startLabel);
 
     // 旧ツール移行（検出されたら表示。spec §7.5）
     const legacy = Object.keys(LEGACY_KEYS).filter((k) => localStorage.getItem(k) != null);
@@ -432,7 +497,11 @@
   document.getElementById("btn-theme").addEventListener("click", toggleTheme);
   MK.store.load();
   applyTheme(getTheme());
-  route(getSettings().lastModule || firstView());
+  // 起動先: 既定は HOME。設定 startView === "last" のときだけ前回モジュールを復元する（spec §3.6）。
+  const start0 = getSettings();
+  const startView = start0.startView === "last" && start0.lastModule && ALLOWED[start0.lastModule]
+    ? start0.lastModule : "home";
+  route(startView);
 
   const legacyFound = Object.keys(LEGACY_KEYS).some((k) => localStorage.getItem(k) != null);
   if (legacyFound && !getSettings().migration.fromLegacyDone) {

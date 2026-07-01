@@ -314,6 +314,18 @@
     save(d);
   }
 
+  /**
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   */
+  function summary() {
+    const s = stats();
+    return { empty: s.leaves === 0, stats: [
+      { label: "進行中", value: s.inprogress },
+      { label: "進捗", value: s.overall + "%" },
+    ] };
+  }
+
   MK.logic = MK.logic || {};
-  MK.logic.wbs = { STATUS, load, save, tasks, childrenRange, subtreeEnd, isParent, wbsNumbers, summaryOf, hiddenFlags, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, buildCSVRows, exportData, importData, loadSample };
+  MK.logic.wbs = { STATUS, load, save, tasks, childrenRange, subtreeEnd, isParent, wbsNumbers, summaryOf, hiddenFlags, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, buildCSVRows, exportData, importData, loadSample };
 })();
