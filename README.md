@@ -30,6 +30,7 @@ npx --yes http-server -p 8777 -c-1
 | [`spec.md`](spec.md) | **何を作るか**。アーキテクチャ・共通データ規格（JSON/CSV/localStorage）・名寄せ・デザイン統一・MVP/フェーズ。**最上位の正** |
 | [`CLAUDE.md`](CLAUDE.md) | **どう作るか**。作業ガイド・コーディング規約・オーバーエンジニアリング防止・開発ワークフロー |
 | [`CONVENTIONS.md`](CONVENTIONS.md) | UI/レイアウト規約・logic/view 分割・共有資産リファレンス・**新規モジュール追加手順**・完成チェックリスト |
+| [`TESTING.md`](TESTING.md) | テスト指針・変更影響マトリクス・自動テストの実行/書き方（`node test/run.js`） |
 | [`DESIGN.md`](DESIGN.md) | Notion 風デザインシステム（トークン・コンポーネント） |
 
 新しくモジュールを足す・直すときは、まず [`CONVENTIONS.md`](CONVENTIONS.md) を参照する。

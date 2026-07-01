@@ -146,6 +146,7 @@ npx --yes http-server -p 8777 -c-1
 - コミット・プッシュ・PR作成・マージは、ユーザーが明示的に指示したときのみ行う。
 - コミットメッセージ・PR・Issue は日本語で記述する。
 - モジュールの追加・修正は、着手前後に [`CONVENTIONS.md`](CONVENTIONS.md) §6 の完成チェックリストで自己点検する。
+- テストは [`TESTING.md`](TESTING.md) に従う。ロジック変更後は `node test/run.js` を緑にし、変更したモジュール＋依存側（§2 マトリクス）を確認する。
 - **ビルド不要・外部依存ゼロ・`file://` 動作・ローカル完結**を崩さない（ファイルは分割するが、ES Modules / `fetch()` を使わず classic script + `window.MK` で連携する）。
 </content>
 </invoke>
