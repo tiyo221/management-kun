@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>マネジメントくん</title>
+<title>マネジメントくん（個人）</title>
 <link rel="stylesheet" href="shared/design.css">
 </head>
 <body>
@@ -20,18 +20,15 @@
 
 <main class="mk-main" id="mk-main"></main>
 
-<!-- 配布プロファイル（マネージャ用・全部入り）。どのゾーン/モジュールを積むかを宣言する。
-     シェル（shared/shell.js）は window.MK_CONFIG を読んで描画するため、エントリを足しても
-     シェル本体の改修は不要（spec §1.5）。 -->
+<!-- 配布プロファイル（メンバー配布用・個人ツールのみ）。個人ゾーン（todo/goals）だけを積む。
+     チーム系モジュール（skills/workload/wbs）とマスタ管理は zones に載せないためナビにも
+     現れず、画面から到達できない。かつ当該 <script> も読み込まないので、コードもデータ
+     （localStorage）も物理的に存在しない ＝ 見た目・実データの両面で分離される（spec §1.5）。 -->
 <script>
 window.MK_CONFIG = {
-  profile: "manager",
+  profile: "member",
   zones: [
     { label: "個人", modules: ["todo", "goals"], admin: [] },
-    {
-      label: "チーム管理", modules: ["skills", "workload", "wbs"],
-      admin: [{ view: "masters", label: "👥 マスタ管理" }],
-    },
   ],
 };
 </script>
@@ -44,17 +41,11 @@ window.MK_CONFIG = {
 <script src="shared/projects.js"></script>
 <script src="shared/ui.js"></script>
 <script src="shared/sample.js"></script>
-<!-- モジュール（logic → view の順で読み込む。CONVENTIONS §1） -->
+<!-- モジュール（個人ゾーンのみ。logic → view の順。CONVENTIONS §1） -->
 <script src="modules/todo/logic.js"></script>
 <script src="modules/todo/view.js"></script>
 <script src="modules/goals/logic.js"></script>
 <script src="modules/goals/view.js"></script>
-<script src="modules/wbs/logic.js"></script>
-<script src="modules/wbs/view.js"></script>
-<script src="modules/skills/logic.js"></script>
-<script src="modules/skills/view.js"></script>
-<script src="modules/workload/logic.js"></script>
-<script src="modules/workload/view.js"></script>
 
 <!-- シェル（ブートストラップ・ルーター。プロファイル非依存） -->
 <script src="shared/shell.js"></script>
