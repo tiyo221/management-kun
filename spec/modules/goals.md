@@ -24,4 +24,4 @@
 |---|---|
 | `mokuhyo-mieru-kun:v1` `{version, goals}` | `mk:module:goals:v1` |
 
-移行フロー全体は [`spec.md`](../../spec.md) §7 を参照。
+移行フロー全体は [`import-migration.md`](../import-migration.md) §7 を参照。

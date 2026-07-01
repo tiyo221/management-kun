@@ -10,7 +10,7 @@
 GTD ベースの軽量タスク管理。
 
 ## 共通マスタ関係
-`project`（自由文字列）を **Project マスタへ名寄せ**（`projectId` 参照 + 後方互換の文字列保持。[`spec.md`](../../spec.md) §8）。担当者概念は持たない（個人用途のため People は使わない）。
+`project`（自由文字列）を **Project マスタへ名寄せ**（`projectId` 参照 + 後方互換の文字列保持。[`import-migration.md`](../import-migration.md) §8）。担当者概念は持たない（個人用途のため People は使わない）。
 
 ## 固有データ
 - `tasks[]`（`status` = inbox / next / waiting / someday / done、`contexts`、`due` 等）。`mk:module:todo:v1`。
@@ -24,4 +24,4 @@ GTD ベースの軽量タスク管理。
 |---|---|
 | `todo-kun.data.v1` `{version, exportedAt, tasks}` | `mk:module:todo:v1`、`project` 文字列 → Project 名寄せ |
 
-移行フロー全体は [`spec.md`](../../spec.md) §7、名寄せは §8 を参照。
+移行フロー全体は [`import-migration.md`](../import-migration.md) §7、名寄せは §8 を参照。

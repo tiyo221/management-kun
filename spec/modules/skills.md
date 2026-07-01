@@ -17,7 +17,7 @@
 - モジュール内部 ID は既存採番を踏襲（[`spec.md`](../../spec.md) §4.7）。
 
 ## CSV
-ユーザ（マスタ Member へ名寄せ）／スキル／紐づけ の3種を共通 CSV 規約（[`spec.md`](../../spec.md) §4.6）で入出力する。メンバーは**名前**参照で取込時に §8 名寄せへ通す。
+ユーザ（マスタ Member へ名寄せ）／スキル／紐づけ の3種を共通 CSV 規約（[`import-migration.md`](../import-migration.md) §4.6）で入出力する。メンバーは**名前**参照で取込時に §8 名寄せへ通す。
 
 | 種別 | 列 |
 |---|---|
@@ -30,4 +30,4 @@
 |---|---|
 | `skill-tool-data-v1` `{members, skills, ratings}` | `members` → `mk:people`（名寄せ）、`skills` / `ratings` → `mk:module:skills:v1` |
 
-移行フロー全体は [`spec.md`](../../spec.md) §7、名寄せは §8 を参照。
+移行フロー全体は [`import-migration.md`](../import-migration.md) §7、名寄せは §8 を参照。
