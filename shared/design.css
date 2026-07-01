@@ -74,14 +74,13 @@ a { color: var(--color-link-blue); }
 .mk-topnav {
   position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; gap: var(--space-md);
-  height: 56px; padding: 0 var(--space-xl);
+  min-height: 56px; padding: var(--space-xs) var(--space-xl);
   background: var(--color-canvas);
   border-bottom: 1px solid var(--color-hairline);
 }
 .mk-brand { font-weight: 600; font-size: 16px; white-space: nowrap; }
 .mk-brand .mk-logo { margin-right: var(--space-xs); }
-.mk-nav { display: flex; align-items: center; gap: var(--space-xxs); flex: 1; flex-wrap: nowrap; overflow-x: auto; min-width: 0; }
-.mk-nav::-webkit-scrollbar { height: 0; }
+.mk-nav { display: flex; align-items: center; gap: var(--space-xxs); flex: 1; flex-wrap: wrap; min-width: 0; }
 .mk-nav-sep { width: 1px; align-self: stretch; background: var(--color-hairline); margin: 8px var(--space-xs); }
 .mk-nav-group { align-self: center; font-size: 11px; font-weight: 700; color: var(--color-steel); margin: 0 2px 0 var(--space-xs); white-space: nowrap; }
 .mk-actions { display: flex; gap: var(--space-xs); }
