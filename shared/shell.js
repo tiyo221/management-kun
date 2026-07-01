@@ -1,0 +1,440 @@
+/* シェル（ブートストラップ・ルーター）— classic script・window.MK 名前空間。
+   「どのゾーン/どのモジュールを積むか」はエントリHTML側の window.MK_CONFIG から受け取る
+   （配布プロファイル。spec §1.5）。シェル本体はプロファイルに依存しない。 */
+(function () {
+  "use strict";
+  const MK = window.MK;
+  const el = (t, a, c) => MK.util.el(t, a, c);
+
+  // モジュールのメタ（未実装は「準備中」表示）spec §5。全モジュールの表示情報を持つ
+  // カタログ。エントリが積まないモジュールの分は単に参照されないだけで無害。
+  const META = {
+    todo: { title: "ToDo", icon: "✅" },
+    goals: { title: "目標", icon: "🎯" },
+    skills: { title: "スキル", icon: "📊" },
+    workload: { title: "負荷", icon: "📈" },
+    wbs: { title: "WBS", icon: "🗂" },
+  };
+  // ゾーン構成は配布プロファイル（window.MK_CONFIG.zones）から受け取る。未指定なら
+  // マネージャ用の全部入りにフォールバックする（spec §1.4 / §1.5 / §6.4）。
+  const DEFAULT_ZONES = [
+    { label: "個人", modules: ["todo", "goals"], admin: [] },
+    {
+      label: "チーム管理", modules: ["skills", "workload", "wbs"],
+      admin: [{ view: "masters", label: "👥 マスタ管理" }],
+    },
+  ];
+  const CONFIG = window.MK_CONFIG || {};
+  const ZONES = Array.isArray(CONFIG.zones) ? CONFIG.zones : DEFAULT_ZONES;
+  // このプロファイルで到達可能なビュー（ナビに出るもの＋常設の settings）。
+  // 設定に載っていないビューは route から拒否し、配布用エントリでチーム系ビューへ
+  // 到達できないことを担保する。
+  const ALLOWED = (function () {
+    const set = { settings: true };
+    ZONES.forEach((z) => {
+      (z.modules || []).forEach((id) => { set[id] = true; });
+      (z.admin || []).forEach((a) => { set[a.view] = true; });
+    });
+    return set;
+  })();
+  const LEGACY_KEYS = {
+    "mokuhyo-mieru-kun:v1": "goals",
+    "skill-tool-data-v1": "skills",
+    "task-tool-data-v1": "workload",
+    "todo-kun.data.v1": "todo",
+    "wbs-tool-data-v1": "wbs",
+  };
+
+  const main = document.getElementById("mk-main");
+  const nav = document.getElementById("mk-nav");
+  let current = null;          // 現在のビューID
+  let mountedModule = null;    // mount 中のモジュール def
+
+  // ---- 設定 ----
+  function getSettings() {
+    const s = MK.store.read("settings");
+    return s || { version: 1, lastModule: "todo", migration: { fromLegacyDone: false }, ui: {} };
+  }
+  function setSettings(patch) {
+    MK.store.write("settings", Object.assign(getSettings(), patch));
+  }
+
+  // ---- テーマ（ダークモード。spec §6.2）----
+  function getTheme() {
+    const t = getSettings().theme;
+    if (t === "dark" || t === "light") return t;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function applyTheme(theme) {
+    if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
+    else document.documentElement.removeAttribute("data-theme");
+    const btn = document.getElementById("btn-theme");
+    if (btn) { btn.textContent = theme === "dark" ? "☀" : "🌙"; }
+    MK.bus.emit("theme:changed", { theme }); // 将来のグラフ再描画フック
+  }
+  function toggleTheme() {
+    const next = getTheme() === "dark" ? "light" : "dark";
+    setSettings({ theme: next });
+    applyTheme(next);
+  }
+
+  // ---- ctx（モジュールへ渡す契約。spec §3.5）----
+  function ctxFor(id) {
+    return {
+      store: MK.store.scope("module:" + id),
+      people: MK.people,
+      projects: MK.projects,
+      io: MK.io,
+      ui: MK.ui,
+      bus: MK.bus,
+      util: MK.util,
+      settings: {
+        get() { return (getSettings().ui || {})[id] || {}; },
+        set(v) { const s = getSettings(); s.ui = s.ui || {}; s.ui[id] = v; setSettings({ ui: s.ui }); },
+      },
+    };
+  }
+
+  // ---- ルーティング ----
+  function route(view) {
+    // 配布プロファイルに載っていないビュー（例: 個人配布での masters）は先頭ゾーンへ退避
+    if (!ALLOWED[view]) view = firstView();
+    if (mountedModule && typeof mountedModule.unmount === "function") mountedModule.unmount();
+    mountedModule = null;
+    main.innerHTML = "";
+    current = view;
+    renderNav();
+
+    if (MK.modules[view]) {
+      mountedModule = MK.modules[view];
+      mountedModule.mount(main, ctxFor(view));
+      setSettings({ lastModule: view });
+    } else if (view === "masters") {
+      renderMasters();
+    } else if (view === "settings") {
+      renderSettings();
+    } else {
+      // 未実装モジュール
+      const meta = META[view];
+      main.appendChild(el("h2", { class: "mk-section-title", text: (meta ? meta.title : view) + "（準備中）" }));
+      main.appendChild(el("p", { class: "mk-empty", text: "このモジュールは今後のリリースで実装予定です（spec §9）。" }));
+    }
+  }
+
+  // 先頭ゾーンの最初のモジュール（起動・退避先のデフォルト）
+  function firstView() {
+    for (let i = 0; i < ZONES.length; i++) {
+      const mods = ZONES[i].modules || [];
+      if (mods.length) return mods[0];
+    }
+    return "settings";
+  }
+
+  function navBtn(label, view) {
+    const b = el("button", { class: "pill-tab" + (current === view ? " active" : ""), text: label });
+    b.addEventListener("click", () => route(view));
+    return b;
+  }
+
+  function renderNav() {
+    nav.innerHTML = "";
+    ZONES.forEach((zone, zi) => {
+      if (zi > 0) nav.appendChild(el("div", { class: "mk-nav-sep" }));
+      nav.appendChild(el("span", { class: "mk-nav-group", text: zone.label }));
+      (zone.modules || []).forEach((id) => {
+        const m = META[id];
+        if (!m) return; // カタログ未知のモジュールは無視
+        const implemented = !!MK.modules[id];
+        nav.appendChild(navBtn((m.icon ? m.icon + " " : "") + m.title + (implemented ? "" : "・準備中"), id));
+      });
+      (zone.admin || []).forEach((a) => nav.appendChild(navBtn(a.label, a.view)));
+    });
+    nav.appendChild(el("div", { class: "mk-nav-sep" }));
+    nav.appendChild(navBtn("⚙ 設定", "settings"));
+  }
+
+  // ---- マスタ管理（人・プロジェクトを画面内タブで切替。spec §6.4）----
+  let mastersTab = "people";
+  function renderMasters() {
+    main.appendChild(el("h2", { class: "mk-section-title", text: "マスタ管理" }));
+    const body = el("div", {});
+    const tabs = MK.ui.pillTabs(
+      [{ key: "people", label: "👤 人" }, { key: "projects", label: "📁 プロジェクト" }],
+      mastersTab,
+      (key) => { mastersTab = key; renderMasterTab(body); }
+    );
+    main.appendChild(tabs);
+    main.appendChild(body);
+    renderMasterTab(body);
+  }
+  function renderMasterTab(body) {
+    body.innerHTML = "";
+    if (mastersTab === "projects") renderProjects(body);
+    else renderPeople(body);
+  }
+
+  // ---- 人の管理 ----
+  function renderPeople(container) {
+    const bar = el("div", { class: "mk-toolbar" });
+    const nameInput = el("input", { class: "text-input", placeholder: "氏名を入力して追加", style: "max-width:260px;" });
+    const addBtn = el("button", { class: "btn btn-primary", text: "追加" });
+    const add = () => { const n = nameInput.value.trim(); if (n) { MK.people.create({ name: n }); nameInput.value = ""; renderPeopleList(host); } };
+    addBtn.addEventListener("click", add);
+    nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+    bar.appendChild(nameInput); bar.appendChild(addBtn);
+    container.appendChild(bar);
+    const host = el("div", { class: "card", style: "padding:0;overflow:hidden;" });
+    container.appendChild(host);
+    renderPeopleList(host);
+  }
+  function renderPeopleList(host) {
+    host.innerHTML = "";
+    const members = MK.people.all();
+    if (!members.length) { host.appendChild(el("div", { class: "mk-empty", text: "メンバーがいません" })); return; }
+    const ul = el("ul", { class: "mk-list" });
+    members.forEach((m) => {
+      const info = el("div", { class: "grow" }, [
+        el("div", { text: m.name }),
+        el("div", { class: "sub", text: [m.role, m.note].filter(Boolean).join(" / ") }),
+      ]);
+      const edit = el("button", { class: "btn btn-ghost", text: "編集" });
+      edit.addEventListener("click", () => editMember(m, host));
+      const del = el("button", { class: "btn btn-ghost", text: "削除" });
+      del.addEventListener("click", () => MK.ui.confirm(m.name + " を削除しますか？").then((ok) => { if (ok) { MK.people.remove(m.id); renderPeopleList(host); } }));
+      ul.appendChild(el("li", { class: "mk-row" }, [info, edit, del]));
+    });
+    host.appendChild(ul);
+  }
+  function editMember(m, host) {
+    const f = {};
+    const body = el("div", {}, [
+      fld("氏名", (f.name = inp(m.name))),
+      fld("役割", (f.role = inp(m.role))),
+      fld("表示色", (f.color = inp(m.color, "color"))),
+      fld("備考", (f.note = inp(m.note))),
+    ]);
+    MK.ui.modal({ title: "メンバーを編集", body, actions: [
+      { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
+      { label: "保存", variant: "btn-primary", onClick: (c) => {
+          if (!f.name.value.trim()) { MK.ui.toast("氏名を入力してください", "error"); return; }
+          MK.people.update(m.id, { name: f.name.value.trim(), role: f.role.value, color: f.color.value, note: f.note.value });
+          renderPeopleList(host); c();
+        } },
+    ] });
+  }
+
+  // ---- プロジェクト管理 ----
+  function renderProjects(container) {
+    const bar = el("div", { class: "mk-toolbar" });
+    const nameInput = el("input", { class: "text-input", placeholder: "プロジェクト名を入力して追加", style: "max-width:300px;" });
+    const addBtn = el("button", { class: "btn btn-primary", text: "追加" });
+    const add = () => { const n = nameInput.value.trim(); if (n) { MK.projects.create({ name: n }); nameInput.value = ""; renderProjectList(host); } };
+    addBtn.addEventListener("click", add);
+    nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+    bar.appendChild(nameInput); bar.appendChild(addBtn);
+    container.appendChild(bar);
+    const host = el("div", { class: "card", style: "padding:0;overflow:hidden;" });
+    container.appendChild(host);
+    renderProjectList(host);
+  }
+  function renderProjectList(host) {
+    host.innerHTML = "";
+    const list = MK.projects.all();
+    if (!list.length) { host.appendChild(el("div", { class: "mk-empty", text: "プロジェクトがありません" })); return; }
+    const ul = el("ul", { class: "mk-list" });
+    list.forEach((p) => {
+      const info = el("div", { class: "grow" }, [
+        el("div", { text: p.name }),
+        el("div", { class: "sub", text: p.status === "archived" ? "アーカイブ" : "進行中" }),
+      ]);
+      const del = el("button", { class: "btn btn-ghost", text: "削除" });
+      del.addEventListener("click", () => MK.ui.confirm(p.name + " を削除しますか？").then((ok) => { if (ok) { MK.projects.remove(p.id); renderProjectList(host); } }));
+      ul.appendChild(el("li", { class: "mk-row" }, [info, del]));
+    });
+    host.appendChild(ul);
+  }
+
+  // ---- 設定 ----
+  function renderSettings() {
+    main.appendChild(el("h2", { class: "mk-section-title", text: "設定" }));
+    const card = el("div", { class: "card" });
+    card.appendChild(el("h3", { text: "データ" }));
+    card.appendChild(el("p", { class: "sub", text: "全データ（人・プロジェクト・各モジュール）を JSON で書き出し／取り込みできます。" }));
+    const exp = el("button", { class: "btn btn-primary", text: "全体バックアップ（JSON）" });
+    exp.addEventListener("click", exportAll);
+    const imp = el("button", { class: "btn btn-secondary", text: "JSON を取り込む" });
+    imp.addEventListener("click", importAll);
+    card.appendChild(el("div", { class: "mk-toolbar" }, [exp, imp]));
+
+    // サンプルデータ
+    card.appendChild(el("h3", { text: "サンプルデータ" }));
+    card.appendChild(el("p", { class: "sub", text: "動作確認用に、人・プロジェクト・各モジュールへサンプルを投入します（既存データは置き換わります）。" }));
+    const sample = el("button", { class: "btn btn-secondary", text: "サンプルデータを読み込む" });
+    sample.addEventListener("click", () => {
+      MK.ui.confirm("既存データをサンプルで置き換えます。よろしいですか？").then((ok) => {
+        if (!ok) return;
+        MK.sample.load();
+        MK.ui.toast("サンプルデータを読み込みました", "success");
+        route(current);
+      });
+    });
+    card.appendChild(sample);
+
+    // 旧ツール移行（検出されたら表示。spec §7.5）
+    const legacy = Object.keys(LEGACY_KEYS).filter((k) => localStorage.getItem(k) != null);
+    if (legacy.length) {
+      card.appendChild(el("h3", { text: "旧ツールから移行" }));
+      card.appendChild(el("p", { class: "sub", text: "検出: " + legacy.join(", ") }));
+      const mig = el("button", { class: "btn btn-secondary", text: "旧データを取り込む" });
+      mig.addEventListener("click", () => migrateLegacy(legacy));
+      card.appendChild(mig);
+    }
+    main.appendChild(card);
+
+    if (MK.store.errors.length) {
+      const warn = el("div", { class: "card", style: "margin-top:16px;border-color:var(--color-error);" });
+      warn.appendChild(el("h3", { text: "⚠ 破損データ" }));
+      MK.store.errors.forEach((e) => warn.appendChild(el("div", { class: "sub", text: e.key + ": " + e.message })));
+      main.appendChild(warn);
+    }
+  }
+
+  function exportAll() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    const fname = "management-kun-" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + ".json";
+    MK.io.download(fname, MK.io.buildEnvelope("all"));
+    MK.ui.toast("バックアップを書き出しました", "success");
+  }
+
+  function importAll() {
+    const file = el("input", { type: "file", accept: ".json,application/json" });
+    file.addEventListener("change", () => {
+      const f = file.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        let env;
+        try { env = JSON.parse(reader.result); } catch (e) { MK.ui.toast("JSON の読み込みに失敗しました", "error"); return; }
+        MK.ui.modal({
+          title: "取り込み方法",
+          body: el("p", { text: "既存データへの取り込み方法を選んでください。" }),
+          actions: [
+            { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
+            { label: "マージ", variant: "btn-secondary", onClick: (c) => { doImport(env, "merge"); c(); } },
+            { label: "置換", variant: "btn-primary", onClick: (c) => { doImport(env, "replace"); c(); } },
+          ],
+        });
+      };
+      reader.readAsText(f);
+    });
+    file.click();
+  }
+  function doImport(env, mode) {
+    try {
+      MK.io.importEnvelope(env, mode);
+      MK.ui.toast("取り込みました（" + mode + "）", "success");
+      route(current);
+    } catch (e) {
+      MK.ui.toast(String(e.message || e), "error");
+    }
+  }
+
+  // 旧データ移行（MVP: 実装済みモジュールのみ。名寄せは自動作成・spec §7.5/§8.4）
+  function migrateLegacy(keys) {
+    let done = 0;
+    keys.forEach((k) => {
+      const moduleId = LEGACY_KEYS[k];
+      if (!MK.modules[moduleId]) return; // 未実装／未搭載モジュールは対象外
+      let raw;
+      try { raw = JSON.parse(localStorage.getItem(k)); } catch (e) { return; }
+      if (moduleId === "todo") {
+        const tasks = (raw && raw.tasks ? raw.tasks : []).map((t) => ({
+          id: t.id || MK.util.uid("t"),
+          title: t.title || "",
+          notes: t.notes || "",
+          status: t.status || "inbox",
+          contexts: Array.isArray(t.contexts) ? t.contexts : [],
+          projectId: t.project ? MK.projects.resolveOrCreate(t.project) : (t.projectId || null),
+          due: t.due || null,
+          createdAt: t.createdAt || MK.util.nowISO(),
+          updatedAt: t.updatedAt || MK.util.nowISO(),
+          completedAt: t.completedAt || null,
+        }));
+        MK.modules.todo.importData({ version: 1, tasks }, "merge");
+        done++;
+      } else if (moduleId === "wbs") {
+        const tasks = (raw && raw.tasks ? raw.tasks : []).map((t) => ({
+          id: t.id,
+          level: t.level || 0,
+          name: t.name || "",
+          assigneeId: t.assignee ? MK.people.resolveOrCreate(t.assignee) : (t.assigneeId || null),
+          start: t.start || "",
+          end: t.end || "",
+          progress: Number(t.progress) || 0,
+          status: t.status || "notstarted",
+          note: t.note || "",
+          deps: Array.isArray(t.deps) ? t.deps : [],
+          collapsed: !!t.collapsed,
+        }));
+        MK.modules.wbs.importData({ version: 1, uid: raw.uid || 1, tasks }, "replace");
+        done++;
+      } else if (moduleId === "skills") {
+        // メンバー→People、スキル→新ID、評価キーを新IDへ付け替え
+        const memMap = {};
+        (raw.members || []).forEach((m) => { memMap[m.id] = MK.people.resolveOrCreate(m.name); });
+        const skillMap = {};
+        const skills = (raw.skills || []).map((s) => {
+          const nid = MK.util.uid("sk");
+          skillMap[s.id] = nid;
+          return { id: nid, domain: s.domain || "", item: s.item || "", description: s.description || "", visible: s.visible !== false, core: !!s.core, targetLevel: s.targetLevel != null ? s.targetLevel : null, requiredCount: s.requiredCount != null ? s.requiredCount : null };
+        });
+        const ratings = {};
+        Object.keys(raw.ratings || {}).forEach((k) => {
+          const parts = k.split(":");
+          const nm = memMap[parts[0]], ns = skillMap[parts[1]];
+          if (nm && ns) ratings[nm + ":" + ns] = raw.ratings[k];
+        });
+        MK.modules.skills.importData({ version: 1, skills, ratings }, "replace");
+        done++;
+      } else if (moduleId === "workload") {
+        const memMap = {}, memberSettings = {};
+        (raw.members || []).forEach((m) => {
+          const nid = MK.people.resolveOrCreate(m.name);
+          memMap[m.id] = nid;
+          if (m.color) { const ex = MK.people.get(nid); if (ex && !ex.color) MK.people.update(nid, { color: m.color }); }
+          memberSettings[nid] = { high: m.capacityWarnHigh != null ? m.capacityWarnHigh : 80, low: m.capacityWarnLow != null ? m.capacityWarnLow : 60 };
+        });
+        const remap = (list) => (list || []).map((t) => Object.assign({}, t, { id: t.id || MK.util.uid("wt"), memberId: memMap[t.memberId] || null }));
+        const baseline = raw.baseline ? { savedAt: raw.baseline.savedAt || MK.util.todayISO(), tasks: remap(raw.baseline.tasks) } : null;
+        MK.modules.workload.importData({ version: 1, tasks: remap(raw.tasks), baseline, memberSettings }, "replace");
+        done++;
+      }
+    });
+    setSettings({ migration: { fromLegacyDone: true } });
+    MK.ui.toast(done ? (done + " 件のツールを取り込みました") : "取り込める実装済みモジュールがありませんでした", done ? "success" : "info");
+    route(current);
+  }
+
+  // ---- フォーム小物 ----
+  function fld(label, control) { return el("div", { class: "field" }, [el("label", { text: label }), control]); }
+  function inp(value, type) { return el("input", { class: "text-input", type: type || "text", value: value || "" }); }
+
+  // マスタ変更時、マスタ管理画面表示中なら再描画
+  MK.bus.on("masters:changed", () => {
+    if (current === "masters") { main.innerHTML = ""; renderMasters(); }
+  });
+
+  // ---- 起動 ----
+  document.getElementById("btn-export").addEventListener("click", exportAll);
+  document.getElementById("btn-import").addEventListener("click", importAll);
+  document.getElementById("btn-theme").addEventListener("click", toggleTheme);
+  MK.store.load();
+  applyTheme(getTheme());
+  route(getSettings().lastModule || firstView());
+
+  const legacyFound = Object.keys(LEGACY_KEYS).some((k) => localStorage.getItem(k) != null);
+  if (legacyFound && !getSettings().migration.fromLegacyDone) {
+    MK.ui.toast("旧ツールのデータが見つかりました。「設定」から移行できます。", "info");
+  }
+})();
