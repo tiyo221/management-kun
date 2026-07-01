@@ -53,7 +53,8 @@
   // ---- 設定 ----
   function getSettings() {
     const s = MK.store.read("settings");
-    return s || { version: 1, lastModule: "todo", migration: { fromLegacyDone: false }, ui: {} };
+    // lastModule はプロファイル非依存にするため既定を持たない（起動時に firstView() へフォールバック）
+    return s || { version: 1, lastModule: null, migration: { fromLegacyDone: false }, ui: {} };
   }
   function setSettings(patch) {
     MK.store.write("settings", Object.assign(getSettings(), patch));
