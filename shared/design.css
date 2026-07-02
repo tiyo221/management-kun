@@ -183,6 +183,14 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-empty { color: var(--color-steel); padding: var(--space-xxl); text-align: center; }
 .mk-done { text-decoration: line-through; color: var(--color-muted); }
 
+/* ---- スコープ次元スイッチャ（spec §3.7）---- */
+.mk-scope-bar { display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-lg); }
+.mk-scope-label { font-size: 11px; font-weight: 700; color: var(--color-steel); text-transform: uppercase; letter-spacing: .04em; }
+.mk-scope-current { font-size: 15px; font-weight: 600; }
+.mk-scope-select { max-width: 300px; }
+.mk-scope-empty { text-align: center; }
+.mk-scope-empty .btn { margin-top: var(--space-md); }
+
 /* ---- HOME ダッシュボード（spec §3.6）---- */
 .mk-home-zone { font-size: 15px; font-weight: 600; color: var(--color-steel); margin: var(--space-xl) 0 var(--space-sm); }
 .mk-home-zone:first-of-type { margin-top: var(--space-sm); }

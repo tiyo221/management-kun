@@ -26,6 +26,13 @@
 <script>
 window.MK_CONFIG = {
   profile: "manager",
+  // スコープ次元（§3.7）: 「その中に入って作業する対象」になれるマスタを宣言的に列挙する。
+  // 実装配線は現状 Project の1次元のみ。将来 Product はこの配列に1行足す＋モジュールを足す
+  // だけで増える（コードは "project" を決め打ちしない。§3.7.6 / CONVENTIONS §3）。
+  dimensions: [
+    { dim: "project", label: "プロジェクト", master: "projects" },
+    // 将来: { dim: "product", label: "プロダクト", master: "products" }
+  ],
   zones: [
     { label: "自分", modules: ["todo", "goals"], admin: [] },
     {
@@ -40,6 +47,7 @@ window.MK_CONFIG = {
 <!-- 共有資産（classic script・window.MK 名前空間。spec §3.3） -->
 <script src="shared/core.js"></script>
 <script src="shared/store.js"></script>
+<script src="shared/scope.js"></script>
 <script src="shared/io.js"></script>
 <script src="shared/people.js"></script>
 <script src="shared/projects.js"></script>

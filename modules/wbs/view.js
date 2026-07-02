@@ -186,7 +186,11 @@
 
   MK.registerModule("wbs", {
     title: "WBS", icon: "🗂",
-    mount(container) {
+    // Project 次元に属する scoped モジュール（§3.7.3）。シェルが現在の Project の
+    // 対象別 store を ctx.store で渡してくるので、それに束ねてから描画する。
+    scope: { dim: "project" },
+    mount(container, ctx) {
+      if (ctx && ctx.store) L().setStore(ctx.store);
       root = el("div"); container.appendChild(root);
       if (!document.getElementById("mk-people-list")) document.body.appendChild(el("datalist", { id: "mk-people-list" }));
       refreshPeopleDatalist(); render();

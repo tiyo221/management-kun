@@ -2,7 +2,11 @@
 (function () {
   "use strict";
   const MK = window.MK;
-  const store = MK.store.scope("module:wbs");
+  // 既定は従来の単一 namespace。scoped 化（§3.7.4）に伴い、シェルが mount 時に対象別 store
+  // （mk:module:wbs:<projectId>:v1）を渡してくるので setStore で差し替える。旧データ移行と
+  // export/import の対象別対応は #25 で扱う。
+  let store = MK.store.scope("module:wbs");
+  function setStore(s) { if (s) store = s; }
 
   /**
    * WBS タスク1件。フラット配列で保持し、level で階層を表現する。
@@ -327,5 +331,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.wbs = { STATUS, load, save, tasks, childrenRange, subtreeEnd, isParent, wbsNumbers, summaryOf, hiddenFlags, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, buildCSVRows, exportData, importData, loadSample };
+  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, wbsNumbers, summaryOf, hiddenFlags, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, buildCSVRows, exportData, importData, loadSample };
 })();
