@@ -13,6 +13,7 @@
     goals: { title: "目標", icon: "🎯" },
     skills: { title: "スキル", icon: "📊" },
     workload: { title: "負荷", icon: "📈" },
+    staffing: { title: "要員計画", icon: "🧑‍🤝‍🧑" },
     wbs: { title: "WBS", icon: "🗂" },
   };
   // ゾーン構成は配布プロファイル（window.MK_CONFIG.zones）から受け取る。未指定なら
@@ -22,7 +23,7 @@
   const DEFAULT_ZONES = [
     { label: "自分", modules: ["todo", "goals"], admin: [] },
     {
-      label: "ピープル", modules: ["skills", "workload"],
+      label: "ピープル", modules: ["skills", "workload", "staffing"],
       admin: [{ view: "master-people", label: "👤 人" }],
     },
     { label: "デリバリー", modules: ["wbs"], admin: [{ view: "master-projects", label: "📁 プロジェクト" }] },

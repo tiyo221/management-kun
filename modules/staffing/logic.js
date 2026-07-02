@@ -1,0 +1,151 @@
+/* モジュール staffing（要員計画）— ロジック（PJ横断のアサイン集約・空き要員算出）。DOM/UI に触れない。CONVENTIONS §1
+   People を主語に Project 次元を横断集約する cross ビュー（spec §3.7.5）。
+   データ源は workload の共有アロケーション（#26）のみ。自前の永続データは持たない（読み取り専用の横断ビュー）。
+   WBS の担当（assigneeId）等、各モジュールの内部データは覗かない＝モジュール独立を維持する。 */
+(function () {
+  "use strict";
+  const MK = window.MK;
+
+  // 総キャパシティ既定値(%)。メンバー個別キャパのマスタは持たない（YAGNI）。空き＝キャパ − 全器割当合計。
+  const DEFAULT_CAPACITY = 100;
+
+  /**
+   * 器（Project 等）1件の表示情報。次元 config を回して集めるためコードで "project" を決め打ちしない（§3.7.6）。
+   * @typedef {Object} Target
+   * @property {string} id - 器のID（対象マスタの id）
+   * @property {string} name - 表示名
+   * @property {string} dim - 次元キー（既定 "project"・将来 "product"）
+   */
+
+  /**
+   * データ源＝workload の共有アロケーション一覧を返す（横断ビューの唯一の読み取り入口。§3.7.5）。
+   * workload logic 未ロード時は空配列（HOME 等での安全なフォールバック）。
+   * @returns {Object[]} アロケーション一覧（workload の Allocation 形状）
+   */
+  function alloc() { const w = MK.logic && MK.logic.workload; return (w && typeof w.allocations === "function") ? w.allocations() : []; }
+  /**
+   * 対象メンバー一覧を People マスタから返す（横断参照。scope で縛らない。§3.7.3）。
+   * @returns {Array<Object>} メンバー一覧（MK.people のレコード）
+   */
+  function members() { return MK.people.all(); }
+  /**
+   * 全次元の器（Project 等）を平坦化して返す。次元 config（MK_CONFIG.dimensions）を回すため "project" 決め打ちしない。
+   * @returns {Target[]} 器の一覧（対象マスタ 0 件なら空配列）
+   */
+  function targets() {
+    const list = [];
+    ((MK.scope && MK.scope.dims()) || []).forEach((dim) => {
+      const master = MK.scope.master(dim);
+      if (master && typeof master.all === "function") master.all().forEach((e) => list.push({ id: e.id, name: e.name || "(無題)", dim: dim.dim }));
+    });
+    return list;
+  }
+  /**
+   * 総キャパシティ(%)を返す（現状は既定値の定数。将来メンバー個別化する場合の拡張点）。
+   * @param {string} [mid] - メンバーID（現状未使用）
+   * @returns {number} 総キャパシティ(%)
+   */
+  function capacityOf(mid) { return DEFAULT_CAPACITY; } // eslint-disable-line no-unused-vars
+
+  /**
+   * 指定メンバー×指定器×指定日の割当率を合算する純関数（アサイン表の1セル）。
+   * 同一メンバー・同一器に期間の重なる複数アロケーションがあれば合算する。
+   * @param {Object[]} allocations - 対象アロケーション一覧
+   * @param {string} mid - メンバーID
+   * @param {string} targetId - 器のID
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @returns {number} 割当率(%)
+   */
+  function cellPercent(allocations, mid, targetId, date) {
+    let s = 0;
+    (allocations || []).forEach((a) => {
+      if (a.memberId !== mid || a.targetId !== targetId) return;
+      if (a.startDate && a.endDate && a.startDate <= date && date <= a.endDate) s += Number(a.percent) || 0;
+    });
+    return s;
+  }
+  /**
+   * 指定メンバー・指定日の全器合計割当率を返す純関数（workload の集計純関数へ委譲＝DRY）。
+   * @param {Object[]} allocations - 対象アロケーション一覧
+   * @param {string} mid - メンバーID
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @returns {number} 合計割当率(%)
+   */
+  function totalPercent(allocations, mid, date) {
+    const w = MK.logic && MK.logic.workload;
+    if (w && typeof w.allocationPercentOn === "function") return w.allocationPercentOn(allocations, mid, date);
+    // フォールバック（workload 未ロード時）: 全器を跨いで合算する
+    let s = 0; (allocations || []).forEach((a) => { if (a.memberId !== mid) return; if (a.startDate && a.endDate && a.startDate <= date && date <= a.endDate) s += Number(a.percent) || 0; }); return s;
+  }
+  /**
+   * 指定メンバー・指定日の空き要員(%)を返す純関数（= キャパ − 全器合計割当）。
+   * 過剰アサインを可視化するため負値はクランプしない（100超の割当は負の空きとして表れる）。
+   * @param {Object[]} allocations - 対象アロケーション一覧
+   * @param {string} mid - メンバーID
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @param {number} [capacity] - 総キャパシティ(%)（既定 100）
+   * @returns {number} 空き(%)（過剰アサイン時は負値）
+   */
+  function freeOn(allocations, mid, date, capacity) {
+    const cap = capacity == null ? DEFAULT_CAPACITY : capacity;
+    return cap - totalPercent(allocations, mid, date);
+  }
+  /**
+   * 期間軸（週の月曜サンプル）での空き系列を返す純関数（#27「期間軸で算出・表示」）。
+   * @param {Object[]} allocations - 対象アロケーション一覧
+   * @param {string} mid - メンバーID
+   * @param {string[]} weeks - 週開始日（月曜）の配列
+   * @param {number} [capacity] - 総キャパシティ(%)（既定 100）
+   * @returns {number[]} 週ごとの空き(%)
+   */
+  function freeSeries(allocations, mid, weeks, capacity) {
+    return (weeks || []).map((w) => freeOn(allocations, mid, w, capacity));
+  }
+
+  /**
+   * 指定日時点の PJ×メンバー アサイン俯瞰を算出する純関数（横断ビューの中核）。
+   * @param {Object[]} allocations - 対象アロケーション一覧
+   * @param {Array<Object>} memberList - メンバー一覧（People レコード）
+   * @param {Target[]} targetList - 器の一覧
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @param {number} [capacity] - 総キャパシティ(%)（既定 100）
+   * @returns {{
+   *   date: string, capacity: number,
+   *   rows: {target: Target, cells: {memberId: string, percent: number}[], total: number}[],
+   *   memberSummary: {member: Object, assigned: number, free: number, over: boolean}[]
+   * }} 器別の割当行と、メンバー別の割当合計・空き
+   */
+  function overviewOn(allocations, memberList, targetList, date, capacity) {
+    const cap = capacity == null ? DEFAULT_CAPACITY : capacity;
+    const rows = (targetList || []).map((t) => {
+      const cells = (memberList || []).map((m) => ({ memberId: m.id, percent: cellPercent(allocations, m.id, t.id, date) }));
+      const total = cells.reduce((s, c) => s + c.percent, 0);
+      return { target: t, cells, total };
+    });
+    const memberSummary = (memberList || []).map((m) => {
+      const assigned = totalPercent(allocations, m.id, date);
+      return { member: m, assigned, free: cap - assigned, over: assigned > cap };
+    });
+    return { date, capacity: cap, rows, memberSummary };
+  }
+
+  /**
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
+   * 本日時点の各メンバーの空きをチーム平均し、過剰アサイン（割当 > キャパ）人数を数える。
+   * データ源のアロケーションが皆無なら empty=true。
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   */
+  function summary() {
+    const list = alloc(), mem = members(), today = MK.util.todayISO(), cap = DEFAULT_CAPACITY;
+    let freeSum = 0, over = 0;
+    mem.forEach((m) => { const assigned = totalPercent(list, m.id, today); freeSum += cap - assigned; if (assigned > cap) over++; });
+    const avgFree = mem.length ? Math.round(freeSum / mem.length) : 0;
+    return { empty: !list.length, stats: [
+      { label: "平均空き", value: avgFree + "%" },
+      { label: "過剰アサイン", value: over },
+    ] };
+  }
+
+  MK.logic = MK.logic || {};
+  MK.logic.staffing = { DEFAULT_CAPACITY, alloc, members, targets, capacityOf, cellPercent, totalPercent, freeOn, freeSeries, overviewOn, summary };
+})();

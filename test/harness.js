@@ -42,6 +42,7 @@ const SCRIPTS = [
   "shared/people.js", "shared/projects.js", "shared/ui.js", "shared/sample.js",
   "modules/todo/logic.js", "modules/goals/logic.js", "modules/wbs/logic.js",
   "modules/skills/logic.js", "modules/workload/logic.js",
+  "modules/staffing/logic.js",
 ];
 
 function setup() {
