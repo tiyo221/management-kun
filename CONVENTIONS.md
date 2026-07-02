@@ -54,7 +54,7 @@ modules/
 
 ### 2.2 レスポンシブ（崩さない）
 - 検証幅の基準: **375 / 768 / 1280 px**。この3点でヘッダー・テーブル・カード・グラフが破綻しないこと。
-- **ヘッダー（topnav）**: ナビは横スクロール（`flex-wrap:nowrap; overflow-x:auto`）。768px 以下はブランド＋アクションを1段目、ナビを全幅の2段目に落とす（`design.css` の `@media`）。ピルは `white-space:nowrap; flex:0 0 auto`。
+- **ナビ（サイドバー）**: 左サイドバーにゾーン見出し＋配下モジュールを縦積みする（`.mk-sidebar` / `.mk-nav`。Issue #34）。ゾーン見出し（`.mk-nav-group`）は折りたたみトグルで、状態は `mk:settings.nav` に保持。768px 以下ではサイドバーをオフキャンバスのドロワー化し、`.mk-topbar` のハンバーガー（`#btn-menu`）で開閉、`.mk-sidebar-overlay` クリック／項目選択で閉じる（`design.css` の `@media`）。
 - **テーブル**: 潰さない。`min-width` を持ち狭ければ横スクロール、広ければ `width:100%` で追従し右に空白を作らない（WBS の教訓）。
 - **多ペイン**（goals の一覧＋詳細等）: 狭幅で縦積みにフォールバック（`flex-wrap`）。
 - ブレークポイントは `shared/design.css` の `@media` に集約（各モジュールに散らさない）。

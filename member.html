@@ -8,17 +8,28 @@
 </head>
 <body>
 
-<header class="mk-topnav">
-  <div class="mk-brand"><span class="mk-logo">🗂️</span>マネジメントくん</div>
-  <nav class="mk-nav" id="mk-nav"></nav>
-  <div class="mk-actions">
-    <button class="btn btn-ghost" id="btn-theme" title="テーマ切替">🌙</button>
-    <button class="btn btn-secondary" id="btn-import">取り込み</button>
-    <button class="btn btn-primary" id="btn-export">バックアップ</button>
+<!-- サイドバー構成（Issue #34）。狭幅（≤768px）ではドロワー化し topbar のメニューで開閉する。 -->
+<div class="mk-app">
+  <div class="mk-sidebar-overlay" id="mk-sidebar-overlay"></div>
+  <aside class="mk-sidebar" id="mk-sidebar">
+    <div class="mk-brand"><span class="mk-logo">🗂️</span>マネジメントくん</div>
+    <nav class="mk-nav" id="mk-nav"></nav>
+    <div class="mk-actions">
+      <div class="mk-actions-data">
+        <button class="btn btn-secondary" id="btn-import">取り込み</button>
+        <button class="btn btn-primary" id="btn-export">バックアップ</button>
+      </div>
+      <button class="btn btn-ghost" id="btn-theme" title="テーマ切替">🌙</button>
+    </div>
+  </aside>
+  <div class="mk-content">
+    <header class="mk-topbar">
+      <button class="mk-hamburger" id="btn-menu" aria-label="メニュー" aria-expanded="false">☰</button>
+      <div class="mk-brand"><span class="mk-logo">🗂️</span>マネジメントくん</div>
+    </header>
+    <main class="mk-main" id="mk-main"></main>
   </div>
-</header>
-
-<main class="mk-main" id="mk-main"></main>
+</div>
 
 <!-- 配布プロファイル（メンバー配布用・個人ツールのみ）。自分ゾーン（todo/goals）だけを積む。
      チーム系モジュール（skills/workload/wbs）とマスタ管理は zones に載せないためナビにも
@@ -36,6 +47,7 @@ window.MK_CONFIG = {
 <!-- 共有資産（classic script・window.MK 名前空間。spec §3.3） -->
 <script src="shared/core.js"></script>
 <script src="shared/store.js"></script>
+<script src="shared/scope.js"></script>
 <script src="shared/io.js"></script>
 <script src="shared/people.js"></script>
 <script src="shared/projects.js"></script>
