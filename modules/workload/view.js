@@ -22,8 +22,9 @@
   function toolbar() {
     const bar = ui.toolbar([]);
     bar.appendChild(inlinePills([{ key: "team", label: "チーム" }, { key: "individual", label: "個人" }, { key: "alloc", label: "計画" }], state.view, (k) => { state.view = k; render(); }));
-    // 計画（アロケーション）タブでは負荷用のツールバー要素は出さない
-    if (state.view === "alloc") { bar.appendChild(ui.button("＋ アロケーション", { variant: "btn-primary", onClick: () => editAllocation(null) })); return bar; }
+    // 計画（アロケーション）タブでは負荷用のツールバー要素は出さない。
+    // 器（Project）が1件も無いと計画できないので「＋ アロケーション」は出さない（renderAllocations の空状態で作成を促す）。
+    if (state.view === "alloc") { if (targetOptions().length) bar.appendChild(ui.button("＋ アロケーション", { variant: "btn-primary", onClick: () => editAllocation(null) })); return bar; }
     bar.appendChild(inlinePills(L().PERIODS.map((p) => ({ key: p.key, label: p.label })), state.period, (k) => { state.period = k; render(); }));
     bar.appendChild(ui.button("◀", { variant: "btn-ghost", onClick: () => { state.offset--; render(); } }));
     bar.appendChild(ui.button("今日", { variant: "btn-ghost", onClick: () => { state.offset = 0; render(); } }));
@@ -152,7 +153,7 @@
     });
     return opts;
   }
-  function targetLabel(a) { const o = targetOptions().find((x) => x.value === a.targetId); return o ? o.label : "(不明な対象)"; }
+  function targetLabel(opts, targetId) { const o = opts.find((x) => x.value === targetId); return o ? o.label : "(不明な対象)"; }
   function memberName(mid) { const m = L().members().find((x) => x.id === mid); return m ? m.name : "(不明)"; }
 
   function renderAllocations() {
@@ -162,14 +163,14 @@
     const intro = ui.card([el("p", { class: "sub", text: "各メンバーをプロジェクトへ期間×割当%で計画します。WBS の担当とは独立した計画レコードです。" })]);
     if (!list.length) return [intro, ui.card([ui.emptyState("アロケーションがありません。「＋ アロケーション」から追加してください。")], { flush: true })];
     const ul = el("ul", { class: "mk-list" });
-    list.forEach((a) => ul.appendChild(allocRow(a)));
+    list.forEach((a) => ul.appendChild(allocRow(a, opts)));
     return [intro, ui.card([ul], { flush: true })];
   }
 
-  function allocRow(a) {
+  function allocRow(a, opts) {
     const period = (a.startDate || "?") + " 〜 " + (a.endDate || "?");
     const info = el("div", { class: "grow", style: "cursor:pointer;" }, [
-      el("div", { text: memberName(a.memberId) + " → " + targetLabel(a) }),
+      el("div", { text: memberName(a.memberId) + " → " + targetLabel(opts, a.targetId) }),
       el("div", { class: "sub", text: "割当 " + a.percent + "% / " + period }),
     ]);
     info.addEventListener("click", () => editAllocation(a));
@@ -194,6 +195,7 @@
       a ? { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("削除しますか？").then((ok) => { if (ok) { L().removeAllocation(a.id); c(); render(); } }) } : null,
       { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
       { label: "保存", variant: "btn-primary", onClick: (c) => {
+          if (!f.target.value) { MK.ui.toast("プロジェクトを選択してください", "error"); return; }
           if (f.start.value && f.end.value && f.end.value < f.start.value) { MK.ui.toast("終了日は開始日以降にしてください", "error"); return; }
           const dimOf = (opts.find((o) => o.value === f.target.value) || {}).dim || "project";
           const patch = { memberId: f.member.value, targetId: f.target.value, dim: dimOf, percent: Math.max(0, Number(f.percent.value) || 0), startDate: f.start.value || "", endDate: f.end.value || "", note: f.note.value };
