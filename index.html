@@ -46,12 +46,16 @@ window.MK_CONFIG = {
     // 将来: { dim: "product", label: "プロダクト", master: "products" }
   ],
   zones: [
-    { label: "自分", modules: ["todo", "goals"], admin: [] },
-    {
-      label: "ピープル", modules: ["skills", "workload", "staffing"],
-      admin: [{ view: "master-people", label: "👤 人" }],
-    },
-    { label: "デリバリー", modules: ["wbs"], admin: [{ view: "master-projects", label: "📁 プロジェクト" }] },
+    { label: "自分", modules: ["todo", "goals"] },
+    { label: "ピープル", modules: ["skills", "workload", "staffing"] },
+    { label: "デリバリー", modules: ["wbs"] },
+  ],
+  // マスタ（人・プロジェクト）はゾーン配下ではなく、settings と同列の「シェルレベル管理
+  // グループ」として独立させる（spec §3.6 / Issue #46）。プロジェクトは wbs だけでなく
+  // workload からも参照される横断マスタ（§4.6）のため、特定ゾーンの持ち物にしない。
+  masters: [
+    { view: "master-people", label: "👤 人" },
+    { view: "master-projects", label: "📁 プロジェクト" },
   ],
 };
 </script>

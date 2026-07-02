@@ -21,24 +21,33 @@
   // 分類は EM が見る領域で切る（自分＋4領域）。プロダクト/テクノロジーは現状モジュール
   // が無いため config には載せない（空グループを出さない。spec §1.4）。
   const DEFAULT_ZONES = [
-    { label: "自分", modules: ["todo", "goals"], admin: [] },
-    {
-      label: "ピープル", modules: ["skills", "workload", "staffing"],
-      admin: [{ view: "master-people", label: "👤 人" }],
-    },
-    { label: "デリバリー", modules: ["wbs"], admin: [{ view: "master-projects", label: "📁 プロジェクト" }] },
+    { label: "自分", modules: ["todo", "goals"] },
+    { label: "ピープル", modules: ["skills", "workload", "staffing"] },
+    { label: "デリバリー", modules: ["wbs"] },
   ];
+  // マスタは特定ゾーンの持ち物ではなく、settings と同列の「シェルレベル管理グループ」
+  // として独立させる（spec §3.6 / Issue #46）。プロジェクトは wbs（デリバリー）だけで
+  // なく workload（ピープル）からも参照される横断的存在（scope: "global"・§4.6）であり、
+  // ゾーン配下に置くと横断性が過小表現になるため、ゾーンから切り離してナビ描画する。
+  const DEFAULT_MASTERS = [
+    { view: "master-people", label: "👤 人" },
+    { view: "master-projects", label: "📁 プロジェクト" },
+  ];
+  const hasConfig = !!window.MK_CONFIG;   // エントリが配布プロファイルを宣言したか
   const CONFIG = window.MK_CONFIG || {};
   const ZONES = Array.isArray(CONFIG.zones) ? CONFIG.zones : DEFAULT_ZONES;
+  // マスタは config が明示した分のみ出す。config を宣言するエントリ（member.html 等）で
+  // masters を持たなければマスタグループは非表示＝到達不能になる（spec §1.5）。config が
+  // 完全に無い素の起動時のみ、ZONES と同様にマネージャ既定へフォールバックする。
+  const MASTERS = Array.isArray(CONFIG.masters) ? CONFIG.masters
+    : (hasConfig ? [] : DEFAULT_MASTERS);
   // このプロファイルで到達可能なビュー（ナビに出るもの＋常設の settings）。
   // 設定に載っていないビューは route から拒否し、配布用エントリでチーム系ビューへ
   // 到達できないことを担保する。
   const ALLOWED = (function () {
     const set = { home: true, settings: true };
-    ZONES.forEach((z) => {
-      (z.modules || []).forEach((id) => { set[id] = true; });
-      (z.admin || []).forEach((a) => { set[a.view] = true; });
-    });
+    ZONES.forEach((z) => { (z.modules || []).forEach((id) => { set[id] = true; }); });
+    MASTERS.forEach((a) => { set[a.view] = true; });
     return set;
   })();
   const LEGACY_KEYS = {
@@ -273,7 +282,6 @@
   function renderNav() {
     nav.innerHTML = "";
     nav.appendChild(navItem("🏠 HOME", "home"));
-    const navState = getNav();
     ZONES.forEach((zone) => {
       const items = [];
       (zone.modules || []).forEach((id) => {
@@ -282,31 +290,38 @@
         const implemented = !!MK.modules[id];
         items.push(navItem((m.icon ? m.icon + " " : "") + m.title + (implemented ? "" : "・準備中"), id));
       });
-      (zone.admin || []).forEach((a) => items.push(navItem(a.label, a.view)));
       if (!items.length) return; // 実質空のゾーンは見出しごと出さない
-
-      const activeHere = (zone.modules || []).indexOf(current) >= 0
-        || (zone.admin || []).some((a) => a.view === current);
-      const collapsed = navState[zone.label] === true && !activeHere;
-
-      const group = el("div", { class: "mk-nav-group-wrap" });
-      const head = el("button", {
-        class: "mk-nav-group" + (collapsed ? " collapsed" : ""),
-        "aria-expanded": String(!collapsed),
-      }, [
-        el("span", { class: "mk-nav-caret", text: "▸" }),
-        el("span", { class: "mk-nav-group-label", text: zone.label }),
-      ]);
-      head.addEventListener("click", () => { toggleNavZone(zone.label); renderNav(); });
-      group.appendChild(head);
-
-      const list = el("div", { class: "mk-nav-list" });
-      if (collapsed) list.style.display = "none";
-      items.forEach((it) => list.appendChild(it));
-      group.appendChild(list);
-      nav.appendChild(group);
+      appendNavGroup(zone.label, items, (zone.modules || []).indexOf(current) >= 0);
     });
+    // マスタ（人・プロジェクト）はゾーンから独立した「シェルレベル管理グループ」として
+    // 設定の直前に置く（spec §3.6 / Issue #46）。config が masters を持たなければ非表示。
+    if (MASTERS.length) {
+      appendNavGroup("マスタ", MASTERS.map((a) => navItem(a.label, a.view)),
+        MASTERS.some((a) => a.view === current));
+    }
     nav.appendChild(navItem("⚙ 設定", "settings"));
+  }
+
+  // ナビの折りたたみグループ（ゾーン／マスタ共通）。現在ビューを含むグループは畳んでいても
+  // 展開してアクティブ項目を必ず見せる（activeHere）。
+  function appendNavGroup(label, items, activeHere) {
+    const collapsed = getNav()[label] === true && !activeHere;
+    const group = el("div", { class: "mk-nav-group-wrap" });
+    const head = el("button", {
+      class: "mk-nav-group" + (collapsed ? " collapsed" : ""),
+      "aria-expanded": String(!collapsed),
+    }, [
+      el("span", { class: "mk-nav-caret", text: "▸" }),
+      el("span", { class: "mk-nav-group-label", text: label }),
+    ]);
+    head.addEventListener("click", () => { toggleNavZone(label); renderNav(); });
+    group.appendChild(head);
+
+    const list = el("div", { class: "mk-nav-list" });
+    if (collapsed) list.style.display = "none";
+    items.forEach((it) => list.appendChild(it));
+    group.appendChild(list);
+    nav.appendChild(group);
   }
 
   // ---- サイドバーのドロワー開閉（≤768px。デスクトップは常時表示で無害）----
