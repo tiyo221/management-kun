@@ -316,9 +316,12 @@
     if (m) m.setAttribute("aria-expanded", "true");
   }
   function closeSidebar() {
+    // 開いていない（＝デスクトップ含む常時表示）ときは何もしない。ナビ項目クリックのたびに
+    // 走る無駄なクラス操作を避ける。開いていた場合のみ閉じ、フォーカスをハンバーガーへ戻す（a11y）。
+    if (!document.body.classList.contains("mk-nav-open")) return;
     document.body.classList.remove("mk-nav-open");
     const m = document.getElementById("btn-menu");
-    if (m) m.setAttribute("aria-expanded", "false");
+    if (m) { m.setAttribute("aria-expanded", "false"); m.focus(); }
   }
   function toggleSidebar() {
     if (document.body.classList.contains("mk-nav-open")) closeSidebar(); else openSidebar();
