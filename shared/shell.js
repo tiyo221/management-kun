@@ -82,10 +82,26 @@
     applyTheme(next);
   }
 
-  // ---- ctx（モジュールへ渡す契約。spec §3.5）----
+  // ---- スコープ次元の「現在の対象」（次元ごとに独立。§3.7.3）----
+  // 設定 mk:settings の scope に { <dim>: <targetId> } で保持する。
+  function getScopeTarget(dimKey) { return (getSettings().scope || {})[dimKey] || null; }
+  function setScopeTarget(dimKey, id) {
+    const s = getSettings(); s.scope = Object.assign({}, s.scope); s.scope[dimKey] = id;
+    setSettings({ scope: s.scope });
+  }
+
+  // ---- ctx（モジュールへ渡す契約。spec §3.5 / §3.7.3）----
   function ctxFor(id) {
+    const def = MK.modules[id] || {};
+    const dim = MK.scope.dimOf(def.scope);                 // scoped なら次元 config、global なら null
+    const targetId = dim ? MK.scope.resolveTarget(dim, getScopeTarget(dim.dim)) : null;
+    // scoped は対象別 namespace（mk:module:<id>:<targetId>:v1）へ、global は従来通り（§3.7.4）
+    const ns = MK.scope.storeNsFor(id, def.scope, targetId);
+    let scope = null;
+    if (dim && targetId) scope = { dim: dim.dim, id: targetId, entity: MK.scope.master(dim).get(targetId) };
     return {
-      store: MK.store.scope("module:" + id),
+      store: MK.store.scope(ns),
+      scope,
       people: MK.people,
       projects: MK.projects,
       io: MK.io,
@@ -110,8 +126,7 @@
     renderNav();
 
     if (MK.modules[view]) {
-      mountedModule = MK.modules[view];
-      mountedModule.mount(main, ctxFor(view));
+      mountModuleView(view);
       // lastModule は「モジュール」だけを記録する（特別ビュー home/master-*/settings は記録しない）。
       // これは startView === "last" のときの復元先＝直近に開いていたモジュール（§3.6）に対応する。
       setSettings({ lastModule: view });
@@ -138,6 +153,58 @@
       if (mods.length) return mods[0];
     }
     return "settings";
+  }
+
+  // ---- モジュールのマウント（global / scoped 共通の入口。§3.7.3）----
+  function mountModuleView(view) {
+    const def = MK.modules[view];
+    const dim = MK.scope.dimOf(def.scope);
+    if (!dim) { mountedModule = def; def.mount(main, ctxFor(view)); return; } // global
+
+    // scoped: 縮退モード（0=作成導線 / 1=畳む / 2+=スイッチャ）で分岐する（§3.7.2）
+    const entities = MK.scope.entities(dim);
+    const mode = MK.scope.mode(entities.length);
+    if (mode === "empty") { renderScopeEmpty(dim); return; }
+    const targetId = MK.scope.resolveTarget(dim, getScopeTarget(dim.dim));
+    setScopeTarget(dim.dim, targetId); // 正規化した現在対象を保存（削除で無効化された id を先頭へ寄せる等）
+    main.appendChild(renderScopeBar(view, dim, entities, targetId, mode));
+    const host = el("div");
+    main.appendChild(host);
+    mountedModule = def;
+    def.mount(host, ctxFor(view));
+  }
+
+  // 要素数0: 「まず対象を作る」導線（§3.7.2）。到達可能ならマスタ管理へ誘導する。
+  function renderScopeEmpty(dim) {
+    const box = el("div", { class: "card mk-scope-empty" });
+    box.appendChild(el("p", { class: "mk-empty", text: "「" + dim.label + "」がまだありません。まず作成してください。" }));
+    const masterView = "master-" + dim.master; // 例: master-projects（"project" 決め打ちしない）
+    if (ALLOWED[masterView]) {
+      const btn = el("button", { class: "btn btn-primary", text: dim.label + "を作成" });
+      btn.addEventListener("click", () => route(masterView));
+      box.appendChild(btn);
+    }
+    main.appendChild(box);
+  }
+
+  // スコープ切替スイッチャ。single は畳んで現在対象のラベルのみ、multi は選択 UI を出す（§3.7.2/3）。
+  function renderScopeBar(view, dim, entities, targetId, mode) {
+    const bar = el("div", { class: "mk-scope-bar" });
+    bar.appendChild(el("span", { class: "mk-scope-label", text: dim.label }));
+    if (mode === "single") {
+      const only = entities[0];
+      bar.appendChild(el("span", { class: "mk-scope-current", text: only ? only.name : "" }));
+      return bar;
+    }
+    const sel = el("select", { class: "text-input mk-scope-select" });
+    entities.forEach((e) => {
+      const opt = el("option", { value: e.id, text: e.name });
+      if (e.id === targetId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener("change", () => { setScopeTarget(dim.dim, sel.value); route(view); });
+    bar.appendChild(sel);
+    return bar;
   }
 
   // ---- HOME（玄関ダッシュボード。spec §3.6）----
@@ -485,10 +552,12 @@
   function fld(label, control) { return el("div", { class: "field" }, [el("label", { text: label }), control]); }
   function inp(value, type) { return el("input", { class: "text-input", type: type || "text", value: value || "" }); }
 
-  // マスタ変更時、マスタ管理画面表示中なら再描画
+  // マスタ変更時、マスタ管理画面表示中なら再描画。scoped モジュール表示中は
+  // スイッチャ/現在対象がマスタに連動するため再マウントする（対象の増減・削除に追随。§3.7.2/3）。
   MK.bus.on("masters:changed", () => {
     if (current === "master-people") { main.innerHTML = ""; renderPeopleView(); }
     else if (current === "master-projects") { main.innerHTML = ""; renderProjectsView(); }
+    else if (MK.modules[current] && MK.scope.dimOf(MK.modules[current].scope)) { route(current); }
   });
 
   // ---- 起動 ----

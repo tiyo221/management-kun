@@ -42,7 +42,22 @@
       return cur;
     },
 
-    read(ns) { return this._cache[ns] != null ? this._cache[ns] : null; },
+    // 起動時の load() は既知モジュールの "module:<id>" のみ prewarm する。scoped の
+    // 対象別キー "module:<id>:<targetId>"（§3.7.4）は対象が実行時に決まるため、キャッシュ
+    // 未登録なら localStorage から遅延ロードする（破損は §10.1 と同じく個別に握りつぶす）。
+    read(ns) {
+      if (ns in this._cache) return this._cache[ns];
+      const raw = localStorage.getItem(keyOf(ns));
+      if (raw == null) { this._cache[ns] = null; return null; }
+      try {
+        this._cache[ns] = this._migrate(ns, JSON.parse(raw));
+      } catch (e) {
+        this._cache[ns] = null;
+        this.errors.push({ ns, key: keyOf(ns), message: String(e) });
+        console.error("破損データ:", keyOf(ns), e);
+      }
+      return this._cache[ns];
+    },
 
     write(ns, value) {
       this._cache[ns] = value;

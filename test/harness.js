@@ -38,7 +38,7 @@ function makeDocument() {
 }
 
 const SCRIPTS = [
-  "shared/core.js", "shared/store.js", "shared/io.js",
+  "shared/core.js", "shared/store.js", "shared/scope.js", "shared/io.js",
   "shared/people.js", "shared/projects.js", "shared/ui.js", "shared/sample.js",
   "modules/todo/logic.js", "modules/goals/logic.js", "modules/wbs/logic.js",
   "modules/skills/logic.js", "modules/workload/logic.js",
