@@ -3,10 +3,13 @@
   "use strict";
   const MK = window.MK;
   // 既定は従来の単一 namespace。scoped 化（§3.7.4）に伴い、シェルが mount 時に対象別 store
-  // （mk:module:wbs:<projectId>:v1）を渡してくるので setStore で差し替える。旧データ移行と
-  // export/import の対象別対応は #25 で扱う。
+  // （mk:module:wbs:<projectId>:v1）を渡してくるので setStore で差し替える（表示中の PJ 文脈）。
   let store = MK.store.scope("module:wbs");
   function setStore(s) { if (s) store = s; }
+  // 表示中の store（setStore で束ねた PJ）とは独立に、指定 PJ の対象別 store を引く。
+  // export/import/サンプル投入が「現在表示中でない PJ」も扱えるようにするため（§3.7.4）。
+  // targetId 未指定なら表示中の store を返す（global モジュール・テスト時の従来動作）。
+  function storeFor(targetId) { return targetId != null ? MK.store.scope("module:wbs:" + targetId) : store; }
 
   /**
    * WBS タスク1件。フラット配列で保持し、level で階層を表現する。
@@ -44,10 +47,11 @@
 
   /**
    * ストアからWBSデータを読み込む。不正形式なら初期データを返し、uid 欠落と deps 未初期化を補正する。
+   * @param {{get:Function}} [s] - 読込元ストア（省略時は表示中の store）
    * @returns {WbsData} 読み込んだデータ（uid と各タスクの deps を保証）
    */
-  function load() {
-    const d = store.get();
+  function load(s) {
+    const d = (s || store).get();
     const data = d && Array.isArray(d.tasks) ? d : { version: 1, uid: 1, tasks: [] };
     if (typeof data.uid !== "number") data.uid = data.tasks.reduce((m, t) => Math.max(m, (t.id || 0) + 1), 1);
     data.tasks.forEach((t) => { if (!Array.isArray(t.deps)) t.deps = []; });
@@ -56,10 +60,11 @@
   /**
    * WBSデータをストアへ保存する。
    * @param {WbsData} d - 保存するデータ
+   * @param {{set:Function}} [s] - 保存先ストア（省略時は表示中の store）
    * @returns {void}
    * ※ store（localStorage）へ書き込む副作用あり。
    */
-  function save(d) { store.set(d); }
+  function save(d, s) { (s || store).set(d); }
   /**
    * 全タスクの配列（表示順のフラット配列）を返す。
    * @returns {WbsTask[]} タスク一覧
@@ -279,31 +284,36 @@
   }
 
   /**
-   * エクスポート用に現在の全データを返す。
-   * @returns {WbsData} 現在のWBSデータ
+   * エクスポート用にデータを返す。対象別 scope（§3.7.4）に対応し、targetId 指定時はその PJ のデータを返す。
+   * @param {string} [targetId] - 対象（PJ）id。省略時は表示中の store
+   * @returns {WbsData} 対象のWBSデータ
    */
-  function exportData() { return load(); }
+  function exportData(targetId) { return load(storeFor(targetId)); }
   /**
    * 外部データを取り込む。merge は id 一致で上書きマージ（uid は最大値を採用）、それ以外は全置換。
    * @param {WbsData} data - 取り込むデータ
    * @param {"merge"|"replace"} mode - 取り込みモード（"merge" 以外は全置換扱い）
+   * @param {string} [targetId] - 取り込み先の対象（PJ）id。省略時は表示中の store（§3.7.4）
    * @returns {void}
    * ※ store へ保存する副作用あり。
    */
-  function importData(data, mode) {
+  function importData(data, mode, targetId) {
+    const s = storeFor(targetId);
     if (mode === "merge") {
-      const d = load(); const byId = {}; d.tasks.forEach((t) => (byId[t.id] = t));
+      const d = load(s); const byId = {}; d.tasks.forEach((t) => (byId[t.id] = t));
       (data.tasks || []).forEach((t) => (byId[t.id] = t));
       d.tasks = Object.keys(byId).map((k) => byId[k]);
-      d.uid = Math.max(d.uid || 1, data.uid || 1); save(d);
-    } else { save({ version: 1, uid: data && data.uid ? data.uid : 1, tasks: (data && data.tasks) || [] }); }
+      d.uid = Math.max(d.uid || 1, data.uid || 1); save(d, s);
+    } else { save({ version: 1, uid: data && data.uid ? data.uid : 1, tasks: (data && data.tasks) || [] }, s); }
   }
   /**
    * サンプルデータを生成して保存する（既存データは全置換）。依存関係付きのツリーを構築する。
+   * @param {string} [targetId] - 投入先の対象（PJ）id。省略時は表示中の store（§3.7.4）
    * @returns {void}
    * ※ store へ保存し、参照メンバーを MK.people マスタへ作成する副作用あり。
    */
-  function loadSample() {
+  function loadSample(targetId) {
+    const s = storeFor(targetId);
     const d = { version: 1, uid: 1, tasks: [] };
     const today = MK.util.todayISO();
     const mk = (level, name, opts) => Object.assign({ id: d.uid++, level, name, assigneeId: null, start: "", end: "", progress: 0, status: "notstarted", note: "", deps: [], collapsed: false }, opts || {});
@@ -315,7 +325,7 @@
     const t5 = mk(1, "リリース", { start: MK.util.addDays(today, 13), end: MK.util.addDays(today, 13), status: "notstarted" });
     d.tasks = [t1, t2, t3, t4, t5];
     t3.deps = [t2.id]; t4.deps = [t2.id]; t5.deps = [t3.id, t4.id];
-    save(d);
+    save(d, s);
   }
 
   /**

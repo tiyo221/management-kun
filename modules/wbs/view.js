@@ -197,8 +197,14 @@
     },
     unmount() { closeOpsMenu(); root = null; },
     summary() { return L().summary(); },
-    exportData() { return L().exportData(); },
-    importData(data, mode) { L().importData(data, mode); },
-    loadSample() { L().loadSample(); },
+    // 対象別 scope（§3.7.4）: io が PJ ごとに targetId を渡す。省略時は表示中の store。
+    exportData(targetId) { return L().exportData(targetId); },
+    importData(data, mode, targetId) { L().importData(data, mode, targetId); },
+    // サンプル/旧ツール移行の投入先は、自分の次元の既定対象（先頭 PJ・無ければ作成）へ寄せる。
+    // this はこの def（scope を持つ）。dim 決め打ちを避けつつ既定 PJ を解決する（§3.7.6）。
+    loadSample() {
+      const dim = MK.scope.dimOf(this.scope);
+      L().loadSample(dim ? MK.scope.ensureDefaultTarget(dim) : null);
+    },
   });
 })();

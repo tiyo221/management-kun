@@ -509,7 +509,10 @@
           deps: Array.isArray(t.deps) ? t.deps : [],
           collapsed: !!t.collapsed,
         }));
-        MK.modules.wbs.importData({ version: 1, uid: raw.uid || 1, tasks }, "replace");
+        // wbs は scoped（§3.7.4）。旧ツールのデータは PJ に紐付かないので既定 PJ（先頭・無ければ作成）へ寄せる。
+        const dim = MK.scope.dimOf(MK.modules.wbs.scope);
+        const targetId = dim ? MK.scope.ensureDefaultTarget(dim) : null;
+        MK.modules.wbs.importData({ version: 1, uid: raw.uid || 1, tasks }, "replace", targetId);
         done++;
       } else if (moduleId === "skills") {
         // メンバー→People、スキル→新ID、評価キーを新IDへ付け替え
@@ -548,6 +551,21 @@
     route(current);
   }
 
+  // scoped 化前の単一キー（mk:module:<id>:v1）を対象別キーへ移行する（§3.7.4 / §7 / Issue #25）。
+  // 起動時に一度走ればよい（migrateLegacyScoped が旧キーを消すため冪等）。旧データが無ければ
+  // 何もしない＝新規ユーザーへ余計な既定 PJ を作らない。
+  function migrateScopedData() {
+    MK.scope.dims().forEach((dim) => {
+      Object.keys(MK.modules).forEach((id) => {
+        const d = MK.scope.dimOf(MK.modules[id].scope);
+        if (!d || d.dim !== dim.dim) return;                                  // この次元の scoped モジュールのみ
+        if (localStorage.getItem(MK.store.keyOf("module:" + id)) == null) return; // 旧キーなし＝移行不要
+        const targetId = MK.scope.ensureDefaultTarget(dim);                   // 既定 PJ へ寄せる
+        if (targetId) MK.scope.migrateLegacyScoped(id, targetId);
+      });
+    });
+  }
+
   // ---- フォーム小物 ----
   function fld(label, control) { return el("div", { class: "field" }, [el("label", { text: label }), control]); }
   function inp(value, type) { return el("input", { class: "text-input", type: type || "text", value: value || "" }); }
@@ -565,6 +583,7 @@
   document.getElementById("btn-import").addEventListener("click", importAll);
   document.getElementById("btn-theme").addEventListener("click", toggleTheme);
   MK.store.load();
+  migrateScopedData(); // scoped 化前の単一キーを対象別へ移す（§3.7.4）。route より前に実行する。
   applyTheme(getTheme());
   // 起動先: 既定は HOME。設定 startView === "last" のときだけ前回モジュールを復元する（spec §3.6）。
   const start0 = getSettings();
