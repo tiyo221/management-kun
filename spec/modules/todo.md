@@ -4,7 +4,7 @@
 
 - 参照（機能詳細の正）: [todo-kun/spec.md](../../../todo-kun/spec.md)
 - localStorage: `mk:module:todo:v1`
-- ゾーン: **個人**
+- ゾーン: **自分**
 
 ## 役割
 GTD ベースの軽量タスク管理。

@@ -4,7 +4,7 @@
 
 - 参照（機能詳細の正）: [task-mieru-kun/spec.md](../../../task-mieru-kun/spec.md)
 - localStorage: `mk:module:workload:v1`
-- ゾーン: **チーム管理**
+- ゾーン: **ピープル**
 
 ## 役割
 メンバーの負荷×期間の中長期俯瞰、過負荷/低負荷シグナル、計画ベースライン。
