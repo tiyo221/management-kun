@@ -258,29 +258,70 @@
     return card;
   }
 
-  function navBtn(label, view) {
-    const b = el("button", { class: "pill-tab" + (current === view ? " active" : ""), text: label });
-    b.addEventListener("click", () => route(view));
+  function navItem(label, view) {
+    const b = el("button", { class: "mk-nav-item" + (current === view ? " active" : ""), text: label });
+    b.addEventListener("click", () => { route(view); closeSidebar(); });
     return b;
   }
 
+  // ---- ナビの折りたたみ状態（ゾーン単位。設定 mk:settings.nav に { <label>: true=畳む } で保持）----
+  function getNav() { return getSettings().nav || {}; }
+  function toggleNavZone(label) { const n = Object.assign({}, getNav()); n[label] = !n[label]; setSettings({ nav: n }); }
+
+  // サイドバー（ゾーン見出し＋配下モジュールの縦積み。折りたたみ可。Issue #34）。
+  // 現在ビューを含むゾーンは畳んでいても展開して表示し、アクティブ項目を必ず見せる。
   function renderNav() {
     nav.innerHTML = "";
-    nav.appendChild(navBtn("🏠 HOME", "home"));
-    nav.appendChild(el("div", { class: "mk-nav-sep" }));
-    ZONES.forEach((zone, zi) => {
-      if (zi > 0) nav.appendChild(el("div", { class: "mk-nav-sep" }));
-      nav.appendChild(el("span", { class: "mk-nav-group", text: zone.label }));
+    nav.appendChild(navItem("🏠 HOME", "home"));
+    const navState = getNav();
+    ZONES.forEach((zone) => {
+      const items = [];
       (zone.modules || []).forEach((id) => {
         const m = META[id];
         if (!m) return; // カタログ未知のモジュールは無視
         const implemented = !!MK.modules[id];
-        nav.appendChild(navBtn((m.icon ? m.icon + " " : "") + m.title + (implemented ? "" : "・準備中"), id));
+        items.push(navItem((m.icon ? m.icon + " " : "") + m.title + (implemented ? "" : "・準備中"), id));
       });
-      (zone.admin || []).forEach((a) => nav.appendChild(navBtn(a.label, a.view)));
+      (zone.admin || []).forEach((a) => items.push(navItem(a.label, a.view)));
+      if (!items.length) return; // 実質空のゾーンは見出しごと出さない
+
+      const activeHere = (zone.modules || []).indexOf(current) >= 0
+        || (zone.admin || []).some((a) => a.view === current);
+      const collapsed = navState[zone.label] === true && !activeHere;
+
+      const group = el("div", { class: "mk-nav-group-wrap" });
+      const head = el("button", {
+        class: "mk-nav-group" + (collapsed ? " collapsed" : ""),
+        "aria-expanded": String(!collapsed),
+      }, [
+        el("span", { class: "mk-nav-caret", text: "▸" }),
+        el("span", { class: "mk-nav-group-label", text: zone.label }),
+      ]);
+      head.addEventListener("click", () => { toggleNavZone(zone.label); renderNav(); });
+      group.appendChild(head);
+
+      const list = el("div", { class: "mk-nav-list" });
+      if (collapsed) list.style.display = "none";
+      items.forEach((it) => list.appendChild(it));
+      group.appendChild(list);
+      nav.appendChild(group);
     });
-    nav.appendChild(el("div", { class: "mk-nav-sep" }));
-    nav.appendChild(navBtn("⚙ 設定", "settings"));
+    nav.appendChild(navItem("⚙ 設定", "settings"));
+  }
+
+  // ---- サイドバーのドロワー開閉（≤768px。デスクトップは常時表示で無害）----
+  function openSidebar() {
+    document.body.classList.add("mk-nav-open");
+    const m = document.getElementById("btn-menu");
+    if (m) m.setAttribute("aria-expanded", "true");
+  }
+  function closeSidebar() {
+    document.body.classList.remove("mk-nav-open");
+    const m = document.getElementById("btn-menu");
+    if (m) m.setAttribute("aria-expanded", "false");
+  }
+  function toggleSidebar() {
+    if (document.body.classList.contains("mk-nav-open")) closeSidebar(); else openSidebar();
   }
 
   // ---- マスタ管理（人＝ピープル / プロジェクト＝デリバリー。ドメイン別のビューに分離。spec §6.4）----
@@ -583,6 +624,10 @@
   document.getElementById("btn-export").addEventListener("click", exportAll);
   document.getElementById("btn-import").addEventListener("click", importAll);
   document.getElementById("btn-theme").addEventListener("click", toggleTheme);
+  const menuBtn = document.getElementById("btn-menu");
+  if (menuBtn) menuBtn.addEventListener("click", toggleSidebar);
+  const overlay = document.getElementById("mk-sidebar-overlay");
+  if (overlay) overlay.addEventListener("click", closeSidebar);
   MK.store.load();
   migrateScopedData(); // scoped 化前の単一キーを対象別へ移す（§3.7.4）。route より前に実行する。
   applyTheme(getTheme());
