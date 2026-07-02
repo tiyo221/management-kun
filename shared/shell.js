@@ -33,13 +33,14 @@
     { view: "master-people", label: "👤 人" },
     { view: "master-projects", label: "📁 プロジェクト" },
   ];
+  const hasConfig = !!window.MK_CONFIG;   // エントリが配布プロファイルを宣言したか
   const CONFIG = window.MK_CONFIG || {};
   const ZONES = Array.isArray(CONFIG.zones) ? CONFIG.zones : DEFAULT_ZONES;
   // マスタは config が明示した分のみ出す。config を宣言するエントリ（member.html 等）で
   // masters を持たなければマスタグループは非表示＝到達不能になる（spec §1.5）。config が
   // 完全に無い素の起動時のみ、ZONES と同様にマネージャ既定へフォールバックする。
   const MASTERS = Array.isArray(CONFIG.masters) ? CONFIG.masters
-    : (window.MK_CONFIG ? [] : DEFAULT_MASTERS);
+    : (hasConfig ? [] : DEFAULT_MASTERS);
   // このプロファイルで到達可能なビュー（ナビに出るもの＋常設の settings）。
   // 設定に載っていないビューは route から拒否し、配布用エントリでチーム系ビューへ
   // 到達できないことを担保する。
