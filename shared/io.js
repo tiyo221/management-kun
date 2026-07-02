@@ -20,7 +20,16 @@
       const mod = MK.modules[id];
       if (!mod || typeof mod.exportData !== "function") return;
       if (scope !== "all" && scope !== id) return;
-      env.modules[id] = { version: 1, data: mod.exportData() };
+      const dim = MK.scope.dimOf(mod.scope);
+      if (dim) {
+        // scoped モジュール（§3.7.4）: 対象（PJ）ごとにデータを束ねて出す。
+        // 復元時に対象別キーへ戻せるよう、targets を targetId で引ける形にする。
+        const targets = {};
+        MK.scope.entities(dim).forEach((e) => { targets[e.id] = mod.exportData(e.id); });
+        env.modules[id] = { version: 1, scope: { dim: dim.dim }, targets };
+      } else {
+        env.modules[id] = { version: 1, data: mod.exportData() };
+      }
     });
     if (scope === "people") { env.projects = []; env.modules = {}; }
     if (scope === "projects") { env.people = []; env.modules = {}; }
@@ -60,8 +69,20 @@
     }
     Object.keys(env.modules || {}).forEach((id) => {
       const mod = MK.modules[id];
-      if (mod && typeof mod.importData === "function") {
-        mod.importData(env.modules[id].data, mode);
+      if (!mod || typeof mod.importData !== "function") return;
+      const entry = env.modules[id] || {};
+      const dim = MK.scope.dimOf(mod.scope);
+      if (entry.targets && typeof entry.targets === "object") {
+        // 対象別 scope のエンベロープ（§3.7.4）: PJ ごとに対象別キーへ戻す。
+        // people/projects は先に取り込み済みなので targetId（PJ id）が一致する。
+        Object.keys(entry.targets).forEach((tid) => mod.importData(entry.targets[tid], mode, tid));
+      } else if (dim) {
+        // 旧エンベロープ（scoped 化前の単一 data）を scoped モジュールへ取り込む場合は
+        // 既定の対象（先頭 PJ・無ければ作成）へ寄せる（データを失わない・§7 / Issue #25）。
+        const tid = MK.scope.ensureDefaultTarget(dim);
+        if (tid) mod.importData(entry.data, mode, tid);
+      } else {
+        mod.importData(entry.data, mode);
       }
     });
   };

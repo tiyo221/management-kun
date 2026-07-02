@@ -88,6 +88,44 @@
       if (dim && targetId) return "module:" + moduleId + ":" + targetId;
       return "module:" + moduleId;
     },
+
+    /**
+     * 既定の対象 id を返す。対象があれば先頭、無ければ既定エンティティをマスタへ作成して返す。
+     * 旧データ移行・旧エンベロープ取込のフォールバック（「既定 PJ へ寄せる」§7 / Issue #25）で使う。
+     * @param {{master:string,label:string}} dim
+     * @returns {string|null} 対象 id（マスタ未解決なら null）
+     */
+    ensureDefaultTarget(dim) {
+      const master = scope.master(dim);
+      if (!master || typeof master.all !== "function") return null;
+      const list = master.all();
+      if (list.length) return list[0].id;
+      return master.create({ name: "既定" + (dim.label || "") }).id;
+    },
+
+    /**
+     * 旧・非スコープ時代の単一キー（mk:module:<id>:v1）を対象別キー
+     * （mk:module:<id>:<targetId>:v1）へ移送する（§3.7.4 / §7）。対象別キーが既に存在する場合は
+     * 上書きせず、旧キーだけ除去する（冪等＝再実行しても二重移行しない）。
+     * @param {string} moduleId
+     * @param {string} targetId - 移送先の対象 id
+     * @returns {boolean} 旧キーがあり移送（またはクリーンアップ）した場合 true
+     */
+    migrateLegacyScoped(moduleId, targetId) {
+      const legacyKey = MK.store.keyOf("module:" + moduleId);
+      const raw = localStorage.getItem(legacyKey);
+      if (raw == null) return false;
+      const scopedNs = "module:" + moduleId + ":" + targetId;
+      // 対象別キーが未作成のときだけ移送する（既存データを潰さない）。
+      if (localStorage.getItem(MK.store.keyOf(scopedNs)) == null) {
+        localStorage.setItem(MK.store.keyOf(scopedNs), raw);
+      }
+      localStorage.removeItem(legacyKey);
+      // store キャッシュを整合させる（旧 ns は空・新 ns は次回読込でロードし直す）。
+      MK.store._cache["module:" + moduleId] = null;
+      delete MK.store._cache[scopedNs];
+      return true;
+    },
   };
 
   MK.scope = scope;
