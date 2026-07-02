@@ -36,7 +36,7 @@ window.MK_CONFIG = {
   zones: [
     { label: "自分", modules: ["todo", "goals"], admin: [] },
     {
-      label: "ピープル", modules: ["skills", "workload"],
+      label: "ピープル", modules: ["skills", "workload", "staffing"],
       admin: [{ view: "master-people", label: "👤 人" }],
     },
     { label: "デリバリー", modules: ["wbs"], admin: [{ view: "master-projects", label: "📁 プロジェクト" }] },
@@ -64,6 +64,8 @@ window.MK_CONFIG = {
 <script src="modules/skills/view.js"></script>
 <script src="modules/workload/logic.js"></script>
 <script src="modules/workload/view.js"></script>
+<script src="modules/staffing/logic.js"></script>
+<script src="modules/staffing/view.js"></script>
 
 <!-- シェル（ブートストラップ・ルーター。プロファイル非依存） -->
 <script src="shared/shell.js"></script>
