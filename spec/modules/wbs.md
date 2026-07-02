@@ -4,7 +4,7 @@
 
 - 参照（機能詳細の正）: [wbs-tool/spec.md](../../../wbs-tool/spec.md)
 - localStorage: `mk:module:wbs:v1`
-- ゾーン: **チーム管理**
+- ゾーン: **デリバリー**
 
 ## 役割
 階層 WBS + ガント + 依存（FS）+ クリティカルパス（軽量版・backlog）。

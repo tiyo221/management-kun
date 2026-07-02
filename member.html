@@ -20,7 +20,7 @@
 
 <main class="mk-main" id="mk-main"></main>
 
-<!-- 配布プロファイル（メンバー配布用・個人ツールのみ）。個人ゾーン（todo/goals）だけを積む。
+<!-- 配布プロファイル（メンバー配布用・個人ツールのみ）。自分ゾーン（todo/goals）だけを積む。
      チーム系モジュール（skills/workload/wbs）とマスタ管理は zones に載せないためナビにも
      現れず、画面から到達できない。かつ当該 <script> も読み込まないので、コードもデータ
      （localStorage）も物理的に存在しない ＝ 見た目・実データの両面で分離される（spec §1.5）。 -->
@@ -28,7 +28,7 @@
 window.MK_CONFIG = {
   profile: "member",
   zones: [
-    { label: "個人", modules: ["todo", "goals"], admin: [] },
+    { label: "自分", modules: ["todo", "goals"], admin: [] },
   ],
 };
 </script>

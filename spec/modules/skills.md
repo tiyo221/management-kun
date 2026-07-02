@@ -4,7 +4,7 @@
 
 - 参照（機能詳細の正）: [skill-mieru-kun/spec.md](../../../skill-mieru-kun/spec.md)
 - localStorage: `mk:module:skills:v1`
-- ゾーン: **チーム管理**
+- ゾーン: **ピープル**
 
 ## 役割
 メンバー×スキルのマトリクス・ギャップ・レーダー可視化。

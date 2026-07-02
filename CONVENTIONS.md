@@ -101,7 +101,7 @@ modules/
 
 1. `modules/<id>/logic.js` を作成。`const store = MK.store.scope("module:<id>");` で始め、`load/save`・計算・CRUD・`exportData/importData/loadSample` を定義し、`MK.logic["<id>"] = {...}` で公開（DOM に触れない）。
 2. `modules/<id>/view.js` を作成。`const L = () => MK.logic["<id>"];`、`render()` を `MK.ui` ヘルパで組み、`MK.registerModule("<id>", { title, icon, mount, unmount, exportData:()=>L().exportData(), importData:(d,m)=>L().importData(d,m), loadSample:()=>L().loadSample() })`。
-3. [`index.html`](index.html): `<script src="modules/<id>/logic.js">` → `<script src="modules/<id>/view.js">` の順で追加。ナビの `META` にタイトル/アイコン、`ZONES`（個人／チーム管理）の該当グループに `<id>` を登録。
+3. [`index.html`](index.html): `<script src="modules/<id>/logic.js">` → `<script src="modules/<id>/view.js">` の順で追加。ナビの `META` にタイトル/アイコン、`ZONES`（自分／ピープル／デリバリー…＝§1.4 の領域）の該当グループに `<id>` を登録。プロダクト/テクノロジー等でゾーンが未定義なら新しいゾーンを追加する。
 4. 旧ツール移行が必要なら `index.html` の `migrateLegacy()` に分岐と `LEGACY_KEYS` を追加。
 5. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、[`spec.md`](spec.md) §5 のモジュール一覧に行を追加する。
 6. §6 のチェックリストで点検。

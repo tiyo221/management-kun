@@ -17,12 +17,15 @@
   };
   // ゾーン構成は配布プロファイル（window.MK_CONFIG.zones）から受け取る。未指定なら
   // マネージャ用の全部入りにフォールバックする（spec §1.4 / §1.5 / §6.4）。
+  // 分類は EM が見る領域で切る（自分＋4領域）。プロダクト/テクノロジーは現状モジュール
+  // が無いため config には載せない（空グループを出さない。spec §1.4）。
   const DEFAULT_ZONES = [
-    { label: "個人", modules: ["todo", "goals"], admin: [] },
+    { label: "自分", modules: ["todo", "goals"], admin: [] },
     {
-      label: "チーム管理", modules: ["skills", "workload", "wbs"],
-      admin: [{ view: "masters", label: "👥 マスタ管理" }],
+      label: "ピープル", modules: ["skills", "workload"],
+      admin: [{ view: "master-people", label: "👤 人" }],
     },
+    { label: "デリバリー", modules: ["wbs"], admin: [{ view: "master-projects", label: "📁 プロジェクト" }] },
   ];
   const CONFIG = window.MK_CONFIG || {};
   const ZONES = Array.isArray(CONFIG.zones) ? CONFIG.zones : DEFAULT_ZONES;
@@ -98,7 +101,7 @@
 
   // ---- ルーティング ----
   function route(view) {
-    // 配布プロファイルに載っていないビュー（例: 個人配布での masters）は先頭ゾーンへ退避
+    // 配布プロファイルに載っていないビュー（例: 自分配布での master-people / master-projects）は先頭ゾーンへ退避
     if (!ALLOWED[view]) view = firstView();
     if (mountedModule && typeof mountedModule.unmount === "function") mountedModule.unmount();
     mountedModule = null;
@@ -109,13 +112,15 @@
     if (MK.modules[view]) {
       mountedModule = MK.modules[view];
       mountedModule.mount(main, ctxFor(view));
-      // lastModule は「モジュール」だけを記録する（特別ビュー home/masters/settings は記録しない）。
+      // lastModule は「モジュール」だけを記録する（特別ビュー home/master-*/settings は記録しない）。
       // これは startView === "last" のときの復元先＝直近に開いていたモジュール（§3.6）に対応する。
       setSettings({ lastModule: view });
     } else if (view === "home") {
       renderHome();
-    } else if (view === "masters") {
-      renderMasters();
+    } else if (view === "master-people") {
+      renderPeopleView();
+    } else if (view === "master-projects") {
+      renderProjectsView();
     } else if (view === "settings") {
       renderSettings();
     } else {
@@ -137,7 +142,7 @@
 
   // ---- HOME（玄関ダッシュボード。spec §3.6）----
   // ZONES を入力にゾーン別セクション＋モジュールのサマリーカードを描画する。配布プロファイル
-  // （member.html）ではチーム管理ゾーンが ZONES に無いため、自動的に「個人」だけになる。
+  // （member.html）ではピープル/デリバリーゾーンが ZONES に無いため、自動的に「自分」だけになる。
   function renderHome() {
     main.appendChild(el("h2", { class: "mk-section-title", text: "🏠 HOME" }));
     ZONES.forEach((zone) => {
@@ -210,24 +215,18 @@
     nav.appendChild(navBtn("⚙ 設定", "settings"));
   }
 
-  // ---- マスタ管理（人・プロジェクトを画面内タブで切替。spec §6.4）----
-  let mastersTab = "people";
-  function renderMasters() {
-    main.appendChild(el("h2", { class: "mk-section-title", text: "マスタ管理" }));
+  // ---- マスタ管理（人＝ピープル / プロジェクト＝デリバリー。ドメイン別のビューに分離。spec §6.4）----
+  function renderPeopleView() {
+    main.appendChild(el("h2", { class: "mk-section-title", text: "👤 人（マスタ）" }));
     const body = el("div", {});
-    const tabs = MK.ui.pillTabs(
-      [{ key: "people", label: "👤 人" }, { key: "projects", label: "📁 プロジェクト" }],
-      mastersTab,
-      (key) => { mastersTab = key; renderMasterTab(body); }
-    );
-    main.appendChild(tabs);
     main.appendChild(body);
-    renderMasterTab(body);
+    renderPeople(body);
   }
-  function renderMasterTab(body) {
-    body.innerHTML = "";
-    if (mastersTab === "projects") renderProjects(body);
-    else renderPeople(body);
+  function renderProjectsView() {
+    main.appendChild(el("h2", { class: "mk-section-title", text: "📁 プロジェクト（マスタ）" }));
+    const body = el("div", {});
+    main.appendChild(body);
+    renderProjects(body);
   }
 
   // ---- 人の管理 ----
@@ -488,7 +487,8 @@
 
   // マスタ変更時、マスタ管理画面表示中なら再描画
   MK.bus.on("masters:changed", () => {
-    if (current === "masters") { main.innerHTML = ""; renderMasters(); }
+    if (current === "master-people") { main.innerHTML = ""; renderPeopleView(); }
+    else if (current === "master-projects") { main.innerHTML = ""; renderProjectsView(); }
   });
 
   // ---- 起動 ----

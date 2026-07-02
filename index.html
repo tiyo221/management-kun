@@ -27,11 +27,12 @@
 window.MK_CONFIG = {
   profile: "manager",
   zones: [
-    { label: "個人", modules: ["todo", "goals"], admin: [] },
+    { label: "自分", modules: ["todo", "goals"], admin: [] },
     {
-      label: "チーム管理", modules: ["skills", "workload", "wbs"],
-      admin: [{ view: "masters", label: "👥 マスタ管理" }],
+      label: "ピープル", modules: ["skills", "workload"],
+      admin: [{ view: "master-people", label: "👤 人" }],
     },
+    { label: "デリバリー", modules: ["wbs"], admin: [{ view: "master-projects", label: "📁 プロジェクト" }] },
   ],
 };
 </script>
