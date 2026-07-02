@@ -39,8 +39,9 @@
 window.MK_CONFIG = {
   profile: "member",
   zones: [
-    { label: "自分", modules: ["todo", "goals"], admin: [] },
+    { label: "自分", modules: ["todo", "goals"] },
   ],
+  // masters を持たないためマスタグループはナビに現れず到達不能（spec §1.5 / §3.6）。
 };
 </script>
 
