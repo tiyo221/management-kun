@@ -192,8 +192,8 @@
     const bar = el("div", { class: "mk-scope-bar" });
     bar.appendChild(el("span", { class: "mk-scope-label", text: dim.label }));
     if (mode === "single") {
-      const only = entities[0];
-      bar.appendChild(el("span", { class: "mk-scope-current", text: only ? only.name : "" }));
+      // single は要素数1が確約されるため entities[0] は必ず存在する（§3.7.2）
+      bar.appendChild(el("span", { class: "mk-scope-current", text: entities[0].name }));
       return bar;
     }
     const sel = el("select", { class: "text-input mk-scope-select" });
