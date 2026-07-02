@@ -68,6 +68,9 @@ node test/run.js
 ```js
 "use strict";
 test("wbs: 依存の循環を検出", (MK) => {
+  // 観点: 循環を生む依存追加は検出して拒否する（不正な依存を作らせない）
+  // 入力: サンプルは t3.deps=[t2]。逆向きの t2→t3 を張ろうとする
+  // 期待: depsCreatesCycle=true（検出）/ addDep=false（追加は拒否）
   const W = MK.logic.wbs;
   W.loadSample();
   const tasks = W.tasks();
@@ -76,6 +79,7 @@ test("wbs: 依存の循環を検出", (MK) => {
 });
 ```
 
+- **各テストは冒頭に「観点 / 入力 / 期待」の3行コメントを付ける**（何を確かめる意図か・どんな入力/シナリオか・どうなるべきか）。関連する仕様があれば §番号や Issue 番号を添える。実装から自明でない値（例: 平均の計算式、`unshift` の並び）はインラインコメントで補う。
 - 使えるアサーション: `assert(cond, msg)` / `eq(actual, expected, msg)`（JSON 比較）/ `almost(a, b, msg)`（浮動小数）。
 - データは `test` ごとに `reset` される（`localStorage` とストアキャッシュをクリア）。各テストは必要なデータを自分で用意する（`loadSample()` か直接 CRUD）。
 - **新規モジュールを追加したら、その `logic` のテストも `test/<id>.test.js` に追加する**（CONVENTIONS §5 の追加手順に含める）。
