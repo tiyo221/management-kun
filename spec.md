@@ -170,7 +170,7 @@ MK.registerModule("todo", {
 |---|---|
 | `ctx.people` | People マスタの参照・CRUD・名寄せ解決（`list/get/resolve(name)/create`）（§8） |
 | `ctx.projects` | Project マスタの同上 |
-| `ctx.scope` | scoped モジュールにのみ渡る「現在の対象」エンティティ（§3.7）。global モジュールでは `null` |
+| `ctx.scope` | scoped モジュールに渡る「現在の対象」`{ dim, id, entity }`（§3.7.3）。global モジュールでは `null` |
 | `ctx.store` | `get(ns)/set(ns,data)/save(ns)`（`ns` = モジュール自身の localStorage 名前空間） |
 | `ctx.io` | `csv.parse/csv.stringify`・JSON ダウンロード/読込（§4.2 / §4.6） |
 | `ctx.ui` | 共通UI部品（`modal/confirm/toast/tabs` 等）（§6.3） |
@@ -234,8 +234,13 @@ summary() {
 - `scope: "global"` … 横断・常時（todo / goals / skills / 要員計画 / マスタ）。既定。
 - `scope: { dim: "project" }` … Project 文脈で動く（wbs）。将来 `{ dim: "product" }`。
 
-「現在の対象」状態は**次元ごとに独立**して持つ（Project の現在／Product の現在は別々）。シェルはスコープ切替スイッチャを提供し、選択中エンティティを scoped モジュールへ `ctx.scope` で渡す（§3.5）。global モジュールは次元文脈の外（`ctx.scope === null`）。
+「現在の対象」状態は**次元ごとに独立**して持つ（Project の現在／Product の現在は別々）。シェルはスコープ切替スイッチャを提供し、選択中エンティティを scoped モジュールへ `ctx.scope` で渡す（§3.5）。global モジュールは次元文脈の外（`ctx.scope === null`）。scoped モジュールが受け取る `ctx.scope` の形は次のとおり:
 
+```js
+ctx.scope = { dim: "project", id: "<projectId>", entity: { /* Project オブジェクト全体 */ } };
+```
+
+- **マスタ参照は横断（scope で縛らない）**: `scope` が縛るのは**データ保存の namespace（§3.7.4）と UI の作業文脈**のみ。`ctx.people` / `ctx.projects` は scoped/global を問わず**全マスタを横断参照**できる（例: WBS が現在 PJ 外のメンバーも参照・アサインすることは妨げない）。「その PJ の人だけ」等の絞り込みは各モジュールの表示都合であり、次元の制約ではない。
 - **ゾーン軸との関係**: ゾーン（§1.4）は残す。`scope` はゾーンに直交し、「デリバリー領域の project-scoped モジュール」のように二次元で位置づく。
 
 #### 3.7.4 scoped データの保存（ハイブリッド）
@@ -264,7 +269,16 @@ summary() {
 
 - スコープ次元の**型／契約だけ**を汎用に定義し、実装配線は **Project の1次元のみ**。
 - **Product はモジュール追加時に実体化**する（Product マスタ・モジュールは今は作らない。§1.5「モジュールの無いゾーンは載せない」と同思想）。
-- **ガードレール**: コード上で `"project"` を**決め打ち分岐しない**。次元は config／配列を回して扱う（[`CONVENTIONS.md`](CONVENTIONS.md)）。Product を紙上で当てて「config に次元を1つ足す＋モジュールを足す」だけで成立することをレビューで確認する。
+- **ガードレール**: コード上で `"project"` を**決め打ち分岐しない**。次元は config の配列を回して扱う（[`CONVENTIONS.md`](CONVENTIONS.md)）。config は `MK_CONFIG.dimensions` に**宣言的な配列**で持たせる想定（詳細スキーマは実装 Issue で確定）:
+
+```js
+MK_CONFIG.dimensions = [
+  { dim: "project", label: "プロジェクト", master: "projects" },
+  // 将来: { dim: "product", label: "プロダクト", master: "products" }
+];
+```
+
+  Product を紙上で当てて「config に次元を1行足す＋モジュールを足す」だけで成立することをレビューで確認する。
 - 逆に、Project が要らない汎用機構まで先に作るのも**過剰設計として避ける**。
 
 ---
