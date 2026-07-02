@@ -73,6 +73,7 @@ modules/
 - Vanilla JS（ES2020+）。ビルド・外部依存・ES Modules・`fetch` を使わない。公開シンボルは `window.MK`。
 - `var` 禁止（`const`/`let`）、比較は `===`/`!==`、イベントは `addEventListener`。
 - 共有化は2か所以上で必要になってから（先回りの抽象化を避ける）。YAGNI。
+- **スコープ次元を決め打ち分岐しない**（[`spec.md`](spec.md) §3.7）。`scope`／次元を扱うコードで `"project"` を直接 if 分岐せず、config／配列を回して汎用に扱う。Product を紙上で当てて「config に次元を1つ足す＋モジュールを足す」だけで成立する状態を保つ（逆に Project が要らない汎用機構まで先に作るのも過剰設計として避ける）。
 
 ---
 
@@ -114,7 +115,8 @@ modules/
 - [ ] logic と view がファイル分割され、logic は DOM/`document`/`MK.ui` に触れていない。
 - [ ] view に業務計算が無い（計算は logic に委譲）。logic は `render` を呼ばない。
 - [ ] logic の公開関数に JSDoc（`@param`/`@returns`・副作用）が付いている。
-- [ ] ストアは自分の名前空間 `mk:module:<id>` のみ・mount 非依存。マスタは `MK.people`/`MK.projects` 経由。
+- [ ] ストアは自分の名前空間 `mk:module:<id>` のみ・mount 非依存。マスタは `MK.people`/`MK.projects` 経由。scoped モジュール（[`spec.md`](spec.md) §3.7）は対象別 `mk:module:<id>:<targetId>` に書き、`ctx.scope` の対象内に閉じる。
+- [ ] スコープ／次元を扱うなら `"project"` の決め打ち分岐が無い（config／配列を回して汎用。§3 / spec §3.7.6）。
 
 **UI・レイアウト**
 - [ ] 余白のインライン直書きが無い（`ui.stack` 等に委譲）。隣接ブロックが密着していない。
