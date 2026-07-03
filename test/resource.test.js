@@ -115,6 +115,15 @@ test("resource: monthsInHorizon は今月起点の月初日を粗い月数で返
   eq(S.monthsInHorizon(13, 1)[0], nextMonthFirst); // offset で翌月起点
 });
 
+test("resource: monthsInHorizon は baseDate 注入で年跨ぎを決定的に扱う", (MK) => {
+  // 観点: 12月起点や負 offset で年をまたいでも月初日が正しく桁上がり／桁下がりする（システム日付に依存しない）
+  // 入力: 基準日 2026-12-10・四半期(13週=3ヶ月) / 同基準日で offset -1
+  // 期待: 12月→翌年1月→2月 と繰り上がる。offset -1 は前月 11月起点
+  const S = MK.logic.resource;
+  eq(S.monthsInHorizon(13, 0, "2026-12-10"), ["2026-12-01", "2027-01-01", "2027-02-01"]);
+  eq(S.monthsInHorizon(13, -1, "2026-01-10")[0], "2025-12-01"); // 負 offset で前年へ桁下がり
+});
+
 test("resource: supplyByMonth はチーム総割当・キャパ・空き・過剰人数を月次で返す", (MK) => {
   // 観点: 供給がキャパを超える月＝オーバーコミットを月次で早期警告する（Issue #52）
   // 入力: m1 は 7月に120%（過剰）、m2 は 7月に40%。8月は割当なし。メンバー2名＝総キャパ200%

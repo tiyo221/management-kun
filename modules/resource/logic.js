@@ -132,22 +132,27 @@
   // ---- 月次集計（要員確保のリードタイムに合わせた粗い時間軸。Issue #52）----
   // 週次は凸凹が細かすぎ「見えても確保が間に合わない」ため、月次×長ホライズンで先まで見せる。
 
+  // 1ヶ月あたりの平均週数（365.25 / 12 / 7 ≒ 4.345）。ホライズンの週数を月数へ丸める係数。
+  const WEEKS_PER_MONTH = 4.345;
+
   /**
    * 表示ホライズン（週数）を月次に丸め、対象月（各月1日）の配列を返す純関数。
-   * 週数 period を約4.33週/月で月数へ変換し、今月を起点に offset 月ずらす。
+   * 週数 period を約4.345週/月で月数へ変換し、基準月を起点に offset 月ずらす。
    * @param {number} period - ホライズンの週数（13/26/52 等）
-   * @param {number} [offset] - 今月からの月オフセット（既定 0）
+   * @param {number} [offset] - 基準月からの月オフセット（既定 0）
+   * @param {string} [baseDate] - 基準日（YYYY-MM-DD、既定 本日）。テストで固定するための注入点。
    * @returns {string[]} 各月の初日（YYYY-MM-01）の配列
    */
-  function monthsInHorizon(period, offset) {
-    const count = Math.max(1, Math.round((period || 13) / 4.345));
-    const base = MK.util.todayISO();
+  function monthsInHorizon(period, offset, baseDate) {
+    const count = Math.max(1, Math.round((period || 13) / WEEKS_PER_MONTH));
+    const base = baseDate || MK.util.todayISO();
     const y = Number(base.slice(0, 4)), m = Number(base.slice(5, 7));
     const arr = [];
     for (let i = 0; i < count; i++) {
-      const idx = (m - 1) + (offset || 0) + i;             // 0-based month index from year start
+      // 年初からの 0-based 月インデックス。負 offset でも floor 除算で年へ桁上がり／桁下がりする。
+      const idx = (m - 1) + (offset || 0) + i;
       const yy = y + Math.floor(idx / 12);
-      const mm = ((idx % 12) + 12) % 12 + 1;               // 1..12（負offsetでも正規化）
+      const mm = ((idx % 12) + 12) % 12 + 1;               // 0..11 へ正規化してから 1..12 に戻す（負値対応）
       arr.push(yy + "-" + String(mm).padStart(2, "0") + "-01");
     }
     return arr;
