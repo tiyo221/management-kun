@@ -1,7 +1,8 @@
 /* モジュール staffing（要員計画）— ロジック（PJ横断のアサイン集約・空き要員算出）。DOM/UI に触れない。CONVENTIONS §1
    People を主語に Project 次元を横断集約する cross ビュー（spec §3.7.5）。
-   データ源は workload の共有アロケーション（#26）のみ。自前の永続データは持たない（読み取り専用の横断ビュー）。
-   WBS の担当（assigneeId）等、各モジュールの内部データは覗かない＝モジュール独立を維持する。 */
+   データ源は中立な共有マスタ MK.allocations（Issue #45 で workload 内部から昇格）。自前の永続データは
+   持たず、マスタを参照・編集する。WBS の担当（assigneeId）等、各モジュールの内部データは覗かない
+   ＝モジュール独立を維持する。workload の logic API には依存しない（workload を外しても成立する）。 */
 (function () {
   "use strict";
   const MK = window.MK;
@@ -18,11 +19,11 @@
    */
 
   /**
-   * データ源＝workload の共有アロケーション一覧を返す（横断ビューの唯一の読み取り入口。§3.7.5）。
-   * workload logic 未ロード時は空配列（HOME 等での安全なフォールバック）。
-   * @returns {Object[]} アロケーション一覧（workload の Allocation 形状）
+   * データ源＝共有マスタ MK.allocations のアロケーション一覧を返す（横断ビューの唯一の読み取り入口。§3.7.5）。
+   * マスタ未ロード時は空配列（HOME 等での安全なフォールバック）。
+   * @returns {Object[]} アロケーション一覧（Allocation 形状）
    */
-  function alloc() { const w = MK.logic && MK.logic.workload; return (w && typeof w.allocations === "function") ? w.allocations() : []; }
+  function alloc() { return MK.allocations ? MK.allocations.all() : []; }
   /**
    * 対象メンバー一覧を People マスタから返す（横断参照。scope で縛らない。§3.7.3）。
    * @returns {Array<Object>} メンバー一覧（MK.people のレコード）
@@ -65,16 +66,15 @@
     return s;
   }
   /**
-   * 指定メンバー・指定日の全器合計割当率を返す純関数（workload の集計純関数へ委譲＝DRY）。
+   * 指定メンバー・指定日の全器合計割当率を返す純関数（共有マスタの集計純関数へ委譲＝DRY）。
    * @param {Object[]} allocations - 対象アロケーション一覧
    * @param {string} mid - メンバーID
    * @param {string} date - 対象日（YYYY-MM-DD）
    * @returns {number} 合計割当率(%)
    */
   function totalPercent(allocations, mid, date) {
-    const w = MK.logic && MK.logic.workload;
-    if (w && typeof w.allocationPercentOn === "function") return w.allocationPercentOn(allocations, mid, date);
-    // フォールバック（workload 未ロード時）: 全器を跨いで合算する
+    if (MK.allocations && typeof MK.allocations.percentOn === "function") return MK.allocations.percentOn(allocations, mid, date);
+    // フォールバック（マスタ未ロード時）: 全器を跨いで合算する
     let s = 0; (allocations || []).forEach((a) => { if (a.memberId !== mid) return; if (a.startDate && a.endDate && a.startDate <= date && date <= a.endDate) s += Number(a.percent) || 0; }); return s;
   }
   /**

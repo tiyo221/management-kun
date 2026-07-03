@@ -16,7 +16,7 @@
     // 起動時に全 mk: キーを個別 try/parse（壊れても他へ波及させない・§10.1）
     load() {
       this.errors = [];
-      const namespaces = ["people", "projects", "settings"];
+      const namespaces = ["people", "projects", "allocations", "settings"];
       Object.keys(MK.modules).forEach((id) => namespaces.push("module:" + id));
       namespaces.forEach((ns) => {
         const raw = localStorage.getItem(keyOf(ns));

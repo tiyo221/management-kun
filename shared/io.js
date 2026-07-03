@@ -4,7 +4,7 @@
   const MK = window.MK;
   const io = {};
 
-  // scope: "all" | "people" | "projects" | "<moduleId>"
+  // scope: "all" | "people" | "projects" | "allocations" | "<moduleId>"
   io.buildEnvelope = function (scope) {
     scope = scope || "all";
     const env = {
@@ -14,6 +14,7 @@
       scope,
       people: MK.people.all(),
       projects: MK.projects.all(),
+      allocations: MK.allocations ? MK.allocations.all() : [],
       modules: {},
     };
     MK.moduleOrder.forEach((id) => {
@@ -31,8 +32,9 @@
         env.modules[id] = { version: 1, data: mod.exportData() };
       }
     });
-    if (scope === "people") { env.projects = []; env.modules = {}; }
-    if (scope === "projects") { env.people = []; env.modules = {}; }
+    if (scope === "people") { env.projects = []; env.allocations = []; env.modules = {}; }
+    if (scope === "projects") { env.people = []; env.allocations = []; env.modules = {}; }
+    if (scope === "allocations") { env.people = []; env.projects = []; env.modules = {}; }
     return env;
   };
 
@@ -66,6 +68,10 @@
     if (Array.isArray(env.projects) && env.projects.length) {
       if (mode === "replace") MK.projects.replaceAll(env.projects);
       else env.projects.forEach((p) => (MK.projects.get(p.id) ? MK.projects.update(p.id, p) : MK.projects.create(p)));
+    }
+    if (MK.allocations && Array.isArray(env.allocations) && env.allocations.length) {
+      if (mode === "replace") MK.allocations.replaceAll(env.allocations);
+      else env.allocations.forEach((a) => (MK.allocations.get(a.id) ? MK.allocations.update(a.id, a) : MK.allocations.create(a)));
     }
     Object.keys(env.modules || {}).forEach((id) => {
       const mod = MK.modules[id];
