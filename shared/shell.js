@@ -15,6 +15,7 @@
     skills: { title: "スキル", icon: "📊" },
     workload: { title: "負荷", icon: "📈" },
     staffing: { title: "要員計画", icon: "🧑‍🤝‍🧑" },
+    oneonone: { title: "1on1", icon: "🗣" },
     wbs: { title: "WBS", icon: "🗂" },
   };
   // ゾーン構成は配布プロファイル（window.MK_CONFIG.zones）から受け取る。未指定なら
