@@ -25,12 +25,13 @@ skill-mieru-kun（自前パーサ・UTF-8・BOM許容）と wbs-tool（BOM付き
 
 | 種別 | 列 |
 |---|---|
-| 人（People） | `氏名, 役割, 表示色, 備考, 有効` |
-| プロジェクト（Project） | `プロジェクト名, 表示色, 状態, 関連目標, 備考`（状態は `active`/`archived`、関連目標は Goal 名で参照） |
+| 人（People） | `氏名, 役割, 表示色, 備考, 有効`（`有効` は空/未指定は true、`false`/`0`/`no`/`無効` を false と解釈） |
+| プロジェクト（Project） | `プロジェクト名, 表示色, 状態, 備考`（状態は `active`/`archived`。`archived`/`アーカイブ` を archived、それ以外は既定 `active`。関連目標＝Goal 参照は将来拡張） |
 
+- 人・プロジェクトいずれも **氏名／プロジェクト名が空の行はスキップ**し、取込は**全置換**（プロダクトと同様。共通契約 §4.4.1 C に合わせ将来は名寄せ upsert へ寄せる）。
 - モジュール固有の CSV: **skills**（ユーザ / スキル / 紐づけ）→ [`spec/modules/skills.md`](modules/skills.md)、**wbs** → [`spec/modules/wbs.md`](modules/wbs.md)。
 
-> MVP の CSV 対象は既存どおり **skills / wbs**。人・プロジェクトの CSV は Phase 2 で同規約に沿って追加する（[`spec.md`](../spec.md) §9.2）。
+> 人・プロジェクト・プロダクトの各マスタは CSV 出力／取込に対応（Issue #37 / #57 / #58）。CSV は `MK.io.csv.stringify` / `MK.io.csv.parse`・`MK.io.downloadText`・ファイル選択の共通ヘルパを用いる（各マスタ view の「CSV出力」「CSV取込」）。
 
 ---
 

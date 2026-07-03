@@ -84,6 +84,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
   - workload の `capacityWarnHigh` / `capacityWarnLow` → `mk:module:workload` 側に `memberSettings[memberId]` として保持。
   - skills の評価（ratings）は従来どおり skills 側に `memberId` キーで保持。
 - 旧 wbs-tool の `assignee`（文字列）は、マスタ Member への参照（`assigneeId`）へ移行。未解決の文字列は「未割当の表示名」として暫定保持し、マスタ登録を促す（§7）。
+- CSV 入出力に対応（§4.6）。列: `氏名, 役割, 表示色, 備考, 有効`。`有効` は空/未指定は true、`false`/`0`/`no`/`無効` を false と解釈。氏名が空の行はスキップ。**現行は全置換**（共通契約 §4.4.1 C に合わせ名寄せ upsert へ寄せる）。
 
 ### Project マスタ — プロジェクト管理ドメイン … `mk:projects:v1`
 横断的な束ね概念。todo-kun の `project` 文字列、wbs の大項目、workload のタスク群を緩く束ねる。
@@ -99,6 +100,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 
 - 参照は原則 `projectId`。ただし **人間・AI 編集のしやすさ**のため、CSV/JSON では**名前による参照**も許容し、取込時に名前→ID解決する（未登録名は新規 Project として作成 or スキップを選択。既定は警告のうえスキップ）。
 - todo-kun の自由文字列 `project` は移行時に Project マスタへ名寄せ（同名は1つに集約）。後方互換として文字列のままも読めるようにする。
+- CSV 入出力に対応（§4.6）。列: `プロジェクト名, 表示色, 状態, 備考`。`状態` は `archived`/`アーカイブ` を archived、それ以外は既定 `active`。プロジェクト名が空の行はスキップ。**現行は全置換**（共通契約 §4.4.1 C に合わせ名寄せ upsert へ寄せる）。
 
 ### アロケーションマスタ — 計画（人×器×期間×割当%） … `mk:allocations:v1`
 マネージャがトップダウンで planning する**共有された計画事実**（§3.7.5）。People / Projects と同格の**中立な共有マスタ**として独立させ、特定モジュールに属させない（Issue #45 で workload 内部から昇格）。参照・編集は `ctx.allocations` 経由（§3.5）で、直接 localStorage を触らない。編集（planning）は要員計画（staffing）が担う。

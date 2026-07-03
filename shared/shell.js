@@ -372,6 +372,18 @@
     addBtn.addEventListener("click", add);
     nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
     bar.appendChild(nameInput); bar.appendChild(addBtn);
+    const expBtn = el("button", { class: "btn btn-secondary", text: "CSV出力" });
+    expBtn.addEventListener("click", () => {
+      MK.io.downloadText("people-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(MK.people.buildCSVRows()), "text/csv");
+      MK.ui.toast("人マスタCSVを書き出しました", "success");
+    });
+    const impBtn = el("button", { class: "btn btn-secondary", text: "CSV取込" });
+    // applyCSV は masters:changed を発火し、下の bus ハンドラがビュー全体を再描画する。
+    impBtn.addEventListener("click", () => pickCSV((rows) => {
+      const n = MK.people.applyCSV(rows);
+      MK.ui.toast(n + " 件のメンバーを取り込みました", "success");
+    }));
+    bar.appendChild(expBtn); bar.appendChild(impBtn);
     container.appendChild(bar);
     const host = el("div", { class: "card", style: "padding:0;overflow:hidden;" });
     container.appendChild(host);
@@ -422,6 +434,18 @@
     addBtn.addEventListener("click", add);
     nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
     bar.appendChild(nameInput); bar.appendChild(addBtn);
+    const expBtn = el("button", { class: "btn btn-secondary", text: "CSV出力" });
+    expBtn.addEventListener("click", () => {
+      MK.io.downloadText("projects-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(MK.projects.buildCSVRows()), "text/csv");
+      MK.ui.toast("プロジェクトCSVを書き出しました", "success");
+    });
+    const impBtn = el("button", { class: "btn btn-secondary", text: "CSV取込" });
+    // applyCSV は masters:changed を発火し、下の bus ハンドラがビュー全体を再描画する。
+    impBtn.addEventListener("click", () => pickCSV((rows) => {
+      const n = MK.projects.applyCSV(rows);
+      MK.ui.toast(n + " 件のプロジェクトを取り込みました", "success");
+    }));
+    bar.appendChild(expBtn); bar.appendChild(impBtn);
     container.appendChild(bar);
     const host = el("div", { class: "card", style: "padding:0;overflow:hidden;" });
     container.appendChild(host);
@@ -468,7 +492,7 @@
       MK.ui.toast("プロダクトCSVを書き出しました", "success");
     });
     const impBtn = el("button", { class: "btn btn-secondary", text: "CSV取込" });
-    impBtn.addEventListener("click", () => pickProductCSV((rows) => {
+    impBtn.addEventListener("click", () => pickCSV((rows) => {
       const n = MK.products.applyCSV(rows); productFilter = "all";
       MK.ui.toast(n + " 件のプロダクトを取り込みました", "success");
     }));
@@ -542,7 +566,8 @@
         } },
     ] });
   }
-  function pickProductCSV(cb) {
+  // CSV ファイルを選択して parse 済み行データをコールバックに渡す共通ヘルパ（人/プロジェクト/プロダクト共用）。
+  function pickCSV(cb) {
     const file = el("input", { type: "file", accept: ".csv,text/csv" });
     file.addEventListener("change", () => {
       const f = file.files[0]; if (!f) return;
