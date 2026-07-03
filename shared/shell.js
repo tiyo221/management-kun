@@ -11,6 +11,7 @@
   const META = {
     todo: { title: "ToDo", icon: "✅" },
     goals: { title: "目標", icon: "🎯" },
+    questions: { title: "わからないこと", icon: "❓" },
     skills: { title: "スキル", icon: "📊" },
     workload: { title: "負荷", icon: "📈" },
     staffing: { title: "要員計画", icon: "🧑‍🤝‍🧑" },
