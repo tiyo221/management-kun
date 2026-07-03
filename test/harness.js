@@ -42,7 +42,7 @@ const SCRIPTS = [
   "shared/people.js", "shared/projects.js", "shared/products.js", "shared/allocations.js", "shared/ui.js", "shared/sample.js",
   "modules/todo/logic.js", "modules/goals/logic.js", "modules/questions/logic.js", "modules/wbs/logic.js",
   "modules/skills/logic.js", "modules/workload/logic.js",
-  "modules/staffing/logic.js", "modules/oneonone/logic.js",
+  "modules/resource/logic.js", "modules/oneonone/logic.js",
   "modules/techstack/logic.js",
 ];
 

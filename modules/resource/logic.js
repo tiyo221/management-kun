@@ -1,8 +1,8 @@
-/* モジュール staffing（要員計画）— ロジック（PJ横断のアサイン集約・空き要員算出）。DOM/UI に触れない。CONVENTIONS §1
-   People を主語に Project 次元を横断集約する cross ビュー（spec §3.7.5）。
-   データ源は中立な共有マスタ MK.allocations（Issue #45 で workload 内部から昇格）。自前の永続データは
-   持たず、マスタを参照・編集する。WBS の担当（assigneeId）等、各モジュールの内部データは覗かない
-   ＝モジュール独立を維持する。workload の logic API には依存しない（workload を外しても成立する）。 */
+/* モジュール resource（リソース＝要員計画）— ロジック（PJ横断のアサイン集約・空き要員・月次供給）。DOM/UI に触れない。CONVENTIONS §1
+   People を主語に Project 次元を横断集約する cross ビュー（spec §3.7.5）。旧 staffing を発展させたもの（Issue #52）。
+   データ源は中立な共有マスタ MK.allocations（供給）。将来 MK.demands（需要）と対で月次ギャップを見る。
+   自前の永続データは持たず、マスタを参照・編集する。各モジュールの内部データ（WBS の担当 assigneeId 等）は
+   覗かない＝モジュール独立を維持する。旧 workload の task ベース負荷には依存しない。 */
 (function () {
   "use strict";
   const MK = window.MK;
@@ -129,6 +129,66 @@
     return { date, capacity: cap, rows, memberSummary };
   }
 
+  // ---- 月次集計（要員確保のリードタイムに合わせた粗い時間軸。Issue #52）----
+  // 週次は凸凹が細かすぎ「見えても確保が間に合わない」ため、月次×長ホライズンで先まで見せる。
+
+  // 1ヶ月あたりの平均週数（365.25 / 12 / 7 ≒ 4.345）。ホライズンの週数を月数へ丸める係数。
+  const WEEKS_PER_MONTH = 4.345;
+
+  /**
+   * 表示ホライズン（週数）を月次に丸め、対象月（各月1日）の配列を返す純関数。
+   * 週数 period を約4.345週/月で月数へ変換し、基準月を起点に offset 月ずらす。
+   * @param {number} period - ホライズンの週数（13/26/52 等）
+   * @param {number} [offset] - 基準月からの月オフセット（既定 0）
+   * @param {string} [baseDate] - 基準日（YYYY-MM-DD、既定 本日）。テストで固定するための注入点。
+   * @returns {string[]} 各月の初日（YYYY-MM-01）の配列
+   */
+  function monthsInHorizon(period, offset, baseDate) {
+    const count = Math.max(1, Math.round((period || 13) / WEEKS_PER_MONTH));
+    const base = baseDate || MK.util.todayISO();
+    const y = Number(base.slice(0, 4)), m = Number(base.slice(5, 7));
+    const arr = [];
+    for (let i = 0; i < count; i++) {
+      // 年初からの 0-based 月インデックス。負 offset でも floor 除算で年へ桁上がり／桁下がりする。
+      const idx = (m - 1) + (offset || 0) + i;
+      const yy = y + Math.floor(idx / 12);
+      const mm = ((idx % 12) + 12) % 12 + 1;               // 0..11 へ正規化してから 1..12 に戻す（負値対応）
+      arr.push(yy + "-" + String(mm).padStart(2, "0") + "-01");
+    }
+    return arr;
+  }
+  /**
+   * 指定月の代表サンプル日（15日）を返す。月次の在籍判定に用いる（月中に一点サンプル）。
+   * @param {string} monthFirst - 月初日（YYYY-MM-01）
+   * @returns {string} サンプル日（YYYY-MM-15）
+   */
+  function monthSample(monthFirst) { return monthFirst.slice(0, 8) + "15"; }
+
+  /**
+   * 月次の供給（割当）とキャパを算出する純関数。各月の代表日で全メンバーの割当合計を集計する。
+   * 「供給がキャパを超える月＝オーバーコミット」「空きが尽きる月」を導ける（早期警告）。
+   * @param {Object[]} allocations - 対象アロケーション一覧
+   * @param {Array<Object>} memberList - メンバー一覧
+   * @param {string[]} months - 対象月（月初日）の配列
+   * @param {number} [capacity] - メンバー1人あたり総キャパ(%)（既定 100）
+   * @returns {{month: string, assigned: number, cap: number, free: number, overCount: number}[]}
+   *   月ごとの総割当・総キャパ・空き（負なら供給超過）・過剰アサイン人数
+   */
+  function supplyByMonth(allocations, memberList, months, capacity) {
+    const cap = capacity == null ? DEFAULT_CAPACITY : capacity;
+    const totalCap = (memberList || []).length * cap;
+    return (months || []).map((mo) => {
+      const date = monthSample(mo);
+      let assigned = 0, overCount = 0;
+      (memberList || []).forEach((m) => {
+        const a = totalPercent(allocations, m.id, date);
+        assigned += a;
+        if (a > cap) overCount++;
+      });
+      return { month: mo, assigned, cap: totalCap, free: totalCap - assigned, overCount };
+    });
+  }
+
   /**
    * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
    * 本日時点の各メンバーの空きをチーム平均し、過剰アサイン（割当 > キャパ）人数を数える。
@@ -147,5 +207,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.staffing = { DEFAULT_CAPACITY, alloc, members, targets, capacityOf, cellPercent, totalPercent, freeOn, freeSeries, overviewOn, summary };
+  MK.logic.resource = { DEFAULT_CAPACITY, alloc, members, targets, capacityOf, cellPercent, totalPercent, freeOn, freeSeries, overviewOn, monthsInHorizon, monthSample, supplyByMonth, summary };
 })();

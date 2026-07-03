@@ -14,7 +14,7 @@
     questions: { title: "わからないこと", icon: "❓" },
     skills: { title: "スキル", icon: "📊" },
     workload: { title: "負荷", icon: "📈" },
-    staffing: { title: "要員計画", icon: "🧑‍🤝‍🧑" },
+    resource: { title: "リソース", icon: "🧑‍🤝‍🧑" },
     oneonone: { title: "1on1", icon: "🗣" },
     wbs: { title: "WBS", icon: "🗂" },
     techstack: { title: "技術スタック", icon: "🧰" },
@@ -25,7 +25,7 @@
   // config には載せない（空グループを出さない。spec §1.4）。
   const DEFAULT_ZONES = [
     { label: "自分", modules: ["todo", "goals", "questions"] },
-    { label: "ピープル", modules: ["skills", "workload", "staffing", "oneonone"] },
+    { label: "ピープル", modules: ["skills", "resource", "oneonone"] },
     { label: "デリバリー", modules: ["wbs"] },
     { label: "テクノロジー", modules: ["techstack"] },
   ];

@@ -357,3 +357,13 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .wl-ok { background: var(--color-success); color: #fff; }
 .wl-peak { font-size: 12px; color: var(--color-steel); }
 .wl-peak.hot { color: var(--color-error); font-weight: 600; }
+.wl-name.today { text-decoration: underline; text-decoration-color: var(--color-primary); text-underline-offset: 3px; }
+
+/* ---- resource: 月次の供給とキャパ（Issue #52）---- */
+.mk-month-list { display: flex; flex-direction: column; }
+.mk-month-row { padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-hairline); }
+.mk-month-row:last-child { border-bottom: none; }
+.mk-month-bar { position: relative; height: 10px; margin-top: 6px; border-radius: var(--rounded-full); background: var(--color-surface); overflow: hidden; }
+.mk-month-fill { height: 100%; background: rgba(86, 69, 212, 0.55); border-radius: var(--rounded-full); }
+.mk-month-fill.tight { background: var(--color-warning); }
+.mk-month-fill.over { background: var(--color-error); }

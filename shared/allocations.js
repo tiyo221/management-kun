@@ -1,7 +1,7 @@
 /* アロケーション管理（共有マスタ）spec §3.7.5 / §4.4
    `人 × 器（Project/将来 Product）× 期間 × 割当%` の計画事実を、モジュールに属さない
    中立な共有マスタとして保持する。People / Projects と同格（別ストア mk:allocations、
-   ctx.allocations 経由で参照・編集）。要員計画（staffing）が編集・俯瞰し、workload には
+   ctx.allocations 経由で参照・編集）。リソース（resource・旧 staffing）が編集・俯瞰し、workload には
    依存しない（Issue #45 で workload 内部データから昇格）。 */
 (function () {
   "use strict";

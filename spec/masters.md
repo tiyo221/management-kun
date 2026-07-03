@@ -103,7 +103,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 - CSV 入出力に対応（§4.6）。列: `プロジェクト名, 表示色, 状態, 備考`。`状態` は `archived`/`アーカイブ` を archived、それ以外は既定 `active`。プロジェクト名が空の行はスキップ。**現行は全置換**（共通契約 §4.4.1 C に合わせ名寄せ upsert へ寄せる）。
 
 ### アロケーションマスタ — 計画（人×器×期間×割当%） … `mk:allocations:v1`
-マネージャがトップダウンで planning する**共有された計画事実**（§3.7.5）。People / Projects と同格の**中立な共有マスタ**として独立させ、特定モジュールに属させない（Issue #45 で workload 内部から昇格）。参照・編集は `ctx.allocations` 経由（§3.5）で、直接 localStorage を触らない。編集（planning）は要員計画（staffing）が担う。
+マネージャがトップダウンで planning する**共有された計画事実**（§3.7.5）。People / Projects と同格の**中立な共有マスタ**として独立させ、特定モジュールに属させない（Issue #45 で workload 内部から昇格）。参照・編集は `ctx.allocations` 経由（§3.5）で、直接 localStorage を触らない。編集（planning）はリソース（resource・旧 staffing）が担う。
 
 | フィールド | 型 | 説明 |
 |---|---|---|
