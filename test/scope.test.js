@@ -1,8 +1,13 @@
-/* スコープ次元の基盤（MK.scope・対象別 store）テスト spec §3.7 / Issue #24 */
+/* スコープ次元の基盤（MK.scope・対象別 store）テスト spec §3.7 / Issue #24 / #54 */
 "use strict";
 
 // テスト用の次元定義（project 次元をマスタ projects に紐づける）。
 const DIMS = [{ dim: "project", label: "プロジェクト", master: "projects" }];
+// 実運用の MK_CONFIG.dimensions 相当（project + product の2次元。Issue #54）。
+const DIMS_ALL = [
+  { dim: "project", label: "プロジェクト", master: "projects" },
+  { dim: "product", label: "プロダクト", master: "products" },
+];
 // MK_CONFIG.dimensions を一時的に差し替えて fn を実行し、必ず元へ戻すヘルパ。
 function withDims(dims, fn) {
   const prev = global.window.MK_CONFIG;
@@ -94,6 +99,32 @@ test("対象別 store: mk:module:<id>:<targetId>:v1 に対象別で保存/読込
     assert(localStorage.getItem("mk:module:wbs:pB:v1") != null, "pB キーが存在");
     eq(MK.store.scope(nsA).get().tasks, ["a"]);
     eq(MK.store.scope(nsB).get().tasks, ["b"]);
+  });
+});
+
+test("scope: Product 次元（Issue #54）も project と同様に汎用配線で動く", (MK) => {
+  // 観点: MK_CONFIG.dimensions に product を並べても、コードの決め打ち分岐なしに
+  // master 名（"products"）から MK.products を汎用解決し、対象別 ns・縮退モードも project と同じ挙動になる
+  // 入力: DIMS_ALL（project+product）下で product 次元を dimOf/master/entities/mode/storeNsFor に通す
+  // 期待: dimOf→DIMS_ALL[1] / master→MK.products / entities は作成件数どおり / mode は project と同じ規則 /
+  //       storeNsFor は "module:<id>:<productId>" へ解決
+  withDims(DIMS_ALL, () => {
+    const dim = MK.scope.dimOf({ dim: "product" });
+    eq(dim, DIMS_ALL[1]);
+    assert(MK.scope.master(dim) === MK.products, "master は MK.products を汎用解決");
+    eq(MK.scope.entities(dim), []);
+    eq(MK.scope.mode(MK.scope.entities(dim).length), "empty");
+
+    const p1 = MK.products.create({ name: "Product A" });
+    eq(MK.scope.entities(dim).length, 1);
+    eq(MK.scope.mode(1), "single");
+
+    const p2 = MK.products.create({ name: "Product B" });
+    eq(MK.scope.mode(2), "multi");
+    eq(MK.scope.resolveTarget(dim, p2.id), p2.id);
+    eq(MK.scope.resolveTarget(dim, "prod_gone"), p1.id);
+
+    eq(MK.scope.storeNsFor("sample", { dim: "product" }, p1.id), "module:sample:" + p1.id);
   });
 });
 

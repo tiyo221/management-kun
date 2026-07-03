@@ -66,7 +66,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 
 #### E. IO・整合
 - 全体 JSON エンベロープ（§4.2）に `<collection>` 配列として往復（置換・マージ）。**マージは id 一致で上書き、なければ追加**。名前参照は取込時に名寄せ（§8）で解決する。
-- スコープ次元（§3.7）になるマスタは `dimensions[].master === "<domain>"` の供給元を兼ねる（Project／将来 Product）。参照マスタ（People）は次元にしない（§3.7.1）。
+- スコープ次元（§3.7）になるマスタは `dimensions[].master === "<domain>"` の供給元を兼ねる（Project／Product・#54）。参照マスタ（People）は次元にしない（§3.7.1）。
 
 ### People マスタ — Member（人） … `mk:people:v1`
 人の管理ドメイン。全モジュール横断の最小マスタ。モジュール固有の属性はマスタに持たせず、各モジュール側に `memberId` をキーに格納する（マスタを汚さず拡張可能にするため）。
@@ -110,7 +110,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 | `id` | string | 一意ID（`a_<epoch>_<rand>`。昇格前の workload 由来は `wa_…` を保持） |
 | `memberId` | string \| null | 対象メンバー（People 参照） |
 | `targetId` | string \| null | 器のID（現状 Project 参照。次元は `dim` で識別） |
-| `dim` | string | 次元キー（器の種類。既定 `project`・将来 `product`。§3.7.6 の config 由来。`"project"` 決め打ち禁止） |
+| `dim` | string | 次元キー（器の種類。`project` / `product`。§3.7.6 の config 由来。`"project"` 決め打ち禁止） |
 | `startDate` / `endDate` | string | 割当期間（YYYY-MM-DD、未設定は空文字） |
 | `percent` | number | 割当率(%)。100 超も許容（過剰アサインの可視化） |
 | `note` | string | 備考（任意） |
@@ -120,7 +120,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 - ※ `memberId` / `targetId` の複合参照を持つため、共通契約の `name` 必須・`resolve`/CSV は素直に当てはまらない（名前ではなく参照で成立するマスタ）。編集は要員計画 UI と JSON 入出力を正とし、CSV 取込対象外。
 
 ### Product マスタ — プロダクト（成果物）… `mk:products:v1`
-プロダクト領域（§1.4・主語＝作るもの／成果物）の横断マスタ。People / Project とは別ドメインの独立ストア（`mk:products`）で、シェルレベルの「マスタ」グループに `master-products`（📦 プロダクト）として置く（§3.6 / §6.4）。扱うプロダクト自体の台帳であると同時に、将来 §3.7 の **Product スコープ次元のマスタ**（`dimensions[].master === "products"`）になる「器」を兼ねる。次元としての配線（`MK_CONFIG.dimensions` への追加）は別 Issue に分け、本バージョンは**マスタ（台帳）として成立**させるところまで（Issue #37・§3.7.6・§9.3 ガードレール準拠）。
+プロダクト領域（§1.4・主語＝作るもの／成果物）の横断マスタ。People / Project とは別ドメインの独立ストア（`mk:products`）で、シェルレベルの「マスタ」グループに `master-products`（📦 プロダクト）として置く（§3.6 / §6.4）。扱うプロダクト自体の台帳であると同時に、§3.7 の **Product スコープ次元のマスタ**（`dimensions[].master === "products"`）を兼ねる。マスタ自体は Issue #37 で先行追加し、次元としての配線（`MK_CONFIG.dimensions` への追加）は Issue #54 で完了した（§3.7.6・§9.3 ガードレール準拠。product-scoped モジュールはまだ無い）。
 
 | フィールド | 型 | 説明 |
 |---|---|---|
