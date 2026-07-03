@@ -39,13 +39,12 @@
 window.MK_CONFIG = {
   profile: "manager",
   // スコープ次元（§3.7）: 「その中に入って作業する対象」になれるマスタを宣言的に列挙する。
-  // 実装配線は現状 Project の1次元のみ。将来 Product はこの配列に1行足す＋モジュールを足す
-  // だけで増える（コードは "project" を決め打ちしない。§3.7.6 / CONVENTIONS §3）。
+  // コードは "project" を決め打ちしない（§3.7.6 / CONVENTIONS §3）。
   dimensions: [
     { dim: "project", label: "プロジェクト", master: "projects" },
-    // products マスタ（📦 プロダクト）は実装済みだが、Product 次元としての配線（この配列への
-    // 追加）は別 Issue に分ける（Issue #37 / spec §3.7.6）。昇格時は次の1行を有効化する:
-    // { dim: "product", label: "プロダクト", master: "products" }
+    // Product 次元（Issue #54）。master は既存の products マスタ（shared/products.js）に
+    // 汎用解決される。scoped モジュールは追加時に実体化する（YAGNI・§3.7.6）。
+    { dim: "product", label: "プロダクト", master: "products" },
   ],
   zones: [
     { label: "自分", modules: ["todo", "goals", "questions"] },
