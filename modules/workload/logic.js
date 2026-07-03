@@ -230,7 +230,7 @@
       t(tanaka, "ロゴ制作", 30, MK.util.addDays(today, 7), MK.util.addDays(today, 21)),
     ];
     save(d);
-    // 計画（アロケーション）は共有マスタ側のサンプルとして staffing.loadSample が投入する（Issue #45）。
+    // 計画（アロケーション）は共有マスタ側のサンプルとして resource.loadSample が投入する（Issue #45 / #52）。
   }
 
   /**

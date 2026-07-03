@@ -1,12 +1,12 @@
-/* モジュール staffing（要員計画）— ビュー（描画・イベント）。計算は MK.logic.staffing に委譲。CONVENTIONS §1
-   アロケーション（共有マスタ MK.allocations）を編集し、PJ×メンバーのアサイン表と、メンバー別の
-   空き要員（期間軸）を俯瞰する（spec §3.7.5）。planning はこの要員計画で行う（Issue #45）。 */
+/* モジュール resource（リソース＝要員計画）— ビュー（描画・イベント）。計算は MK.logic.resource に委譲。CONVENTIONS §1
+   アロケーション（共有マスタ MK.allocations）を編集し、PJ×メンバーのアサイン表・メンバー別の空き要員（期間軸）・
+   月次の供給とキャパ（要員確保のリードタイム向け早期警告）を俯瞰する（spec §3.7.5 / Issue #52）。 */
 (function () {
   "use strict";
   const MK = window.MK;
   const el = MK.util.el;
   const ui = MK.ui;
-  const L = () => MK.logic.staffing;
+  const L = () => MK.logic.resource;
   const PERIODS = [{ key: 13, label: "四半期" }, { key: 26, label: "半年" }, { key: 52, label: "1年" }];
 
   let root = null;
@@ -19,17 +19,19 @@
   function render() {
     if (!root) return;
     root.innerHTML = "";
-    root.appendChild(ui.sectionTitle("要員計画"));
+    root.appendChild(ui.sectionTitle("リソース"));
     const ms = L().members();
     if (!ms.length) { root.appendChild(ui.emptyState("メンバーがいません。「人」で追加してください。")); return; }
     const list = L().alloc();
     const tg = L().targets();
     const weeks = weekMondays(state.period, state.offset);
-    const refDate = MK.util.todayISO(); // アサイン表・空き集計の基準日は本日固定（期間軸スイッチャは下段の週次ストリップ専用）
+    const months = L().monthsInHorizon(state.period, state.offset);
+    const refDate = MK.util.todayISO(); // アサイン表・空き集計の基準日は本日固定（期間軸スイッチャは下段の推移専用）
     const ov = L().overviewOn(list, ms, tg, refDate, L().DEFAULT_CAPACITY);
 
     const body = [toolbar(refDate, tg)];
     body.push(planCard(list, tg));
+    body.push(supplyCard(L().supplyByMonth(list, ms, months, L().DEFAULT_CAPACITY)));
     body.push(freeCard(ov, list, ms, weeks));
     if (tg.length) body.push(assignCard(ov, ms, tg));
     root.appendChild(ui.stack(body));
@@ -40,9 +42,9 @@
     if (tg.length) bar.appendChild(ui.button("＋ アロケーション", { variant: "btn-primary", onClick: () => editAllocation(null) }));
     bar.appendChild(inlinePills(PERIODS, state.period, (k) => { state.period = k; render(); }));
     bar.appendChild(ui.button("◀", { variant: "btn-ghost", onClick: () => { state.offset--; render(); } }));
-    bar.appendChild(ui.button("今日", { variant: "btn-ghost", onClick: () => { state.offset = 0; render(); } }));
+    bar.appendChild(ui.button("今月", { variant: "btn-ghost", onClick: () => { state.offset = 0; render(); } }));
     bar.appendChild(ui.button("▶", { variant: "btn-ghost", onClick: () => { state.offset++; render(); } }));
-    bar.appendChild(el("span", { class: "sub", text: "アサイン表は本日（" + refDate + "）時点／期間切替は下段の空き推移用" }));
+    bar.appendChild(el("span", { class: "sub", text: "アサイン表は本日（" + refDate + "）時点／期間切替は下段の月次・週次推移用" }));
     return bar;
   }
 
@@ -106,19 +108,45 @@
         } },
     ].filter(Boolean) });
   }
-  // 数値 key の pill 群（ui.pillTabs は文字列 key 前提のため。workload と同様）
+  // 数値 key の pill 群（ui.pillTabs は文字列 key 前提のため）
   function inlinePills(items, active, onChange) {
     const wrap = el("span", { style: "display:inline-flex;gap:4px;" });
     items.forEach((it) => { const b = el("button", { class: "pill-tab" + (it.key === active ? " active" : ""), text: it.label }); b.addEventListener("click", () => onChange(it.key)); wrap.appendChild(b); });
     return wrap;
   }
 
-  // 表示期間分の週開始日（月曜）を生成（workload と同じ暦。共有 util を使用）
+  // 表示期間分の週開始日（月曜）を生成（共有 util を使用）
   function weekMondays(period, offset) {
     const start = MK.util.addDays(MK.util.mondayOf(MK.util.todayISO()), (offset || 0) * 7);
     const arr = []; for (let i = 0; i < period; i++) arr.push(MK.util.addDays(start, i * 7));
     return arr;
   }
+
+  // ---- 月次の供給とキャパ（要員確保のリードタイム向け早期警告。Issue #52）----
+  // 供給がキャパを超える月＝オーバーコミット、空きが尽きる月を先まで見せる。週次の凸凹は見せない。
+  function supplyCard(rows) {
+    const thisMonth = MK.util.todayISO().slice(0, 7);
+    const list = el("div", { class: "mk-month-list" });
+    rows.forEach((r) => {
+      const over = r.free < 0;
+      const tight = !over && r.cap > 0 && r.free <= r.cap * 0.1; // 空きが1割以下＝逼迫
+      const ratio = r.cap > 0 ? r.assigned / r.cap : 0;
+      const cls = over ? "wl-over" : (tight ? "wl-under" : "wl-ok");
+      const label = over ? ("超過 " + Math.round(-r.free) + "%") : ("空き " + Math.round(r.free) + "%");
+      const bar = el("div", { class: "mk-month-bar" }, [
+        el("div", { class: "mk-month-fill" + (over ? " over" : (tight ? " tight" : "")), style: "width:" + Math.min(100, Math.round(ratio * 100)) + "%;" }),
+      ]);
+      const head = el("div", { class: "wl-head" }, [
+        el("span", { class: "wl-name" + (r.month.slice(0, 7) === thisMonth ? " today" : ""), text: monthLabel(r.month) }),
+        el("span", { class: "wl-badge " + cls, text: label }),
+        el("span", { class: "wl-peak" + (r.overCount ? " hot" : ""), text: "割当 " + Math.round(r.assigned) + "% / キャパ " + r.cap + "%" + (r.overCount ? "（過剰 " + r.overCount + "人）" : "") }),
+      ]);
+      list.appendChild(el("div", { class: "mk-month-row" }, [head, bar]));
+    });
+    const intro = el("p", { class: "sub", text: "供給（割当）がキャパを超える月＝オーバーコミット。空きが尽きる前に増員・応援を手当てする早期警告です。" });
+    return ui.card([el("h3", { text: "月ごとの供給とキャパ（" + monthLabel(rows[0] && rows[0].month) + " 〜）" }), intro, list]);
+  }
+  function monthLabel(monthFirst) { if (!monthFirst) return ""; const y = monthFirst.slice(0, 4), m = Number(monthFirst.slice(5, 7)); return y + "年" + m + "月"; }
 
   // ---- 空き要員（メンバー別・期間軸）----
   function freeCard(ov, list, ms, weeks) {
@@ -182,12 +210,12 @@
     return ui.card([el("h3", { text: "アサイン表（基準日 " + ov.date + "）" }), wrap]);
   }
 
-  // メンバー表示色（People マスタの color 優先、無ければパレット循環。workload と揃える）
+  // メンバー表示色（People マスタの color 優先、無ければパレット循環）
   const PALETTE = ["#5645d4", "#0075de", "#dd5b00", "#1aae39", "#ff64c8", "#2a9d99"];
   function colorOf(m, i) { return (m && m.color) || PALETTE[i % PALETTE.length]; }
 
   // サンプルのアロケーション（計画）を共有マスタへ投入する。people/projects 投入後に呼ばれる
-  // 前提で名寄せ（resolveOrCreate）が既存に一致する（shared/sample.js）。Issue #45 で workload から移設。
+  // 前提で名寄せ（resolveOrCreate）が既存に一致する（shared/sample.js）。旧 staffing から移設（Issue #52）。
   function loadSample() {
     const today = MK.util.todayISO();
     const sato = MK.people.resolveOrCreate("佐藤 花子"), suzuki = MK.people.resolveOrCreate("鈴木 一郎"), tanaka = MK.people.resolveOrCreate("田中 美咲");
@@ -201,8 +229,8 @@
     ]);
   }
 
-  MK.registerModule("staffing", {
-    title: "要員計画", icon: "🧑‍🤝‍🧑",
+  MK.registerModule("resource", {
+    title: "リソース", icon: "🧑‍🤝‍🧑",
     scope: "global",
     mount(container, context) { ctx = context; root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; ctx = null; },
