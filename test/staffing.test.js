@@ -96,16 +96,16 @@ test("staffing: freeSeries は期間軸で空きを算出する", (MK) => {
   eq(S.freeSeries(list, "m1", weeks), [100, 30, 100]);
 });
 
-test("staffing: summary はアロケーション由来（WBS 等の内部を見ない）で空き平均と過剰人数を返す", (MK) => {
-  // 観点: データ源は共有アロケーションのみ＝モジュール独立（#27 受け入れ条件）。HOME サマリー（§3.6）
-  // 入力: 本日を含む期間で m1 に 120%（過剰）、m2 に 40% を workload のアロケーションとして登録
+test("staffing: summary はアロケーション由来（WBS/workload 等の内部を見ない）で空き平均と過剰人数を返す", (MK) => {
+  // 観点: データ源は中立な共有マスタ MK.allocations のみ＝モジュール独立（#27/#45 受け入れ条件）。HOME サマリー（§3.6）
+  // 入力: 本日を含む期間で m1 に 120%（過剰）、m2 に 40% を共有マスタへ登録
   // 期待: empty=false、過剰アサイン=1人。空きは m1=-20, m2=60 の平均=20%
-  const S = MK.logic.staffing, W = MK.logic.workload;
+  const S = MK.logic.staffing;
   const m1 = MK.people.resolveOrCreate("過剰さん"), m2 = MK.people.resolveOrCreate("余裕さん");
   const today = MK.util.todayISO(), end = MK.util.addDays(today, 30);
-  W.addAllocation({ memberId: m1, targetId: "a", percent: 70, startDate: today, endDate: end });
-  W.addAllocation({ memberId: m1, targetId: "b", percent: 50, startDate: today, endDate: end });
-  W.addAllocation({ memberId: m2, targetId: "a", percent: 40, startDate: today, endDate: end });
+  MK.allocations.create({ memberId: m1, targetId: "a", percent: 70, startDate: today, endDate: end });
+  MK.allocations.create({ memberId: m1, targetId: "b", percent: 50, startDate: today, endDate: end });
+  MK.allocations.create({ memberId: m2, targetId: "a", percent: 40, startDate: today, endDate: end });
   const sum = S.summary();
   eq(sum.empty, false);
   eq(sum.stats[1].value, 1);       // 過剰アサイン 1人（m1）

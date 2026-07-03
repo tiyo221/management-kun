@@ -1,5 +1,6 @@
 /* モジュール staffing（要員計画）— ビュー（描画・イベント）。計算は MK.logic.staffing に委譲。CONVENTIONS §1
-   PJ×メンバーのアサイン表と、メンバー別の空き要員（期間軸）を俯瞰する読み取り専用ビュー（spec §3.7.5）。 */
+   アロケーション（共有マスタ MK.allocations）を編集し、PJ×メンバーのアサイン表と、メンバー別の
+   空き要員（期間軸）を俯瞰する（spec §3.7.5）。planning はこの要員計画で行う（Issue #45）。 */
 (function () {
   "use strict";
   const MK = window.MK;
@@ -9,7 +10,11 @@
   const PERIODS = [{ key: 13, label: "四半期" }, { key: 26, label: "半年" }, { key: 52, label: "1年" }];
 
   let root = null;
+  let ctx = null; // マスタ編集は ctx.allocations 経由（spec §3.5）
   const state = { period: 13, offset: 0 };
+
+  // マスタ編集入口（契約に沿って ctx.allocations を使う。未取得時は global へフォールバック）
+  function allocMaster() { return (ctx && ctx.allocations) || MK.allocations; }
 
   function render() {
     if (!root) return;
@@ -23,23 +28,83 @@
     const refDate = MK.util.todayISO(); // アサイン表・空き集計の基準日は本日固定（期間軸スイッチャは下段の週次ストリップ専用）
     const ov = L().overviewOn(list, ms, tg, refDate, L().DEFAULT_CAPACITY);
 
-    const body = [toolbar(refDate)];
-    if (!list.length) {
-      body.push(ui.card([ui.emptyState("アロケーション（計画）がありません。「負荷」モジュールの「計画」タブで、各メンバーをプロジェクトへ割り当ててください。")], { flush: true }));
-    }
+    const body = [toolbar(refDate, tg)];
+    body.push(planCard(list, tg));
     body.push(freeCard(ov, list, ms, weeks));
     if (tg.length) body.push(assignCard(ov, ms, tg));
     root.appendChild(ui.stack(body));
   }
 
-  function toolbar(refDate) {
+  function toolbar(refDate, tg) {
     const bar = ui.toolbar([]);
+    if (tg.length) bar.appendChild(ui.button("＋ アロケーション", { variant: "btn-primary", onClick: () => editAllocation(null) }));
     bar.appendChild(inlinePills(PERIODS, state.period, (k) => { state.period = k; render(); }));
     bar.appendChild(ui.button("◀", { variant: "btn-ghost", onClick: () => { state.offset--; render(); } }));
     bar.appendChild(ui.button("今日", { variant: "btn-ghost", onClick: () => { state.offset = 0; render(); } }));
     bar.appendChild(ui.button("▶", { variant: "btn-ghost", onClick: () => { state.offset++; render(); } }));
     bar.appendChild(el("span", { class: "sub", text: "アサイン表は本日（" + refDate + "）時点／期間切替は下段の空き推移用" }));
     return bar;
+  }
+
+  // ---- 計画（共有アロケーション。§3.7.5）----
+  // 器（Project 等）は次元 config を回して集める。コードで "project" を決め打ちしない（§3.7.6）。
+  function targetOptions() {
+    const opts = [];
+    ((MK.scope && MK.scope.dims()) || []).forEach((dim) => {
+      const master = MK.scope.master(dim);
+      if (master && typeof master.all === "function") master.all().forEach((e) => opts.push({ value: e.id, label: e.name || "(無題)", dim: dim.dim }));
+    });
+    return opts;
+  }
+  function targetLabel(opts, targetId) { const o = opts.find((x) => x.value === targetId); return o ? o.label : "(不明な対象)"; }
+  function memberName(mid) { const m = L().members().find((x) => x.id === mid); return m ? m.name : "(不明)"; }
+
+  function planCard(list, tg) {
+    if (!tg.length) return ui.card([ui.emptyState("計画の対象となるプロジェクトがありません。「プロジェクト」マスタで追加してください。")], { flush: true });
+    const intro = el("p", { class: "sub", text: "各メンバーをプロジェクトへ期間×割当%で計画します。WBS の担当とは独立した計画レコードです。" });
+    if (!list.length) return ui.card([intro, ui.emptyState("アロケーションがありません。「＋ アロケーション」から追加してください。")]);
+    const opts = targetOptions();
+    const ul = el("ul", { class: "mk-list" });
+    list.forEach((a) => ul.appendChild(allocRow(a, opts)));
+    return ui.card([intro, ul]);
+  }
+
+  function allocRow(a, opts) {
+    const period = (a.startDate || "?") + " 〜 " + (a.endDate || "?");
+    const info = el("div", { class: "grow", style: "cursor:pointer;" }, [
+      el("div", { text: memberName(a.memberId) + " → " + targetLabel(opts, a.targetId) }),
+      el("div", { class: "sub", text: "割当 " + a.percent + "% / " + period }),
+    ]);
+    info.addEventListener("click", () => editAllocation(a));
+    return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("このアロケーションを削除しますか？").then((ok) => { if (ok) { allocMaster().remove(a.id); render(); } }) })]);
+  }
+
+  function editAllocation(a) {
+    const ms = L().members();
+    const opts = targetOptions();
+    const f = {
+      member: ui.select(ms.map((m) => ({ value: m.id, label: m.name })), a ? a.memberId : (ms[0] && ms[0].id)),
+      target: ui.select(opts.map((o) => ({ value: o.value, label: o.label })), a ? a.targetId : (opts[0] && opts[0].value)),
+      percent: ui.input({ type: "number", value: a ? a.percent : 50 }),
+      start: ui.input({ type: "date", value: a ? a.startDate : "" }),
+      end: ui.input({ type: "date", value: a ? a.endDate : "" }),
+      note: ui.textarea(a ? a.note : ""),
+    };
+    MK.ui.modal({ title: a ? "アロケーションを編集" : "アロケーションを追加", body: ui.stack([
+      ui.field("メンバー", f.member), ui.field("プロジェクト", f.target), ui.field("割当（%）", f.percent),
+      ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
+    ]), actions: [
+      a ? { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("削除しますか？").then((ok) => { if (ok) { allocMaster().remove(a.id); c(); render(); } }) } : null,
+      { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
+      { label: "保存", variant: "btn-primary", onClick: (c) => {
+          if (!f.target.value) { MK.ui.toast("プロジェクトを選択してください", "error"); return; }
+          if (f.start.value && f.end.value && f.end.value < f.start.value) { MK.ui.toast("終了日は開始日以降にしてください", "error"); return; }
+          const dimOf = (opts.find((o) => o.value === f.target.value) || {}).dim || "project";
+          const patch = { memberId: f.member.value, targetId: f.target.value, dim: dimOf, percent: Math.max(0, Number(f.percent.value) || 0), startDate: f.start.value || "", endDate: f.end.value || "", note: f.note.value };
+          if (a) allocMaster().update(a.id, patch); else allocMaster().create(patch);
+          c(); render();
+        } },
+    ].filter(Boolean) });
   }
   // 数値 key の pill 群（ui.pillTabs は文字列 key 前提のため。workload と同様）
   function inlinePills(items, active, onChange) {
@@ -121,11 +186,27 @@
   const PALETTE = ["#5645d4", "#0075de", "#dd5b00", "#1aae39", "#ff64c8", "#2a9d99"];
   function colorOf(m, i) { return (m && m.color) || PALETTE[i % PALETTE.length]; }
 
+  // サンプルのアロケーション（計画）を共有マスタへ投入する。people/projects 投入後に呼ばれる
+  // 前提で名寄せ（resolveOrCreate）が既存に一致する（shared/sample.js）。Issue #45 で workload から移設。
+  function loadSample() {
+    const today = MK.util.todayISO();
+    const sato = MK.people.resolveOrCreate("佐藤 花子"), suzuki = MK.people.resolveOrCreate("鈴木 一郎"), tanaka = MK.people.resolveOrCreate("田中 美咲");
+    const alpha = MK.projects.resolveOrCreate("新製品ローンチ"), beta = MK.projects.resolveOrCreate("サイトリニューアル");
+    const end = MK.util.addDays(today, 84);
+    MK.allocations.replaceAll([
+      { id: MK.util.uid("a"), memberId: suzuki, targetId: alpha, dim: "project", startDate: today, endDate: end, percent: 60, note: "" },
+      { id: MK.util.uid("a"), memberId: suzuki, targetId: beta, dim: "project", startDate: today, endDate: end, percent: 30, note: "" },
+      { id: MK.util.uid("a"), memberId: sato, targetId: alpha, dim: "project", startDate: today, endDate: end, percent: 50, note: "" },
+      { id: MK.util.uid("a"), memberId: tanaka, targetId: beta, dim: "project", startDate: today, endDate: end, percent: 80, note: "" },
+    ]);
+  }
+
   MK.registerModule("staffing", {
     title: "要員計画", icon: "🧑‍🤝‍🧑",
     scope: "global",
-    mount(container) { root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; },
+    mount(container, context) { ctx = context; root = el("div"); container.appendChild(root); render(); },
+    unmount() { root = null; ctx = null; },
     summary() { return L().summary(); },
+    loadSample,
   });
 })();

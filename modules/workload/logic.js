@@ -26,26 +26,11 @@
    */
 
   /**
-   * 共有アロケーション1件。`人 × 器（Project/将来 Product）× 期間 × 割当%` を表す、
-   * マネージャがトップダウンで planning する粗い計画事実（spec §3.7.5）。
-   * WBS の担当（assigneeId）とは**別レコード**で、片方から導出しない・片方を変えても他方に影響しない。
-   * @typedef {Object} Allocation
-   * @property {string} id - アロケーションID（"wa" プレフィックス）
-   * @property {string|null} memberId - 対象メンバーID（People マスタ参照）
-   * @property {string|null} targetId - 器のID（現状 Project マスタの id。次元は dim で識別）
-   * @property {string} dim - 次元キー（器の種類。既定 "project"。将来 "product"。§3.7.6 の config 由来）
-   * @property {string} startDate - 割当開始日（YYYY-MM-DD、未設定なら空文字）
-   * @property {string} endDate - 割当終了日（YYYY-MM-DD、未設定なら空文字）
-   * @property {number} percent - 割当率(%)
-   * @property {string} note - 備考
-   */
-
-  /**
-   * モジュールの永続データ全体。
+   * モジュールの永続データ全体。負荷（タスク）に専念し、計画（アロケーション）は持たない。
+   * アロケーションは共有マスタ `MK.allocations`（mk:allocations）へ昇格した（Issue #45）。
    * @typedef {Object} WorkloadData
    * @property {number} version - スキーマバージョン
    * @property {WorkloadTask[]} tasks - タスク一覧（実行の細かい事実。負荷計算の源）
-   * @property {Allocation[]} allocations - 共有アロケーション一覧（計画の粗い事実。§3.7.5）
    * @property {{savedAt: string, tasks: WorkloadTask[]}|null} baseline - 計画スナップショット（未保存なら null）
    * @property {Object.<string, MemberSetting>} memberSettings - メンバーIDごとの警告しきい値
    */
@@ -58,7 +43,7 @@
    * ストアから稼働データを読み込む。未保存・不正形式なら空の初期データを返し、memberSettings 欠落も補う。
    * @returns {WorkloadData} 読み込んだデータ
    */
-  function load() { const d = store.get(); if (!d || !Array.isArray(d.tasks)) return { version: 1, tasks: [], allocations: [], baseline: null, memberSettings: {} }; if (!d.memberSettings) d.memberSettings = {}; if (!Array.isArray(d.allocations)) d.allocations = []; return d; }
+  function load() { const d = store.get(); if (!d || !Array.isArray(d.tasks)) return { version: 1, tasks: [], baseline: null, memberSettings: {} }; if (!d.memberSettings) d.memberSettings = {}; return d; }
   /**
    * 稼働データをストアへ保存する。
    * @param {WorkloadData} d - 保存するデータ
@@ -183,60 +168,6 @@
    */
   function tasksOf(mid) { return tasks().filter((t) => t.memberId === mid); }
 
-  // ---- 共有アロケーション（計画。§3.7.5）----
-  // タスク（実行）とは独立したレコード。負荷計算（series/stats）には一切影響させず、
-  // 横断ビュー（要員計画・#27）のデータ源として保持・集計する。
-
-  /**
-   * 全アロケーションの配列を返す（横断ビュー #27 の読み取り入口）。
-   * @returns {Allocation[]} アロケーション一覧
-   */
-  function allocations() { return load().allocations; }
-  /**
-   * 指定メンバーのアロケーション一覧を返す。
-   * @param {string} mid - メンバーID
-   * @returns {Allocation[]} 対象メンバーのアロケーション
-   */
-  function allocationsOf(mid) { return allocations().filter((a) => a.memberId === mid); }
-  /**
-   * 指定の器（Project 等）に紐づくアロケーション一覧を返す。
-   * @param {string} targetId - 器のID
-   * @returns {Allocation[]} 対象の器のアロケーション
-   */
-  function allocationsForTarget(targetId) { return allocations().filter((a) => a.targetId === targetId); }
-  /**
-   * アロケーションを1件追加して保存する（未指定フィールドは既定値で補完）。
-   * @param {Partial<Allocation>} attrs - 初期属性
-   * @returns {void}
-   * ※ store へ保存する副作用あり。
-   */
-  function addAllocation(attrs) { const d = load(); d.allocations.push(Object.assign({ id: MK.util.uid("wa"), memberId: null, targetId: null, dim: "project", startDate: "", endDate: "", percent: 50, note: "" }, attrs || {})); save(d); }
-  /**
-   * 指定アロケーションを部分更新して保存する。該当なしなら何も変更しない。
-   * @param {string} id - 対象アロケーションID
-   * @param {Partial<Allocation>} patch - 上書きするフィールド
-   * @returns {void}
-   * ※ store へ保存する副作用あり。
-   */
-  function updateAllocation(id, patch) { const d = load(); const a = d.allocations.find((x) => x.id === id); if (a) Object.assign(a, patch); save(d); }
-  /**
-   * 指定アロケーションを削除して保存する。
-   * @param {string} id - 対象アロケーションID
-   * @returns {void}
-   * ※ store へ保存する副作用あり。
-   */
-  function removeAllocation(id) { const d = load(); d.allocations = d.allocations.filter((a) => a.id !== id); save(d); }
-
-  /**
-   * 指定メンバー・指定日の合計割当率を算出する（期間内アロケーションの percent を器を跨いで合算）。
-   * 横断ビュー（#27）が「空き要員 = 総キャパ − 全器へのアロケーション合計」を出すための純関数。
-   * @param {Allocation[]} list - 対象アロケーション一覧
-   * @param {string} mid - メンバーID
-   * @param {string} date - 対象日（YYYY-MM-DD）
-   * @returns {number} 合計割当率(%)
-   */
-  function allocationPercentOn(list, mid, date) { let s = 0; list.forEach((a) => { if (a.memberId !== mid) return; if (a.startDate && a.endDate && a.startDate <= date && date <= a.endDate) s += Number(a.percent) || 0; }); return s; }
-
   /**
    * 現在のタスクを計画（baseline）としてスナップショット保存する（ディープコピー）。
    * @returns {void}
@@ -272,12 +203,14 @@
       const d = load(); const byId = {}; d.tasks.forEach((t) => (byId[t.id] = t));
       (data.tasks || []).forEach((t) => (byId[t.id] = t));
       d.tasks = Object.keys(byId).map((k) => byId[k]);
-      const aById = {}; d.allocations.forEach((a) => (aById[a.id] = a));
-      (data.allocations || []).forEach((a) => (aById[a.id] = a));
-      d.allocations = Object.keys(aById).map((k) => aById[k]);
       if (data.baseline) d.baseline = data.baseline;
       Object.assign(d.memberSettings, data.memberSettings || {}); save(d);
-    } else { save({ version: 1, tasks: (data && data.tasks) || [], allocations: (data && data.allocations) || [], baseline: (data && data.baseline) || null, memberSettings: (data && data.memberSettings) || {} }); }
+    } else { save({ version: 1, tasks: (data && data.tasks) || [], baseline: (data && data.baseline) || null, memberSettings: (data && data.memberSettings) || {} }); }
+    // 昇格前（Issue #45 以前）に書き出したバックアップは allocations を workload 内に持つ。
+    // 失わないよう共有マスタへ加算的に転送する（既存 id は上書きしない・非破壊）。
+    if (MK.allocations && data && Array.isArray(data.allocations)) {
+      data.allocations.forEach((a) => { if (a && a.id && !MK.allocations.get(a.id)) MK.allocations.create(a); });
+    }
   }
   /**
    * サンプルデータを生成して保存する（既存データは全置換）。
@@ -285,7 +218,7 @@
    * ※ store へ保存し、参照メンバーを MK.people マスタへ作成する副作用あり。
    */
   function loadSample() {
-    const d = { version: 1, tasks: [], allocations: [], baseline: null, memberSettings: {} };
+    const d = { version: 1, tasks: [], baseline: null, memberSettings: {} };
     const today = MK.util.todayISO();
     const sato = MK.people.resolveOrCreate("佐藤 花子"), suzuki = MK.people.resolveOrCreate("鈴木 一郎"), tanaka = MK.people.resolveOrCreate("田中 美咲");
     const t = (memberId, title, load, s, e, opts) => Object.assign({ id: MK.util.uid("wt"), memberId, title, load, startDate: s, endDate: e, status: "in_progress", completedDate: null, note: "" }, opts || {});
@@ -296,16 +229,8 @@
       t(tanaka, "UIデザイン", 70, today, MK.util.addDays(today, 28)),
       t(tanaka, "ロゴ制作", 30, MK.util.addDays(today, 7), MK.util.addDays(today, 21)),
     ];
-    // アロケーション（計画）: 器＝Project。1人が複数 PJ に期間×割当%で計画される例（§3.7.5）。
-    const alpha = MK.projects.resolveOrCreate("プロジェクトA"), beta = MK.projects.resolveOrCreate("プロジェクトB");
-    const a = (memberId, targetId, percent, s, e) => ({ id: MK.util.uid("wa"), memberId, targetId, dim: "project", startDate: s, endDate: e, percent, note: "" });
-    d.allocations = [
-      a(suzuki, alpha, 60, today, MK.util.addDays(today, 84)),
-      a(suzuki, beta, 30, today, MK.util.addDays(today, 84)),
-      a(sato, alpha, 50, today, MK.util.addDays(today, 84)),
-      a(tanaka, beta, 80, today, MK.util.addDays(today, 84)),
-    ];
     save(d);
+    // 計画（アロケーション）は共有マスタ側のサンプルとして staffing.loadSample が投入する（Issue #45）。
   }
 
   /**
@@ -326,5 +251,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.workload = { STATUS, PERIODS, load, save, tasks, members, warnOf, colorOf, effEnd, weekMondays, series, planSeries, stats, summary, addTask, updateTask, removeTask, tasksOf, allocations, allocationsOf, allocationsForTarget, addAllocation, updateAllocation, removeAllocation, allocationPercentOn, saveBaseline, clearBaseline, hasBaseline, exportData, importData, loadSample };
+  MK.logic.workload = { STATUS, PERIODS, load, save, tasks, members, warnOf, colorOf, effEnd, weekMondays, series, planSeries, stats, summary, addTask, updateTask, removeTask, tasksOf, saveBaseline, clearBaseline, hasBaseline, exportData, importData, loadSample };
 })();

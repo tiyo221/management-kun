@@ -114,6 +114,7 @@
       scope,
       people: MK.people,
       projects: MK.projects,
+      allocations: MK.allocations,
       io: MK.io,
       ui: MK.ui,
       bus: MK.bus,
@@ -648,6 +649,7 @@
   if (overlay) overlay.addEventListener("click", closeSidebar);
   MK.store.load();
   migrateScopedData(); // scoped 化前の単一キーを対象別へ移す（§3.7.4）。route より前に実行する。
+  if (MK.allocations) MK.allocations.migrateFromWorkload(); // 旧 workload 内部のアロケーションを共有マスタへ昇格（Issue #45）。
   applyTheme(getTheme());
   // 起動先: 既定は HOME。設定 startView === "last" のときだけ前回モジュールを復元する（spec §3.6）。
   const start0 = getSettings();
