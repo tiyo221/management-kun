@@ -5,7 +5,6 @@
   const el = MK.util.el;
   const ui = MK.ui;
   const L = () => MK.logic.skills;
-  const LEVELS = ["", "1", "2", "3", "4", "5", "-"];
 
   let root = null;
   let view = "matrix";
@@ -87,15 +86,30 @@
     let content;
     if (!ms.length) content = ui.emptyState("メンバーがいません。「人の管理」で追加してください。");
     else if (!vs.length) content = ui.emptyState("表示中のスキルがありません。");
-    else content = matrixTable(ms, vs, (m, s) => el("td", {}, [ratingSelect(m.id, s.id)]));
+    else {
+      const hint = el("div", { class: "sub mk-muted", style: "margin-bottom:6px;", text: "数字をクリックしてレベルを設定（同じ数字を再クリックで解除）。右端「対象外」は評価対象外。色が濃いほど高レベル。" });
+      content = el("div", {}, [hint, matrixTable(ms, vs, (m, s) => el("td", { class: "mk-rate-td" }, [rateCell(m.id, s.id)]))]);
+    }
     root.appendChild(ui.stack([bar, content]));
   }
-  function ratingSelect(mid, sid) {
-    const sel = el("select", { class: "cell" });
-    LEVELS.forEach((v) => sel.appendChild(el("option", { value: v, text: v === "" ? "—" : v })));
-    sel.value = L().rating(mid, sid);
-    sel.addEventListener("change", () => L().setRating(mid, sid, sel.value)); // データのみ（再描画せずフォーカス維持）
-    return sel;
+  // セル ＝ 1〜5／対象外 のセグメント。1クリックで即設定（同値の再クリックで解除）。
+  function rateCell(mid, sid) {
+    const cur = L().rating(mid, sid); // "" / "1"〜"5" / "-"
+    const grp = el("div", { class: "mk-rate2" });
+    const seg = (val, label) => {
+      const b = el("button", { class: "mk-seg" + (val === cur ? " is-sel" : "") + (val === "-" ? " mk-seg-na" : ""), type: "button", text: label, title: val === "-" ? "対象外" : ("レベル" + val) });
+      if (val === cur) b.setAttribute("style", heatStyle(val)); // 選択中のみ配色（"-" は muted）
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const next = L().rating(mid, sid) === val ? "" : val; // 同値クリックでトグル解除
+        L().setRating(mid, sid, next);
+        grp.replaceWith(rateCell(mid, sid)); // そのセルだけ再描画（全体再描画せずスクロール維持）
+      });
+      return b;
+    };
+    ["1", "2", "3", "4", "5"].forEach((v) => grp.appendChild(seg(v, v)));
+    grp.appendChild(seg("-", "対象外"));
+    return grp;
   }
 
   // 共通のマトリクス表（セル生成を cellFn に委譲）

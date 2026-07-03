@@ -328,13 +328,22 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-matrix { border-collapse: collapse; font-size: 13px; }
 .mk-matrix th, .mk-matrix td { border: 1px solid var(--color-hairline); padding: 4px 8px; text-align: center; white-space: nowrap; height: 32px; }
 .mk-matrix th { position: sticky; top: 0; background: var(--color-surface); color: var(--color-slate); z-index: 2; }
-.mk-matrix .rowhead { text-align: left; position: sticky; left: 0; background: var(--color-canvas); z-index: 1; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
-.mk-matrix th.rowhead { z-index: 3; }
+.mk-matrix .rowhead { text-align: left; position: sticky; left: 0; background: var(--color-canvas); z-index: 4; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.mk-matrix th.rowhead { z-index: 5; }
 .mk-matrix .domain-row td { background: var(--color-surface); color: var(--color-slate); font-weight: 600; text-align: left; }
 .mk-matrix .core .rowhead { font-weight: 600; }
 .mk-matrix .core .rowhead::before { content: "★ "; color: var(--color-primary); }
-.mk-matrix select.cell { width: 52px; text-align: center; }
 .mk-heat { font-variant-numeric: tabular-nums; }
+/* 紐づけ（評価入力）セル ＝ 1クリックで設定する 1〜5／対象外 のセグメント */
+.mk-matrix td.mk-rate-td { padding: 2px; }
+.mk-rate2 { display: inline-flex; align-items: stretch; }
+.mk-seg { min-width: 22px; height: 30px; padding: 0 3px; border: 1px solid var(--color-hairline); border-left-width: 0; background: var(--color-canvas); color: var(--color-slate); font: inherit; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+.mk-rate2 .mk-seg:first-child { border-left-width: 1px; border-top-left-radius: var(--rounded-sm); border-bottom-left-radius: var(--rounded-sm); }
+.mk-rate2 .mk-seg:last-child { border-top-right-radius: var(--rounded-sm); border-bottom-right-radius: var(--rounded-sm); }
+.mk-seg:hover, .mk-seg:focus-visible { position: relative; z-index: 1; border-color: var(--color-primary); color: var(--color-ink); outline: none; }
+/* 選択状態のフォールバック（inline の heatStyle に依存せず選択を示す。低レベルの薄い配色でも判別可能に） */
+.mk-seg.is-sel { font-weight: 700; box-shadow: inset 0 0 0 1px var(--color-primary); }
+.mk-seg-na { min-width: 42px; font-size: 11px; font-weight: 500; }
 .skill-list-item { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-xs) var(--space-md); border-bottom: 1px solid var(--color-hairline); }
 .skill-list-item .grow { flex: 1; min-width: 0; }
 .skill-domain-head { font-weight: 600; color: var(--color-slate); padding: var(--space-sm) var(--space-md); background: var(--color-surface); border-bottom: 1px solid var(--color-hairline); }
