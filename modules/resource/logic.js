@@ -63,7 +63,8 @@
    * @returns {string} 人数ラベル（例 "0.9人"）
    */
   function fteLabel(percent) {
-    return (Math.round((Number(percent) || 0) / 10) / 10).toFixed(1) + "人";
+    const tenths = Math.round((Number(percent) || 0) / 10); // 0.1人単位へ丸める（例 90% → 9、85% → 9）
+    return (tenths / 10).toFixed(1) + "人";
   }
 
   /**

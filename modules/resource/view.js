@@ -75,7 +75,7 @@
       tr.appendChild(el("td", { class: "rowhead", text: r.target.name, title: r.target.name }));
       r.cells.forEach((c) => {
         const detail = "必要 " + L().fteLabel(c.demand) + " / 確保 " + L().fteLabel(c.supply);
-        const text = c.short ? (L().fteLabel(c.gap) + "不足") : (c.demand > 0 ? "OK" : "");
+        const text = c.short ? (L().fteLabel(c.gap) + "不足") : (c.demand > 0 ? "OK" : "—"); // — ＝ 需要なし（不足合計行と揃える）
         tr.appendChild(el("td", { class: "mk-heat" + (c.short ? " gap-short" : ""), text, title: detail }));
       });
       tbody.appendChild(tr);
