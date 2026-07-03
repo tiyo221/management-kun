@@ -119,6 +119,23 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 - 集計純関数 `percentOn(list, memberId, date)`（器を跨いだ期間内合算）をマスタが提供し、要員計画の「空き＝キャパ−全器割当」算出が再利用する。
 - ※ `memberId` / `targetId` の複合参照を持つため、共通契約の `name` 必須・`resolve`/CSV は素直に当てはまらない（名前ではなく参照で成立するマスタ）。編集は要員計画 UI と JSON 入出力を正とし、CSV 取込対象外。
 
+### 需要（demand）マスタ — 需要（器×期間×必要%） … `mk:demands:v1`
+「この器（PJ 等）がこの期間に何%（＝何人分）必要か」の**共有された需要事実**（Issue #68 / #52 Phase 2）。アロケーション（供給）と**対**の中立な共有マスタで、People / Projects / Allocations と同格。特定モジュールに属させず、参照・編集は `ctx.demands` 経由（§3.5）で直接 localStorage を触らない。編集はリソース（resource）が担い、月次の「需要 vs 供給」ギャップ＝いつまでに何人分の確保が必要かを示す。
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `id` | string | 一意ID（`d_<epoch>_<rand>`） |
+| `targetId` | string \| null | 器のID（現状 Project 参照。次元は `dim` で識別） |
+| `dim` | string | 次元キー（器の種類。`project` / `product`。§3.7.6 の config 由来。`"project"` 決め打ち禁止） |
+| `startDate` / `endDate` | string | 需要期間（YYYY-MM-DD、未設定は空文字） |
+| `requiredPercent` | number | 必要率(%)。100 超も許容（複数人分の需要） |
+| `note` | string | 備考（任意） |
+
+- アロケーション（供給）・WBS のタスクとは**別レコード**。片方から導出せず、片方を変えても他方に影響しない。**メンバー非依存**（誰が、ではなく、どれだけ要るか）。
+- 集計純関数 `demandOn(list, targetId, date)`（器×期間内合算）・`totalDemandOn(list, date)`（全器合計）をマスタが提供し、resource の `gapByMonth`（需要−供給）が再利用する。
+- 将来 wbs 見積り等から自動生成する場合も、**生成器が本マスタへ書き込む**方式にしモジュール独立を維持する（resource が他モジュールの namespace を読まない）。
+- ※ `targetId` 参照で成立するため、共通契約の `name` 必須・`resolve`/CSV は当てはまらない。編集は resource UI と JSON 入出力を正とし、CSV 取込対象外。
+
 ### Product マスタ — プロダクト（成果物）… `mk:products:v1`
 プロダクト領域（§1.4・主語＝作るもの／成果物）の横断マスタ。People / Project とは別ドメインの独立ストア（`mk:products`）で、シェルレベルの「マスタ」グループに `master-products`（📦 プロダクト）として置く（§3.6 / §6.4）。扱うプロダクト自体の台帳であると同時に、§3.7 の **Product スコープ次元のマスタ**（`dimensions[].master === "products"`）を兼ねる。マスタ自体は Issue #37 で先行追加し、次元としての配線（`MK_CONFIG.dimensions` への追加）は Issue #54 で完了した（§3.7.6・§9.3 ガードレール準拠。product-scoped モジュールはまだ無い）。
 

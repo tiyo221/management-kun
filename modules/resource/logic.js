@@ -25,6 +25,11 @@
    */
   function alloc() { return MK.allocations ? MK.allocations.all() : []; }
   /**
+   * データ源＝共有マスタ MK.demands の需要一覧を返す（未ロード時は空配列）。
+   * @returns {Object[]} 需要一覧（Demand 形状）
+   */
+  function demandsAll() { return MK.demands ? MK.demands.all() : []; }
+  /**
    * 対象メンバー一覧を People マスタから返す（横断参照。scope で縛らない。§3.7.3）。
    * @returns {Array<Object>} メンバー一覧（MK.people のレコード）
    */
@@ -189,6 +194,58 @@
     });
   }
 
+  // ---- 需要 × 供給ギャップ（いつまでに何人分の確保が必要か。Issue #68 / #52 Phase 2）----
+  // 需要（demand）は共有マスタ MK.demands の必要%、供給（supply）は allocations の割当合計（＝約束済み供給）。
+
+  /**
+   * 指定日の全器合計必要率(%)を返す（共有マスタの集計純関数へ委譲＝DRY・未ロード時はフォールバック）。
+   * @param {Object[]} demands - 対象需要一覧
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @returns {number} 合計必要率(%)
+   */
+  function totalDemand(demands, date) {
+    if (MK.demands && typeof MK.demands.totalDemandOn === "function") return MK.demands.totalDemandOn(demands, date);
+    let s = 0; (demands || []).forEach((x) => { if (x.startDate && x.endDate && x.startDate <= date && date <= x.endDate) s += Number(x.requiredPercent) || 0; }); return s;
+  }
+  /**
+   * 指定日の約束済み供給(%)＝期間内アロケーションの割当合計（メンバー非依存の総 FTE%）を返す純関数。
+   * @param {Object[]} allocations - 対象アロケーション一覧
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @returns {number} 約束済み供給(%)
+   */
+  function committedSupply(allocations, date) {
+    let s = 0;
+    (allocations || []).forEach((a) => { if (a.startDate && a.endDate && a.startDate <= date && date <= a.endDate) s += Number(a.percent) || 0; });
+    return s;
+  }
+  /**
+   * 月次の総需要を算出する純関数（各月の代表日で全器の必要%を合算）。
+   * @param {Object[]} demands - 対象需要一覧
+   * @param {string[]} months - 対象月（月初日）の配列
+   * @returns {{month: string, demand: number}[]} 月ごとの総需要
+   */
+  function demandByMonth(demands, months) {
+    return (months || []).map((mo) => ({ month: mo, demand: totalDemand(demands, monthSample(mo)) }));
+  }
+  /**
+   * 月次の「需要 vs 供給」ギャップを算出する純関数。gap = 需要 − 約束済み供給。
+   * gap > 0 の月は供給不足＝その月までに確保が必要（確保デッドライン）。
+   * @param {Object[]} allocations - 対象アロケーション一覧（供給）
+   * @param {Object[]} demands - 対象需要一覧
+   * @param {string[]} months - 対象月（月初日）の配列
+   * @returns {{month: string, demand: number, supply: number, gap: number, short: boolean}[]}
+   *   月ごとの需要・供給・ギャップ（正なら不足）・不足フラグ
+   */
+  function gapByMonth(allocations, demands, months) {
+    return (months || []).map((mo) => {
+      const date = monthSample(mo);
+      const demand = totalDemand(demands, date);
+      const supply = committedSupply(allocations, date);
+      const gap = demand - supply;
+      return { month: mo, demand, supply, gap, short: gap > 0 };
+    });
+  }
+
   /**
    * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
    * 本日時点の各メンバーの空きをチーム平均し、過剰アサイン（割当 > キャパ）人数を数える。
@@ -207,5 +264,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.resource = { DEFAULT_CAPACITY, alloc, members, targets, capacityOf, cellPercent, totalPercent, freeOn, freeSeries, overviewOn, monthsInHorizon, monthSample, supplyByMonth, summary };
+  MK.logic.resource = { DEFAULT_CAPACITY, alloc, demandsAll, members, targets, capacityOf, cellPercent, totalPercent, freeOn, freeSeries, overviewOn, monthsInHorizon, monthSample, supplyByMonth, totalDemand, committedSupply, demandByMonth, gapByMonth, summary };
 })();

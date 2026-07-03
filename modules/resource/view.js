@@ -13,8 +13,9 @@
   let ctx = null; // マスタ編集は ctx.allocations 経由（spec §3.5）
   const state = { period: 13, offset: 0 };
 
-  // マスタ編集入口（契約に沿って ctx.allocations を使う。未取得時は global へフォールバック）
+  // マスタ編集入口（契約に沿って ctx.allocations / ctx.demands を使う。未取得時は global へフォールバック）
   function allocMaster() { return (ctx && ctx.allocations) || MK.allocations; }
+  function demandMaster() { return (ctx && ctx.demands) || MK.demands; }
 
   function render() {
     if (!root) return;
@@ -29,8 +30,11 @@
     const refDate = MK.util.todayISO(); // アサイン表・空き集計の基準日は本日固定（期間軸スイッチャは下段の推移専用）
     const ov = L().overviewOn(list, ms, tg, refDate, L().DEFAULT_CAPACITY);
 
+    const demands = L().demandsAll();
     const body = [toolbar(refDate, tg)];
     body.push(planCard(list, tg));
+    if (tg.length) body.push(demandCard(demands, tg));
+    if (tg.length) body.push(gapCard(L().gapByMonth(list, demands, months)));
     body.push(supplyCard(L().supplyByMonth(list, ms, months, L().DEFAULT_CAPACITY)));
     body.push(freeCard(ov, list, ms, weeks));
     if (tg.length) body.push(assignCard(ov, ms, tg));
@@ -40,6 +44,7 @@
   function toolbar(refDate, tg) {
     const bar = ui.toolbar([]);
     if (tg.length) bar.appendChild(ui.button("＋ アロケーション", { variant: "btn-primary", onClick: () => editAllocation(null) }));
+    if (tg.length) bar.appendChild(ui.button("＋ 需要", { variant: "btn-secondary", onClick: () => editDemand(null) }));
     bar.appendChild(inlinePills(PERIODS, state.period, (k) => { state.period = k; render(); }));
     bar.appendChild(ui.button("◀", { variant: "btn-ghost", onClick: () => { state.offset--; render(); } }));
     bar.appendChild(ui.button("今月", { variant: "btn-ghost", onClick: () => { state.offset = 0; render(); } }));
@@ -120,6 +125,74 @@
     const start = MK.util.addDays(MK.util.mondayOf(MK.util.todayISO()), (offset || 0) * 7);
     const arr = []; for (let i = 0; i < period; i++) arr.push(MK.util.addDays(start, i * 7));
     return arr;
+  }
+
+  // ---- 需要（共有マスタ MK.demands。Issue #68 / #52 Phase 2）----
+  // 「この器がこの期間に何%（＝何人分）必要か」を編集する。アロケーション（供給）と対の需要事実。
+  function demandCard(demands, tg) {
+    const intro = el("p", { class: "sub", text: "各プロジェクトが期間×必要%で「何人分必要か」を見積もります。供給（アロケーション）と対の需要で、下の月次ギャップの分子になります。" });
+    if (!demands.length) return ui.card([el("h3", { text: "需要（プロジェクト別）" }), intro, ui.emptyState("需要がありません。「＋ 需要」から追加してください。")]);
+    const opts = targetOptions();
+    const ul = el("ul", { class: "mk-list" });
+    demands.forEach((d) => ul.appendChild(demandRow(d, opts)));
+    return ui.card([el("h3", { text: "需要（プロジェクト別）" }), intro, ul]);
+  }
+  function demandRow(d, opts) {
+    const period = (d.startDate || "?") + " 〜 " + (d.endDate || "?");
+    const info = el("div", { class: "grow", style: "cursor:pointer;" }, [
+      el("div", { text: targetLabel(opts, d.targetId) }),
+      el("div", { class: "sub", text: "必要 " + d.requiredPercent + "% / " + period }),
+    ]);
+    info.addEventListener("click", () => editDemand(d));
+    return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("この需要を削除しますか？").then((ok) => { if (ok) { demandMaster().remove(d.id); render(); } }) })]);
+  }
+  function editDemand(d) {
+    const opts = targetOptions();
+    const f = {
+      target: ui.select(opts.map((o) => ({ value: o.value, label: o.label })), d ? d.targetId : (opts[0] && opts[0].value)),
+      required: ui.input({ type: "number", value: d ? d.requiredPercent : 100 }),
+      start: ui.input({ type: "date", value: d ? d.startDate : "" }),
+      end: ui.input({ type: "date", value: d ? d.endDate : "" }),
+      note: ui.textarea(d ? d.note : ""),
+    };
+    MK.ui.modal({ title: d ? "需要を編集" : "需要を追加", body: ui.stack([
+      ui.field("プロジェクト", f.target), ui.field("必要（%・100超可）", f.required),
+      ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
+    ]), actions: [
+      d ? { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("削除しますか？").then((ok) => { if (ok) { demandMaster().remove(d.id); c(); render(); } }) } : null,
+      { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
+      { label: "保存", variant: "btn-primary", onClick: (c) => {
+          if (!f.target.value) { MK.ui.toast("プロジェクトを選択してください", "error"); return; }
+          if (f.start.value && f.end.value && f.end.value < f.start.value) { MK.ui.toast("終了日は開始日以降にしてください", "error"); return; }
+          const dimOf = (opts.find((o) => o.value === f.target.value) || {}).dim || "project";
+          const patch = { targetId: f.target.value, dim: dimOf, requiredPercent: Math.max(0, Number(f.required.value) || 0), startDate: f.start.value || "", endDate: f.end.value || "", note: f.note.value };
+          if (d) demandMaster().update(d.id, patch); else demandMaster().create(patch);
+          c(); render();
+        } },
+    ].filter(Boolean) });
+  }
+
+  // ---- 需要 × 供給の月次ギャップ（いつまでに確保が必要か。Issue #68）----
+  // gap = 需要 − 約束済み供給。gap>0 の月＝供給不足で、その月までに確保が必要（確保デッドライン）。
+  function gapCard(rows) {
+    const anyDemand = rows.some((r) => r.demand > 0);
+    if (!anyDemand) return ui.card([el("h3", { text: "需要 × 供給（月次ギャップ）" }), ui.emptyState("需要が未登録です。「＋ 需要」を追加すると、いつまでに何%分の確保が必要かが月次で出ます。")], { flush: true });
+    const firstShort = rows.find((r) => r.short);
+    const lead = firstShort
+      ? el("p", { class: "sub", text: "最初に供給不足になるのは " + monthLabel(firstShort.month) + "（不足 " + Math.round(firstShort.gap) + "%）。それまでに確保・応援を手当てしてください。" })
+      : el("p", { class: "sub", text: "現時点の供給は全月で需要を満たしています。" });
+    const list = el("div", { class: "mk-month-list" });
+    rows.forEach((r) => {
+      const cls = r.short ? "wl-over" : "wl-ok";
+      const label = r.short ? ("不足 " + Math.round(r.gap) + "%") : ("充足 +" + Math.round(-r.gap) + "%");
+      const head = el("div", { class: "wl-head" }, [
+        el("span", { class: "wl-name", text: monthLabel(r.month) }),
+        el("span", { class: "wl-badge " + cls, text: label }),
+        el("span", { class: "wl-peak" + (r.short ? " hot" : ""), text: "需要 " + Math.round(r.demand) + "% / 供給 " + Math.round(r.supply) + "%" }),
+      ]);
+      list.appendChild(el("div", { class: "mk-month-row" }, [head]));
+    });
+    return ui.card([el("h3", { text: "需要 × 供給（月次ギャップ・" + monthLabel(rows[0] && rows[0].month) + " 〜）" }), lead, list]);
   }
 
   // ---- 月次の供給とキャパ（要員確保のリードタイム向け早期警告。Issue #52）----
@@ -226,6 +299,11 @@
       { id: MK.util.uid("a"), memberId: suzuki, targetId: beta, dim: "project", startDate: today, endDate: end, percent: 30, note: "" },
       { id: MK.util.uid("a"), memberId: sato, targetId: alpha, dim: "project", startDate: today, endDate: end, percent: 50, note: "" },
       { id: MK.util.uid("a"), memberId: tanaka, targetId: beta, dim: "project", startDate: today, endDate: end, percent: 80, note: "" },
+    ]);
+    // 需要（供給と対）。alpha は供給110%に対し200%必要＝不足を可視化する（Issue #68）。
+    if (MK.demands) MK.demands.replaceAll([
+      { id: MK.util.uid("d"), targetId: alpha, dim: "project", startDate: today, endDate: end, requiredPercent: 200, note: "2名体制が必要" },
+      { id: MK.util.uid("d"), targetId: beta, dim: "project", startDate: today, endDate: end, requiredPercent: 100, note: "" },
     ]);
   }
 
