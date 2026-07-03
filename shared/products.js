@@ -50,6 +50,17 @@
     return out;
   }
 
+  /**
+   * ownerId を正規化する（空・未指定は null に寄せる）。People 側の実在チェックはしない
+   * （削除後も id を保持し、表示側の `ownerPerson` がガードする。§4.4 Product / Issue #56）。
+   * @param {*} id
+   * @returns {string|null}
+   */
+  function normalizeOwnerId(id) {
+    const s = String(id == null ? "" : id).trim();
+    return s || null;
+  }
+
   function data() {
     const d = MK.store.read(NS);
     if (!d || !Array.isArray(d.products)) return { version: 1, products: [] };
@@ -95,12 +106,13 @@
       const d = data();
       const now = MK.util.nowISO();
       const p = Object.assign(
-        { id: MK.util.uid("prod"), name: "", status: "planned", owner: "", summary: "", repo: "", tags: [], projectIds: [], createdAt: now, updatedAt: now },
+        { id: MK.util.uid("prod"), name: "", status: "planned", owner: "", ownerId: null, summary: "", repo: "", tags: [], projectIds: [], createdAt: now, updatedAt: now },
         attrs || {}
       );
       if (!p.id) p.id = MK.util.uid("prod");
       p.status = normalizeStatus(p.status);
       p.projectIds = normalizeProjectIds(p.projectIds);
+      p.ownerId = normalizeOwnerId(p.ownerId);
       d.products.push(p);
       persist(d);
       return p;
@@ -120,6 +132,7 @@
       Object.assign(p, patch);
       if (Object.prototype.hasOwnProperty.call(patch, "status")) p.status = normalizeStatus(patch.status);
       if (Object.prototype.hasOwnProperty.call(patch, "projectIds")) p.projectIds = normalizeProjectIds(patch.projectIds);
+      if (Object.prototype.hasOwnProperty.call(patch, "ownerId")) p.ownerId = normalizeOwnerId(patch.ownerId);
       p.updatedAt = MK.util.nowISO();
       persist(d);
       return p;
@@ -166,7 +179,9 @@
      * ※ store へ保存する副作用あり（全置換）。
      */
     replaceAll(list) {
-      const products = (Array.isArray(list) ? list : []).map((p) => Object.assign({}, p, { projectIds: normalizeProjectIds(p.projectIds) }));
+      const products = (Array.isArray(list) ? list : []).map((p) => Object.assign({}, p, {
+        projectIds: normalizeProjectIds(p.projectIds), ownerId: normalizeOwnerId(p.ownerId),
+      }));
       persist({ version: 1, products: products });
     },
 
@@ -179,6 +194,34 @@
       return normalizeProjectIds(p && p.projectIds).map((id) => MK.projects.get(id)).filter(Boolean);
     },
 
+    /**
+     * 責任者（People 参照）を返す。未設定・削除済み参照は null（表示側の破綻防止・Issue #56）。
+     * @param {object} p - プロダクト
+     * @returns {object|null} People メンバー、無ければ null
+     */
+    ownerPerson(p) {
+      const id = p && p.ownerId;
+      return id ? MK.people.get(id) : null;
+    },
+
+    /**
+     * 旧・自由文字列 `owner` を People マスタへ一度だけ名寄せ移行する（`ownerId` 未設定のもののみ対象）。
+     * 同名の既存 People があれば集約、無ければ新規作成（`resolveOrCreate`・spec §8.4）。冪等。
+     * @returns {number} 移行した件数
+     * ※ store へ保存する副作用あり（対象が1件以上ある場合のみ）。
+     */
+    migrateOwnerToPeople() {
+      const d = data();
+      let moved = 0;
+      d.products.forEach((p) => {
+        if (p.ownerId || !p.owner || !String(p.owner).trim()) return;
+        p.ownerId = MK.people.resolveOrCreate(p.owner);
+        moved++;
+      });
+      if (moved) persist(d);
+      return moved;
+    },
+
     // ---- CSV（DOM 非依存の純整形/取込。ファイル選択・DL はシェルの view 側）----
     /**
      * プロダクトをCSV行データ（ヘッダ＋各行）に整形する。
@@ -187,7 +230,7 @@
     buildCSVRows() {
       const rows = [["プロダクト名", "ステータス", "責任者", "概要", "リポジトリ", "タグ", "関連プロジェクト"]];
       this.all().forEach((p) => rows.push([
-        p.name, p.status, p.owner || "", p.summary || "", p.repo || "", (p.tags || []).join(" "),
+        p.name, p.status, (this.ownerPerson(p) || {}).name || "", p.summary || "", p.repo || "", (p.tags || []).join(" "),
         this.relatedProjects(p).map((proj) => proj.name).join(" "),
       ]));
       return rows;
@@ -210,13 +253,17 @@
       };
       const now = MK.util.nowISO();
       const body = rows.slice(1).filter((r) => r.length >= 1 && (r[0] || "").trim());
-      const list = body.map((r) => ({
-        id: MK.util.uid("prod"), name: (r[0] || "").trim(), status: statusFromCSV(r[1]),
-        owner: (r[2] || "").trim(), summary: (r[3] || "").trim(), repo: (r[4] || "").trim(),
-        tags: (r[5] || "").split(/[\s,]+/).map((t) => t.trim()).filter(Boolean),
-        projectIds: (r[6] || "").split(/[\s,]+/).map((t) => t.trim()).filter(Boolean).map((n) => MK.projects.resolveOrCreate(n)).filter(Boolean),
-        createdAt: now, updatedAt: now,
-      }));
+      const list = body.map((r) => {
+        const ownerName = (r[2] || "").trim();
+        return {
+          id: MK.util.uid("prod"), name: (r[0] || "").trim(), status: statusFromCSV(r[1]),
+          ownerId: ownerName ? MK.people.resolveOrCreate(ownerName) : null,
+          summary: (r[3] || "").trim(), repo: (r[4] || "").trim(),
+          tags: (r[5] || "").split(/[\s,]+/).map((t) => t.trim()).filter(Boolean),
+          projectIds: (r[6] || "").split(/[\s,]+/).map((t) => t.trim()).filter(Boolean).map((n) => MK.projects.resolveOrCreate(n)).filter(Boolean),
+          createdAt: now, updatedAt: now,
+        };
+      });
       this.replaceAll(list);
       return list.length;
     },

@@ -127,14 +127,16 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 | `id` | string | 一意ID（`prod_<epoch>_<rand>`）。将来 `mk:module:<id>:<productId>:v1` の targetId になりうる |
 | `name` | string | プロダクト名（必須） |
 | `status` | enum | `planned` / `active` / `maintenance` / `sunset`（既定 planned・未知は planned に正規化） |
-| `owner` | string | 責任者メモ（任意・自由文字列。People 参照は将来検討） |
+| `owner` | string | 旧・責任者メモ（自由文字列。互換のため残置。`ownerId` へ移行済みなら参照しない） |
+| `ownerId` | string \| null | 責任者（People 参照・任意・既定 `null`。Issue #56） |
 | `summary` | string | 概要・提供価値（任意） |
 | `repo` | string | リポジトリ / リンク（任意） |
 | `tags` | string[] | 自由タグ（任意） |
 | `projectIds` | string[] | 関連プロジェクト（Project 参照・任意・既定 `[]`。Issue #55） |
 | `createdAt` / `updatedAt` | string | 作成 / 更新日時（ISO 8601） |
 
-- People は使わない（プロダクトは特定の人に属さない成果物情報）。Project とは `projectIds` による**一方向の緩い紐付け**を持つ（プロダクト⇄デリバリー・Issue #55）。Project 側からプロダクトを必須参照にはしない（モジュール独立を崩さない）。参照先の Project が削除された場合、存在しない id は `relatedProjects(product)`（表示用ガード）で無視され、UI は破綻しない。
+- People とは `ownerId` による**責任者参照**を持つ（Issue #56）。Project とは `projectIds` による**一方向の緩い紐付け**を持つ（プロダクト⇄デリバリー・Issue #55）。いずれも Project / People 側からプロダクトを必須参照にはしない（モジュール独立を崩さない）。参照先が削除された場合、存在しない id は `relatedProjects(product)` / `ownerPerson(product)`（表示用ガード）で無視され、UI は破綻しない。
+- 旧・自由文字列 `owner` は `migrateOwnerToPeople()` により起動時に一度だけ People へ名寄せ移行する（`ownerId` 未設定のもののみ対象・同名は既存 People に集約・`resolveOrCreate` で新規作成・冪等）。
 - 名寄せ（§8）: `resolve(name)` / `resolveOrCreate(name)` を提供（将来の次元対象解決・CSV 取込の名前参照用）。
-- CSV 入出力に対応（§4.6）。列: `プロダクト名, ステータス, 責任者, 概要, リポジトリ, タグ, 関連プロジェクト`。`ステータス` は key（`planned` 等）または日本語ラベル先頭語（計画 / 稼働 / 保守 / 終息）を受け付け、不明なら `planned`。`タグ` は空白 / カンマ区切り。`関連プロジェクト` は空白 / カンマ区切りのプロジェクト名で、取込時に `MK.projects.resolveOrCreate` により id 解決する（未登録名は新規 Project として作成）。**現行は全置換**だが、共通契約（§4.4.1 C）に合わせ名寄せ upsert へ寄せる。
+- CSV 入出力に対応（§4.6）。列: `プロダクト名, ステータス, 責任者, 概要, リポジトリ, タグ, 関連プロジェクト`。`ステータス` は key（`planned` 等）または日本語ラベル先頭語（計画 / 稼働 / 保守 / 終息）を受け付け、不明なら `planned`。`責任者` は People の氏名で、取込時に `MK.people.resolveOrCreate` により `ownerId` を解決する（未登録名は新規 People として作成）。出力も `ownerId` から People 氏名を引いて書き出す。`タグ` は空白 / カンマ区切り。`関連プロジェクト` は空白 / カンマ区切りのプロジェクト名で、取込時に `MK.projects.resolveOrCreate` により id 解決する（未登録名は新規 Project として作成）。**現行は全置換**だが、共通契約（§4.4.1 C）に合わせ名寄せ upsert へ寄せる。
 - バックアップは全体 JSON エンベロープの `products` 配列で入出力する（置換・マージ。§4.2）。
