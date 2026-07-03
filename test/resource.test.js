@@ -105,7 +105,7 @@ test("resource: monthsInHorizon は今月起点の月初日を粗い月数で返
   const thisMonthFirst = today.slice(0, 7) + "-01";
   // 翌月の初日を素朴に算出（年跨ぎ込み）
   const y = Number(today.slice(0, 4)), m = Number(today.slice(5, 7));
-  const nextIdx = m; // 0-based の翌月 index（m は1..12なので m がそのまま翌月0-based）
+  const nextIdx = m; // m は1..12（今月の1-based番号）。(nextIdx % 12)+1 で翌月へ、Math.floor(nextIdx/12) で年跨ぎを補正する
   const nextMonthFirst = (y + Math.floor(nextIdx / 12)) + "-" + String((nextIdx % 12) + 1).padStart(2, "0") + "-01";
   const months = S.monthsInHorizon(13, 0);
   eq(months.length, 3);
