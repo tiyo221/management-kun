@@ -206,6 +206,11 @@
       if (data.baseline) d.baseline = data.baseline;
       Object.assign(d.memberSettings, data.memberSettings || {}); save(d);
     } else { save({ version: 1, tasks: (data && data.tasks) || [], baseline: (data && data.baseline) || null, memberSettings: (data && data.memberSettings) || {} }); }
+    // 昇格前（Issue #45 以前）に書き出したバックアップは allocations を workload 内に持つ。
+    // 失わないよう共有マスタへ加算的に転送する（既存 id は上書きしない・非破壊）。
+    if (MK.allocations && data && Array.isArray(data.allocations)) {
+      data.allocations.forEach((a) => { if (a && a.id && !MK.allocations.get(a.id)) MK.allocations.create(a); });
+    }
   }
   /**
    * サンプルデータを生成して保存する（既存データは全置換）。
