@@ -49,7 +49,6 @@
 npx --yes http-server -p 8777 -c-1
 ```
 
-（`python` はこの環境では Windows ストアのスタブで動かないため Node を使う。）
 
 ## 開発ワークフロー（必須ルール）
 
