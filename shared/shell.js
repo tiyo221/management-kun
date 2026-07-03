@@ -119,6 +119,7 @@
       people: MK.people,
       projects: MK.projects,
       allocations: MK.allocations,
+      demands: MK.demands,
       io: MK.io,
       ui: MK.ui,
       bus: MK.bus,

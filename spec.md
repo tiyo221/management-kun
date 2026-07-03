@@ -177,6 +177,7 @@ MK.registerModule("todo", {
 | `ctx.people` | People マスタの参照・CRUD・名寄せ解決（`list/get/resolve(name)/create`）（§8） |
 | `ctx.projects` | Project マスタの同上 |
 | `ctx.allocations` | アロケーション共有マスタの参照・CRUD（`all/get/of/forTarget/create/update/remove/percentOn`）（§3.7.5 / §4.4） |
+| `ctx.demands` | 需要共有マスタの参照・CRUD（`all/get/forTarget/create/update/remove/demandOn/totalDemandOn`）（§4.4 / Issue #68） |
 | `ctx.scope` | scoped モジュールに渡る「現在の対象」`{ dim, id, entity }`（§3.7.3）。global モジュールでは `null` |
 | `ctx.store` | `get(ns)/set(ns,data)/save(ns)`（`ns` = モジュール自身の localStorage 名前空間） |
 | `ctx.io` | `csv.parse/csv.stringify`・JSON ダウンロード/読込（§4.2 / §4.6） |
@@ -302,6 +303,7 @@ MK_CONFIG.dimensions = [
 | `mk:people:v1` | 人の管理マスタ `{ members }`（§4.4） |
 | `mk:projects:v1` | プロジェクト管理マスタ `{ projects }`（§4.4） |
 | `mk:allocations:v1` | アロケーション共有マスタ `{ allocations }`（人×器×期間×割当%。§3.7.5 / §4.4） |
+| `mk:demands:v1` | 需要共有マスタ `{ demands }`（器×期間×必要%。§4.4 / Issue #68） |
 | `mk:module:goals:v1` | 目標みえるくんのデータ |
 | `mk:module:skills:v1` | スキル可視化のデータ |
 | `mk:module:workload:v1` | タスク負荷可視化のデータ（負荷＝タスクに専念。計画は `mk:allocations` へ昇格・Issue #45） |

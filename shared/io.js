@@ -4,7 +4,7 @@
   const MK = window.MK;
   const io = {};
 
-  // scope: "all" | "people" | "projects" | "products" | "allocations" | "<moduleId>"
+  // scope: "all" | "people" | "projects" | "products" | "allocations" | "demands" | "<moduleId>"
   io.buildEnvelope = function (scope) {
     scope = scope || "all";
     const env = {
@@ -16,6 +16,7 @@
       projects: MK.projects.all(),
       products: MK.products ? MK.products.all() : [],
       allocations: MK.allocations ? MK.allocations.all() : [],
+      demands: MK.demands ? MK.demands.all() : [],
       modules: {},
     };
     MK.moduleOrder.forEach((id) => {
@@ -33,10 +34,11 @@
         env.modules[id] = { version: 1, data: mod.exportData() };
       }
     });
-    if (scope === "people") { env.projects = []; env.products = []; env.allocations = []; env.modules = {}; }
-    if (scope === "projects") { env.people = []; env.products = []; env.allocations = []; env.modules = {}; }
-    if (scope === "products") { env.people = []; env.projects = []; env.allocations = []; env.modules = {}; }
-    if (scope === "allocations") { env.people = []; env.projects = []; env.products = []; env.modules = {}; }
+    if (scope === "people") { env.projects = []; env.products = []; env.allocations = []; env.demands = []; env.modules = {}; }
+    if (scope === "projects") { env.people = []; env.products = []; env.allocations = []; env.demands = []; env.modules = {}; }
+    if (scope === "products") { env.people = []; env.projects = []; env.allocations = []; env.demands = []; env.modules = {}; }
+    if (scope === "allocations") { env.people = []; env.projects = []; env.products = []; env.demands = []; env.modules = {}; }
+    if (scope === "demands") { env.people = []; env.projects = []; env.products = []; env.allocations = []; env.modules = {}; }
     return env;
   };
 
@@ -78,6 +80,10 @@
     if (MK.allocations && Array.isArray(env.allocations) && env.allocations.length) {
       if (mode === "replace") MK.allocations.replaceAll(env.allocations);
       else env.allocations.forEach((a) => (MK.allocations.get(a.id) ? MK.allocations.update(a.id, a) : MK.allocations.create(a)));
+    }
+    if (MK.demands && Array.isArray(env.demands) && env.demands.length) {
+      if (mode === "replace") MK.demands.replaceAll(env.demands);
+      else env.demands.forEach((x) => (MK.demands.get(x.id) ? MK.demands.update(x.id, x) : MK.demands.create(x)));
     }
     Object.keys(env.modules || {}).forEach((id) => {
       const mod = MK.modules[id];
