@@ -17,15 +17,17 @@
     staffing: { title: "要員計画", icon: "🧑‍🤝‍🧑" },
     oneonone: { title: "1on1", icon: "🗣" },
     wbs: { title: "WBS", icon: "🗂" },
+    techstack: { title: "技術スタック", icon: "🧰" },
   };
   // ゾーン構成は配布プロファイル（window.MK_CONFIG.zones）から受け取る。未指定なら
   // マネージャ用の全部入りにフォールバックする（spec §1.4 / §1.5 / §6.4）。
-  // 分類は EM が見る領域で切る（自分＋4領域）。プロダクト/テクノロジーは現状モジュール
-  // が無いため config には載せない（空グループを出さない。spec §1.4）。
+  // 分類は EM が見る領域で切る（自分＋4領域）。プロダクトは現状モジュールが無いため
+  // config には載せない（空グループを出さない。spec §1.4）。
   const DEFAULT_ZONES = [
-    { label: "自分", modules: ["todo", "goals"] },
-    { label: "ピープル", modules: ["skills", "workload", "staffing"] },
+    { label: "自分", modules: ["todo", "goals", "questions"] },
+    { label: "ピープル", modules: ["skills", "workload", "staffing", "oneonone"] },
     { label: "デリバリー", modules: ["wbs"] },
+    { label: "テクノロジー", modules: ["techstack"] },
   ];
   // マスタは特定ゾーンの持ち物ではなく、settings と同列の「シェルレベル管理グループ」
   // として独立させる（spec §3.6 / Issue #46）。プロジェクトは wbs（デリバリー）だけで
