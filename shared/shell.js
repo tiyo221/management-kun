@@ -451,6 +451,14 @@
     container.appendChild(host);
     renderProjectList(host);
   }
+  const PROJECT_STATUSES = [
+    { key: "active", label: "進行中" },
+    { key: "archived", label: "アーカイブ" },
+  ];
+  function projectStatusLabel(key) {
+    const s = PROJECT_STATUSES.find((x) => x.key === key);
+    return s ? s.label : key;
+  }
   function renderProjectList(host) {
     host.innerHTML = "";
     const list = MK.projects.all();
@@ -459,13 +467,32 @@
     list.forEach((p) => {
       const info = el("div", { class: "grow" }, [
         el("div", { text: p.name }),
-        el("div", { class: "sub", text: p.status === "archived" ? "アーカイブ" : "進行中" }),
+        el("div", { class: "sub", text: projectStatusLabel(p.status) }),
       ]);
+      const edit = el("button", { class: "btn btn-ghost", text: "編集" });
+      edit.addEventListener("click", () => editProject(p, host));
       const del = el("button", { class: "btn btn-ghost", text: "削除" });
       del.addEventListener("click", () => MK.ui.confirm(p.name + " を削除しますか？").then((ok) => { if (ok) { MK.projects.remove(p.id); renderProjectList(host); } }));
-      ul.appendChild(el("li", { class: "mk-row" }, [info, del]));
+      ul.appendChild(el("li", { class: "mk-row" }, [info, edit, del]));
     });
     host.appendChild(ul);
+  }
+  function editProject(p, host) {
+    const f = {};
+    const body = el("div", {}, [
+      fld("プロジェクト名", (f.name = inp(p.name))),
+      fld("ステータス", (f.status = MK.ui.select(PROJECT_STATUSES.map((s) => ({ value: s.key, label: s.label })), p.status))),
+      fld("表示色", (f.color = inp(p.color, "color"))),
+      fld("備考", (f.note = inp(p.note))),
+    ]);
+    MK.ui.modal({ title: "プロジェクトを編集", body, actions: [
+      { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
+      { label: "保存", variant: "btn-primary", onClick: (c) => {
+          if (!f.name.value.trim()) { MK.ui.toast("プロジェクト名を入力してください", "error"); return; }
+          MK.projects.update(p.id, { name: f.name.value.trim(), status: f.status.value, color: f.color.value, note: f.note.value });
+          renderProjectList(host); c();
+        } },
+    ] });
   }
 
   // ---- プロダクト管理（Product マスタ・§6.4）----
