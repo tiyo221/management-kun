@@ -43,7 +43,9 @@ window.MK_CONFIG = {
   // だけで増える（コードは "project" を決め打ちしない。§3.7.6 / CONVENTIONS §3）。
   dimensions: [
     { dim: "project", label: "プロジェクト", master: "projects" },
-    // 将来: { dim: "product", label: "プロダクト", master: "products" }
+    // products マスタ（📦 プロダクト）は実装済みだが、Product 次元としての配線（この配列への
+    // 追加）は別 Issue に分ける（Issue #37 / spec §3.7.6）。昇格時は次の1行を有効化する:
+    // { dim: "product", label: "プロダクト", master: "products" }
   ],
   zones: [
     { label: "自分", modules: ["todo", "goals", "questions"] },
@@ -57,6 +59,7 @@ window.MK_CONFIG = {
   masters: [
     { view: "master-people", label: "👤 人" },
     { view: "master-projects", label: "📁 プロジェクト" },
+    { view: "master-products", label: "📦 プロダクト" },
   ],
 };
 </script>
@@ -68,6 +71,7 @@ window.MK_CONFIG = {
 <script src="shared/io.js"></script>
 <script src="shared/people.js"></script>
 <script src="shared/projects.js"></script>
+<script src="shared/products.js"></script>
 <script src="shared/allocations.js"></script>
 <script src="shared/ui.js"></script>
 <script src="shared/sample.js"></script>

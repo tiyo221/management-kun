@@ -4,7 +4,7 @@
   const MK = window.MK;
   const io = {};
 
-  // scope: "all" | "people" | "projects" | "allocations" | "<moduleId>"
+  // scope: "all" | "people" | "projects" | "products" | "allocations" | "<moduleId>"
   io.buildEnvelope = function (scope) {
     scope = scope || "all";
     const env = {
@@ -14,6 +14,7 @@
       scope,
       people: MK.people.all(),
       projects: MK.projects.all(),
+      products: MK.products ? MK.products.all() : [],
       allocations: MK.allocations ? MK.allocations.all() : [],
       modules: {},
     };
@@ -32,9 +33,10 @@
         env.modules[id] = { version: 1, data: mod.exportData() };
       }
     });
-    if (scope === "people") { env.projects = []; env.allocations = []; env.modules = {}; }
-    if (scope === "projects") { env.people = []; env.allocations = []; env.modules = {}; }
-    if (scope === "allocations") { env.people = []; env.projects = []; env.modules = {}; }
+    if (scope === "people") { env.projects = []; env.products = []; env.allocations = []; env.modules = {}; }
+    if (scope === "projects") { env.people = []; env.products = []; env.allocations = []; env.modules = {}; }
+    if (scope === "products") { env.people = []; env.projects = []; env.allocations = []; env.modules = {}; }
+    if (scope === "allocations") { env.people = []; env.projects = []; env.products = []; env.modules = {}; }
     return env;
   };
 
@@ -68,6 +70,10 @@
     if (Array.isArray(env.projects) && env.projects.length) {
       if (mode === "replace") MK.projects.replaceAll(env.projects);
       else env.projects.forEach((p) => (MK.projects.get(p.id) ? MK.projects.update(p.id, p) : MK.projects.create(p)));
+    }
+    if (MK.products && Array.isArray(env.products) && env.products.length) {
+      if (mode === "replace") MK.products.replaceAll(env.products);
+      else env.products.forEach((p) => (MK.products.get(p.id) ? MK.products.update(p.id, p) : MK.products.create(p)));
     }
     if (MK.allocations && Array.isArray(env.allocations) && env.allocations.length) {
       if (mode === "replace") MK.allocations.replaceAll(env.allocations);

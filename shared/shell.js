@@ -151,6 +151,8 @@
       renderPeopleView();
     } else if (view === "master-projects") {
       renderProjectsView();
+    } else if (view === "master-products") {
+      renderProductsView();
     } else if (view === "settings") {
       renderSettings();
     } else {
@@ -442,6 +444,115 @@
     host.appendChild(ul);
   }
 
+  // ---- プロダクト管理（Product マスタ・§6.4）----
+  // ステータス絞り込みの選択状態。マスタビュー再描画（masters:changed）をまたいで保持する。
+  let productFilter = "all";
+  function renderProductsView() {
+    main.appendChild(el("h2", { class: "mk-section-title", text: "📦 プロダクト（マスタ）" }));
+    const body = el("div", {});
+    main.appendChild(body);
+    renderProducts(body);
+  }
+  function renderProducts(container) {
+    const bar = el("div", { class: "mk-toolbar" });
+    const nameInput = el("input", { class: "text-input", placeholder: "プロダクト名を入力して追加", style: "max-width:300px;" });
+    const addBtn = el("button", { class: "btn btn-primary", text: "追加" });
+    // create は masters:changed を発火し、下の bus ハンドラがビュー全体を再描画する（手動再描画は不要）。
+    const add = () => { const n = nameInput.value.trim(); if (n) { MK.products.create({ name: n }); nameInput.value = ""; } };
+    addBtn.addEventListener("click", add);
+    nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+    bar.appendChild(nameInput); bar.appendChild(addBtn);
+    const expBtn = el("button", { class: "btn btn-secondary", text: "CSV出力" });
+    expBtn.addEventListener("click", () => {
+      MK.io.downloadText("products-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(MK.products.buildCSVRows()), "text/csv");
+      MK.ui.toast("プロダクトCSVを書き出しました", "success");
+    });
+    const impBtn = el("button", { class: "btn btn-secondary", text: "CSV取込" });
+    impBtn.addEventListener("click", () => pickProductCSV((rows) => {
+      const n = MK.products.applyCSV(rows); productFilter = "all";
+      MK.ui.toast(n + " 件のプロダクトを取り込みました", "success");
+    }));
+    bar.appendChild(expBtn); bar.appendChild(impBtn);
+    container.appendChild(bar);
+
+    // ステータス絞り込みタブ（件数バッジ）
+    const c = MK.products.counts();
+    const tabs = el("div", { class: "mk-toolbar" });
+    tabs.appendChild(productPill("全て", "all", c.all));
+    MK.products.STATUSES.forEach((s) => tabs.appendChild(productPill(s.label, s.key, c[s.key])));
+    container.appendChild(tabs);
+
+    const host = el("div", { class: "card", style: "padding:0;overflow:hidden;" });
+    container.appendChild(host);
+    renderProductList(host);
+  }
+  function productPill(label, key, count) {
+    const b = el("button", { class: "pill-tab" + (productFilter === key ? " active" : "") }, [
+      label + " ", el("span", { class: "badge badge-count", text: String(count || 0) }),
+    ]);
+    b.addEventListener("click", () => { productFilter = key; main.innerHTML = ""; renderProductsView(); });
+    return b;
+  }
+  function productStatusLabel(key) {
+    const s = MK.products.STATUSES.find((x) => x.key === key);
+    return s ? s.label : key;
+  }
+  function renderProductList(host) {
+    host.innerHTML = "";
+    let list = MK.products.all();
+    if (productFilter !== "all") list = list.filter((p) => p.status === productFilter);
+    if (!list.length) { host.appendChild(el("div", { class: "mk-empty", text: "プロダクトがありません" })); return; }
+    const ul = el("ul", { class: "mk-list" });
+    list.forEach((p) => {
+      const meta = [el("span", { class: "chip", text: productStatusLabel(p.status) })];
+      if (p.owner) meta.push(el("span", { class: "sub", text: "責任者: " + p.owner }));
+      if (p.repo) meta.push(el("span", { class: "sub", text: p.repo }));
+      (p.tags || []).forEach((t) => meta.push(el("span", { class: "chip", text: "#" + t })));
+      if (p.summary) meta.push(el("span", { class: "sub", text: p.summary }));
+      const info = el("div", { class: "grow" }, [el("div", { text: p.name }), el("div", { class: "sub" }, meta)]);
+      const edit = el("button", { class: "btn btn-ghost", text: "編集" });
+      edit.addEventListener("click", () => editProduct(p));
+      const del = el("button", { class: "btn btn-ghost", text: "削除" });
+      del.addEventListener("click", () => MK.ui.confirm(p.name + " を削除しますか？").then((ok) => { if (ok) MK.products.remove(p.id); }));
+      ul.appendChild(el("li", { class: "mk-row" }, [info, edit, del]));
+    });
+    host.appendChild(ul);
+  }
+  function editProduct(p) {
+    const f = {};
+    const body = el("div", {}, [
+      fld("プロダクト名", (f.name = inp(p.name))),
+      fld("ステータス", (f.status = MK.ui.select(MK.products.STATUSES.map((s) => ({ value: s.key, label: s.label })), p.status))),
+      fld("責任者（メモ）", (f.owner = inp(p.owner))),
+      fld("概要（提供価値）", (f.summary = inp(p.summary))),
+      fld("リポジトリ / リンク", (f.repo = inp(p.repo))),
+      fld("タグ（カンマ区切り）", (f.tags = inp((p.tags || []).join(", ")))),
+    ]);
+    MK.ui.modal({ title: "プロダクトを編集", body, actions: [
+      { label: "削除", variant: "btn-danger", onClick: (close) => MK.ui.confirm("このプロダクトを削除しますか？").then((ok) => { if (ok) { MK.products.remove(p.id); close(); } }) },
+      { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
+      { label: "保存", variant: "btn-primary", onClick: (c) => {
+          if (!f.name.value.trim()) { MK.ui.toast("プロダクト名を入力してください", "error"); return; }
+          MK.products.update(p.id, {
+            name: f.name.value.trim(), status: f.status.value, owner: f.owner.value.trim(),
+            summary: f.summary.value, repo: f.repo.value.trim(),
+            tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
+          });
+          c();
+        } },
+    ] });
+  }
+  function pickProductCSV(cb) {
+    const file = el("input", { type: "file", accept: ".csv,text/csv" });
+    file.addEventListener("change", () => {
+      const f = file.files[0]; if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => { try { cb(MK.io.csv.parse(reader.result)); } catch (e) { MK.ui.toast("CSV の読み込みに失敗しました", "error"); } };
+      reader.readAsText(f);
+    });
+    file.click();
+  }
+
   // ---- 設定 ----
   function renderSettings() {
     main.appendChild(el("h2", { class: "mk-section-title", text: "設定" }));
@@ -640,6 +751,7 @@
   MK.bus.on("masters:changed", () => {
     if (current === "master-people") { main.innerHTML = ""; renderPeopleView(); }
     else if (current === "master-projects") { main.innerHTML = ""; renderProjectsView(); }
+    else if (current === "master-products") { main.innerHTML = ""; renderProductsView(); }
     else if (MK.modules[current] && MK.scope.dimOf(MK.modules[current].scope)) { route(current); }
   });
 
