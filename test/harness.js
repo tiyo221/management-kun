@@ -43,6 +43,7 @@ const SCRIPTS = [
   "modules/todo/logic.js", "modules/goals/logic.js", "modules/questions/logic.js", "modules/wbs/logic.js",
   "modules/skills/logic.js", "modules/workload/logic.js",
   "modules/staffing/logic.js", "modules/oneonone/logic.js",
+  "modules/techstack/logic.js",
 ];
 
 function setup() {
