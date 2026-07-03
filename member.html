@@ -39,7 +39,7 @@
 window.MK_CONFIG = {
   profile: "member",
   zones: [
-    { label: "自分", modules: ["todo", "goals"] },
+    { label: "自分", modules: ["todo", "goals", "questions"] },
   ],
   // masters を持たないためマスタグループはナビに現れず到達不能（spec §1.5 / §3.6）。
 };
@@ -60,6 +60,8 @@ window.MK_CONFIG = {
 <script src="modules/todo/view.js"></script>
 <script src="modules/goals/logic.js"></script>
 <script src="modules/goals/view.js"></script>
+<script src="modules/questions/logic.js"></script>
+<script src="modules/questions/view.js"></script>
 
 <!-- シェル（ブートストラップ・ルーター。プロファイル非依存） -->
 <script src="shared/shell.js"></script>
