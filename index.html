@@ -47,7 +47,7 @@ window.MK_CONFIG = {
   ],
   zones: [
     { label: "自分", modules: ["todo", "goals", "questions"] },
-    { label: "ピープル", modules: ["skills", "workload", "staffing"] },
+    { label: "ピープル", modules: ["skills", "workload", "staffing", "oneonone"] },
     { label: "デリバリー", modules: ["wbs"] },
   ],
   // マスタ（人・プロジェクト）はゾーン配下ではなく、settings と同列の「シェルレベル管理
@@ -85,6 +85,8 @@ window.MK_CONFIG = {
 <script src="modules/workload/view.js"></script>
 <script src="modules/staffing/logic.js"></script>
 <script src="modules/staffing/view.js"></script>
+<script src="modules/oneonone/logic.js"></script>
+<script src="modules/oneonone/view.js"></script>
 
 <!-- シェル（ブートストラップ・ルーター。プロファイル非依存） -->
 <script src="shared/shell.js"></script>
