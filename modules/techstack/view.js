@@ -31,12 +31,14 @@
     tabsBar.appendChild(pill("全て", "all", c.all));
     L().RINGS.forEach((r) => tabsBar.appendChild(pill(r.label, r.key, c[r.key])));
 
-    // カテゴリフィルタ＋検索
+    // カテゴリフィルタ＋検索。選択中カテゴリが編集/削除で消えたら "all" へ正規化する
+    // （select 表示とフィルタ状態を一致させる）
     const cats = L().categories();
+    if (category !== "all" && cats.indexOf(category) < 0) category = "all";
     const filterBar = ui.toolbar([]);
     const catSel = ui.select(
       [{ value: "all", label: "全カテゴリ" }].concat(cats.map((x) => ({ value: x, label: x }))),
-      cats.indexOf(category) >= 0 ? category : "all",
+      category,
       (v) => { category = v; render(); });
     filterBar.appendChild(ui.field("カテゴリ", catSel));
     const searchBox = ui.input({ placeholder: "検索…", value: search });
