@@ -10,6 +10,7 @@
 
 - 主要ファイル: [`index.html`](index.html)（シェル。これを開く）＋ `shared/*`（共有資産）＋ `modules/*`（各モジュール）
 - 共通仕様: [`spec.md`](spec.md) — アーキテクチャ・共通データ規格・デザイン統一・フェーズの定義（**本書より spec.md を優先**）
+- 共通マスタ: [`spec/masters.md`](spec/masters.md) — マスタ共通契約（§4.4.1）＋各マスタ（People / Project / Allocation / Product）の定義。マスタを追加・修正するときに読む
 - 取込・移行・名寄せ: [`spec/import-migration.md`](spec/import-migration.md) — CSV 規約（§4.6）・旧データ移行（§7）・名寄せ（§8）。CSV/JSON 取込・移行・名寄せを触るときだけ読む
 - モジュール個別仕様: [`spec/modules/<id>.md`](spec/modules/) — 各モジュールの位置づけ・固有データ・CSV 列・旧データ移行（そのモジュールを直すときに読む）
 - デザイン定義: [`DESIGN.md`](DESIGN.md) — Notion 風デザインシステム（トークン・コンポーネント）
