@@ -1,6 +1,7 @@
 /* モジュール resource（リソース＝要員計画）— ビュー（描画・イベント）。計算は MK.logic.resource に委譲。CONVENTIONS §1
-   アロケーション（共有マスタ MK.allocations）を編集し、PJ×メンバーのアサイン表・メンバー別の空き要員（期間軸）・
-   月次の供給とキャパ（要員確保のリードタイム向け早期警告）を俯瞰する（spec §3.7.5 / Issue #52）。 */
+   マネージャの3つの問い「① あと何人足りない？ ② 外注が要る？ ③ メンバーの負担は大丈夫？」に1:1のカードで答える
+   （Issue #71）。主単位は人（FTE、1人＝100%）・時間軸は月次×長ホライズン。データの入力（アロケーション＝供給・
+   需要）は共有マスタ（MK.allocations / MK.demands）を ctx 経由で編集する（spec §3.7.5 / Issue #52）。 */
 (function () {
   "use strict";
   const MK = window.MK;
@@ -10,7 +11,7 @@
   const PERIODS = [{ key: 13, label: "四半期" }, { key: 26, label: "半年" }, { key: 52, label: "1年" }];
 
   let root = null;
-  let ctx = null; // マスタ編集は ctx.allocations 経由（spec §3.5）
+  let ctx = null; // マスタ編集は ctx.allocations / ctx.demands 経由（spec §3.5）
   const state = { period: 13, offset: 0 };
 
   // マスタ編集入口（契約に沿って ctx.allocations / ctx.demands を使う。未取得時は global へフォールバック）
@@ -23,37 +24,137 @@
     root.appendChild(ui.sectionTitle("リソース"));
     const ms = L().members();
     if (!ms.length) { root.appendChild(ui.emptyState("メンバーがいません。「人」で追加してください。")); return; }
-    const list = L().alloc();
     const tg = L().targets();
-    const weeks = weekMondays(state.period, state.offset);
-    const months = L().monthsInHorizon(state.period, state.offset);
-    const refDate = MK.util.todayISO(); // アサイン表・空き集計の基準日は本日固定（期間軸スイッチャは下段の推移専用）
-    const ov = L().overviewOn(list, ms, tg, refDate, L().DEFAULT_CAPACITY);
+    if (!tg.length) { root.appendChild(ui.card([ui.emptyState("対象となるプロジェクトがありません。「プロジェクト」マスタで追加してください。")], { flush: true })); return; }
 
+    const list = L().alloc();
     const demands = L().demandsAll();
-    const body = [toolbar(refDate, tg)];
-    body.push(planCard(list, tg));
-    if (tg.length) body.push(demandCard(demands, tg));
-    if (tg.length) body.push(gapCard(L().gapByMonth(list, demands, months)));
-    body.push(supplyCard(L().supplyByMonth(list, ms, months, L().DEFAULT_CAPACITY)));
-    body.push(freeCard(ov, list, ms, weeks));
-    if (tg.length) body.push(assignCard(ov, ms, tg));
-    root.appendChild(ui.stack(body));
+    const months = L().monthsInHorizon(state.period, state.offset);
+    const matrix = L().shortageMatrix(list, demands, tg, months);
+    const anyDemand = matrix.rows.some((r) => r.cells.some((c) => c.demand > 0));
+
+    root.appendChild(ui.stack([
+      toolbar(),
+      shortageCard(matrix, anyDemand, months),
+      outsourceCard(L().outsourcingByMonth(list, demands, tg, ms, months), anyDemand),
+      loadCard(L().memberLoadByMonth(list, ms, months), list, months),
+      inputCard(list, demands),
+    ]));
   }
 
-  function toolbar(refDate, tg) {
+  function toolbar() {
     const bar = ui.toolbar([]);
-    if (tg.length) bar.appendChild(ui.button("＋ アロケーション", { variant: "btn-primary", onClick: () => editAllocation(null) }));
-    if (tg.length) bar.appendChild(ui.button("＋ 需要", { variant: "btn-secondary", onClick: () => editDemand(null) }));
+    bar.appendChild(ui.button("＋ アロケーション", { variant: "btn-primary", onClick: () => editAllocation(null) }));
+    bar.appendChild(ui.button("＋ 需要", { variant: "btn-secondary", onClick: () => editDemand(null) }));
     bar.appendChild(inlinePills(PERIODS, state.period, (k) => { state.period = k; render(); }));
     bar.appendChild(ui.button("◀", { variant: "btn-ghost", onClick: () => { state.offset--; render(); } }));
     bar.appendChild(ui.button("今月", { variant: "btn-ghost", onClick: () => { state.offset = 0; render(); } }));
     bar.appendChild(ui.button("▶", { variant: "btn-ghost", onClick: () => { state.offset++; render(); } }));
-    bar.appendChild(el("span", { class: "sub", text: "アサイン表は本日（" + refDate + "）時点／期間切替は下段の月次・週次推移用" }));
+    bar.appendChild(el("span", { class: "sub", text: "1人＝100%（FTE）。各月15日時点で集計" }));
     return bar;
   }
 
-  // ---- 計画（共有アロケーション。§3.7.5）----
+  // ---- ① あと何人足りない？（PJ別・月別の不足人数）----
+  function shortageCard(matrix, anyDemand, months) {
+    const title = el("h3", { text: "① あと何人足りない？" });
+    if (!anyDemand) return ui.card([title, ui.emptyState("需要が未登録です。「＋ 需要」で各プロジェクトに何人必要かを登録すると、月ごとの不足人数が出ます。")]);
+    const firstShort = matrix.totals.find((t) => t.short);
+    const lead = firstShort
+      ? el("p", { class: "sub", text: "最初に足りなくなるのは " + monthLabel(firstShort.month) + "（チーム全体であと " + L().fteLabel(firstShort.shortage) + " 不足）。" })
+      : el("p", { class: "sub", text: "全月で必要人数を確保できています。" });
+
+    const table = el("table", { class: "mk-matrix" });
+    const hr = el("tr");
+    hr.appendChild(el("th", { class: "rowhead", text: "プロジェクト＼月" }));
+    months.forEach((mo) => hr.appendChild(el("th", { text: monthLabel(mo) })));
+    table.appendChild(el("thead", {}, [hr]));
+
+    const tbody = el("tbody");
+    matrix.rows.forEach((r) => {
+      const tr = el("tr");
+      tr.appendChild(el("td", { class: "rowhead", text: r.target.name, title: r.target.name }));
+      r.cells.forEach((c) => {
+        const detail = "必要 " + L().fteLabel(c.demand) + " / 確保 " + L().fteLabel(c.supply);
+        const text = c.short ? (L().fteLabel(c.gap) + "不足") : (c.demand > 0 ? "OK" : "");
+        tr.appendChild(el("td", { class: "mk-heat" + (c.short ? " gap-short" : ""), text, title: detail }));
+      });
+      tbody.appendChild(tr);
+    });
+    // 月ごとの不足合計（不足している PJ の分だけを合算。他 PJ の余剰では相殺しない）
+    const foot = el("tr", { class: "domain-row" });
+    foot.appendChild(el("td", { class: "rowhead", text: "不足合計" }));
+    matrix.totals.forEach((t) => foot.appendChild(el("td", { class: "mk-heat" + (t.short ? " gap-short" : ""), text: t.short ? L().fteLabel(t.shortage) : "—" })));
+    tbody.appendChild(foot);
+    table.appendChild(tbody);
+
+    return ui.card([title, lead, el("div", { class: "mk-matrix-wrap" }, [table])]);
+  }
+
+  // ---- ② 外注が要る？（不足をチームの空き要員で吸収できるか）----
+  function outsourceCard(rows, anyDemand) {
+    const title = el("h3", { text: "② 外注が要る？" });
+    if (!anyDemand) return ui.card([title, ui.emptyState("需要が未登録のため判定できません。「＋ 需要」を追加してください。")]);
+    const firstOut = rows.find((r) => r.needsOutsource);
+    const anyShort = rows.some((r) => r.shortage > 0);
+    const lead = firstOut
+      ? el("p", { class: "sub", text: "内部の空きで吸収できない不足が " + monthLabel(firstOut.month) + " に出ます（外注候補 " + L().fteLabel(firstOut.outsource) + "）。それまでに外注・応援を手当てしてください。" })
+      : el("p", { class: "sub", text: anyShort ? "不足はありますが、チームの空き要員で吸収できる見込みです（外注不要）。" : "不足がないため外注は不要です。" });
+    const list = el("div", { class: "mk-month-list" });
+    rows.forEach((r) => {
+      const cls = r.needsOutsource ? "wl-over" : (r.shortage > 0 ? "wl-under" : "wl-ok");
+      const label = r.needsOutsource ? ("外注 " + L().fteLabel(r.outsource)) : (r.shortage > 0 ? "内部で吸収可" : "不足なし");
+      const head = el("div", { class: "wl-head" }, [
+        el("span", { class: "wl-name", text: monthLabel(r.month) }),
+        el("span", { class: "wl-badge " + cls, text: label }),
+        el("span", { class: "wl-peak" + (r.needsOutsource ? " hot" : ""), text: "不足 " + L().fteLabel(r.shortage) + " / チームの空き " + L().fteLabel(r.internalFree) }),
+      ]);
+      list.appendChild(el("div", { class: "mk-month-row" }, [head]));
+    });
+    return ui.card([title, lead, list]);
+  }
+
+  // ---- ③ メンバーの負担は大丈夫？（割当が1人分を超えるメンバーを強調）----
+  function loadCard(loads, list, months) {
+    const title = el("h3", { text: "③ メンバーの負担は大丈夫？" });
+    if (!list.length) return ui.card([title, ui.emptyState("アロケーションがありません。「＋ アロケーション」で誰をどのプロジェクトに割り当てるかを登録してください。")]);
+    const overs = loads.filter((x) => x.anyOver);
+    const lead = overs.length
+      ? el("p", { class: "sub", text: "1人分（100%）を超える月があるメンバー: " + overs.map((x) => x.member.name).join("、") + "。割当の見直しか増員を検討してください。" })
+      : el("p", { class: "sub", text: "全員の割当が1人分（100%）以内です。" });
+
+    const table = el("table", { class: "mk-matrix" });
+    const hr = el("tr");
+    hr.appendChild(el("th", { class: "rowhead", text: "メンバー＼月" }));
+    months.forEach((mo) => hr.appendChild(el("th", { text: monthLabel(mo) })));
+    table.appendChild(el("thead", {}, [hr]));
+    const tbody = el("tbody");
+    loads.forEach((x) => {
+      const tr = el("tr");
+      tr.appendChild(el("td", { class: "rowhead", text: x.member.name, title: x.member.name }));
+      x.cells.forEach((c) => {
+        const text = c.assigned ? L().fteLabel(c.assigned) : "";
+        tr.appendChild(el("td", { class: "mk-heat" + (c.over ? " gap-short" : ""), text, title: "割当 " + Math.round(c.assigned) + "%" + (c.over ? "（" + L().fteLabel(c.overBy) + " 超過）" : "") }));
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    return ui.card([title, lead, el("div", { class: "mk-matrix-wrap" }, [table])]);
+  }
+
+  // ---- 計画の入力（アロケーション＝供給・需要。共有マスタの編集）----
+  function inputCard(list, demands) {
+    const opts = targetOptions();
+    const kids = [el("h3", { text: "計画の入力" }),
+      el("p", { class: "sub", text: "上の3つの判断のもとになるデータです。アロケーション＝誰をどこへ何%割り当てるか（供給）、需要＝各プロジェクトに何人分必要か。" })];
+    kids.push(el("h3", { text: "アロケーション（供給）" }));
+    if (!list.length) kids.push(ui.emptyState("アロケーションがありません。「＋ アロケーション」から追加してください。"));
+    else { const ul = el("ul", { class: "mk-list" }); list.forEach((a) => ul.appendChild(allocRow(a, opts))); kids.push(ul); }
+    kids.push(el("h3", { text: "需要（必要人数）" }));
+    if (!demands.length) kids.push(ui.emptyState("需要がありません。「＋ 需要」から追加してください。"));
+    else { const ul = el("ul", { class: "mk-list" }); demands.forEach((d) => ul.appendChild(demandRow(d, opts))); kids.push(ul); }
+    return ui.card(kids);
+  }
+
   // 器（Project 等）は次元 config を回して集める。コードで "project" を決め打ちしない（§3.7.6）。
   function targetOptions() {
     const opts = [];
@@ -66,21 +167,11 @@
   function targetLabel(opts, targetId) { const o = opts.find((x) => x.value === targetId); return o ? o.label : "(不明な対象)"; }
   function memberName(mid) { const m = L().members().find((x) => x.id === mid); return m ? m.name : "(不明)"; }
 
-  function planCard(list, tg) {
-    if (!tg.length) return ui.card([ui.emptyState("計画の対象となるプロジェクトがありません。「プロジェクト」マスタで追加してください。")], { flush: true });
-    const intro = el("p", { class: "sub", text: "各メンバーをプロジェクトへ期間×割当%で計画します。WBS の担当とは独立した計画レコードです。" });
-    if (!list.length) return ui.card([intro, ui.emptyState("アロケーションがありません。「＋ アロケーション」から追加してください。")]);
-    const opts = targetOptions();
-    const ul = el("ul", { class: "mk-list" });
-    list.forEach((a) => ul.appendChild(allocRow(a, opts)));
-    return ui.card([intro, ul]);
-  }
-
   function allocRow(a, opts) {
     const period = (a.startDate || "?") + " 〜 " + (a.endDate || "?");
     const info = el("div", { class: "grow", style: "cursor:pointer;" }, [
       el("div", { text: memberName(a.memberId) + " → " + targetLabel(opts, a.targetId) }),
-      el("div", { class: "sub", text: "割当 " + a.percent + "% / " + period }),
+      el("div", { class: "sub", text: L().fteLabel(a.percent) + "（" + a.percent + "%） / " + period }),
     ]);
     info.addEventListener("click", () => editAllocation(a));
     return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("このアロケーションを削除しますか？").then((ok) => { if (ok) { allocMaster().remove(a.id); render(); } }) })]);
@@ -98,7 +189,7 @@
       note: ui.textarea(a ? a.note : ""),
     };
     MK.ui.modal({ title: a ? "アロケーションを編集" : "アロケーションを追加", body: ui.stack([
-      ui.field("メンバー", f.member), ui.field("プロジェクト", f.target), ui.field("割当（%）", f.percent),
+      ui.field("メンバー", f.member), ui.field("プロジェクト", f.target), ui.field("割当（%・100=1人分）", f.percent),
       ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
     ]), actions: [
       a ? { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("削除しますか？").then((ok) => { if (ok) { allocMaster().remove(a.id); c(); render(); } }) } : null,
@@ -120,28 +211,11 @@
     return wrap;
   }
 
-  // 表示期間分の週開始日（月曜）を生成（共有 util を使用）
-  function weekMondays(period, offset) {
-    const start = MK.util.addDays(MK.util.mondayOf(MK.util.todayISO()), (offset || 0) * 7);
-    const arr = []; for (let i = 0; i < period; i++) arr.push(MK.util.addDays(start, i * 7));
-    return arr;
-  }
-
-  // ---- 需要（共有マスタ MK.demands。Issue #68 / #52 Phase 2）----
-  // 「この器がこの期間に何%（＝何人分）必要か」を編集する。アロケーション（供給）と対の需要事実。
-  function demandCard(demands, tg) {
-    const intro = el("p", { class: "sub", text: "各プロジェクトが期間×必要%で「何人分必要か」を見積もります。供給（アロケーション）と対の需要で、下の月次ギャップの分子になります。" });
-    if (!demands.length) return ui.card([el("h3", { text: "需要（プロジェクト別）" }), intro, ui.emptyState("需要がありません。「＋ 需要」から追加してください。")]);
-    const opts = targetOptions();
-    const ul = el("ul", { class: "mk-list" });
-    demands.forEach((d) => ul.appendChild(demandRow(d, opts)));
-    return ui.card([el("h3", { text: "需要（プロジェクト別）" }), intro, ul]);
-  }
   function demandRow(d, opts) {
     const period = (d.startDate || "?") + " 〜 " + (d.endDate || "?");
     const info = el("div", { class: "grow", style: "cursor:pointer;" }, [
       el("div", { text: targetLabel(opts, d.targetId) }),
-      el("div", { class: "sub", text: "必要 " + d.requiredPercent + "% / " + period }),
+      el("div", { class: "sub", text: "必要 " + L().fteLabel(d.requiredPercent) + "（" + d.requiredPercent + "%） / " + period }),
     ]);
     info.addEventListener("click", () => editDemand(d));
     return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("この需要を削除しますか？").then((ok) => { if (ok) { demandMaster().remove(d.id); render(); } }) })]);
@@ -156,7 +230,7 @@
       note: ui.textarea(d ? d.note : ""),
     };
     MK.ui.modal({ title: d ? "需要を編集" : "需要を追加", body: ui.stack([
-      ui.field("プロジェクト", f.target), ui.field("必要（%・100超可）", f.required),
+      ui.field("プロジェクト", f.target), ui.field("必要（%・100=1人分。100超可）", f.required),
       ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
     ]), actions: [
       d ? { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("削除しますか？").then((ok) => { if (ok) { demandMaster().remove(d.id); c(); render(); } }) } : null,
@@ -172,120 +246,7 @@
     ].filter(Boolean) });
   }
 
-  // ---- 需要 × 供給の月次ギャップ（いつまでに確保が必要か。Issue #68）----
-  // gap = 需要 − 約束済み供給。gap>0 の月＝供給不足で、その月までに確保が必要（確保デッドライン）。
-  function gapCard(rows) {
-    const anyDemand = rows.some((r) => r.demand > 0);
-    if (!anyDemand) return ui.card([el("h3", { text: "需要 × 供給（月次ギャップ）" }), ui.emptyState("需要が未登録です。「＋ 需要」を追加すると、いつまでに何%分の確保が必要かが月次で出ます。")], { flush: true });
-    const firstShort = rows.find((r) => r.short);
-    const lead = firstShort
-      ? el("p", { class: "sub", text: "最初に供給不足になるのは " + monthLabel(firstShort.month) + "（不足 " + Math.round(firstShort.gap) + "%）。それまでに確保・応援を手当てしてください。" })
-      : el("p", { class: "sub", text: "現時点の供給は全月で需要を満たしています。" });
-    const list = el("div", { class: "mk-month-list" });
-    rows.forEach((r) => {
-      const cls = r.short ? "wl-over" : "wl-ok";
-      const label = r.short ? ("不足 " + Math.round(r.gap) + "%") : ("充足 +" + Math.round(-r.gap) + "%");
-      const head = el("div", { class: "wl-head" }, [
-        el("span", { class: "wl-name", text: monthLabel(r.month) }),
-        el("span", { class: "wl-badge " + cls, text: label }),
-        el("span", { class: "wl-peak" + (r.short ? " hot" : ""), text: "需要 " + Math.round(r.demand) + "% / 供給 " + Math.round(r.supply) + "%" }),
-      ]);
-      list.appendChild(el("div", { class: "mk-month-row" }, [head]));
-    });
-    return ui.card([el("h3", { text: "需要 × 供給（月次ギャップ・" + monthLabel(rows[0] && rows[0].month) + " 〜）" }), lead, list]);
-  }
-
-  // ---- 月次の供給とキャパ（要員確保のリードタイム向け早期警告。Issue #52）----
-  // 供給がキャパを超える月＝オーバーコミット、空きが尽きる月を先まで見せる。週次の凸凹は見せない。
-  function supplyCard(rows) {
-    const thisMonth = MK.util.todayISO().slice(0, 7);
-    const list = el("div", { class: "mk-month-list" });
-    rows.forEach((r) => {
-      const over = r.free < 0;
-      const tight = !over && r.cap > 0 && r.free <= r.cap * 0.1; // 空きが1割以下＝逼迫
-      const ratio = r.cap > 0 ? r.assigned / r.cap : 0;
-      const cls = over ? "wl-over" : (tight ? "wl-under" : "wl-ok");
-      const label = over ? ("超過 " + Math.round(-r.free) + "%") : ("空き " + Math.round(r.free) + "%");
-      const bar = el("div", { class: "mk-month-bar" }, [
-        el("div", { class: "mk-month-fill" + (over ? " over" : (tight ? " tight" : "")), style: "width:" + Math.min(100, Math.round(ratio * 100)) + "%;" }),
-      ]);
-      const head = el("div", { class: "wl-head" }, [
-        el("span", { class: "wl-name" + (r.month.slice(0, 7) === thisMonth ? " today" : ""), text: monthLabel(r.month) }),
-        el("span", { class: "wl-badge " + cls, text: label }),
-        el("span", { class: "wl-peak" + (r.overCount ? " hot" : ""), text: "割当 " + Math.round(r.assigned) + "% / キャパ " + r.cap + "%" + (r.overCount ? "（過剰 " + r.overCount + "人）" : "") }),
-      ]);
-      list.appendChild(el("div", { class: "mk-month-row" }, [head, bar]));
-    });
-    const intro = el("p", { class: "sub", text: "供給（割当）がキャパを超える月＝オーバーコミット。空きが尽きる前に増員・応援を手当てする早期警告です。" });
-    return ui.card([el("h3", { text: "月ごとの供給とキャパ（" + monthLabel(rows[0] && rows[0].month) + " 〜）" }), intro, list]);
-  }
   function monthLabel(monthFirst) { if (!monthFirst) return ""; const y = monthFirst.slice(0, 4), m = Number(monthFirst.slice(5, 7)); return y + "年" + m + "月"; }
-
-  // ---- 空き要員（メンバー別・期間軸）----
-  function freeCard(ov, list, ms, weeks) {
-    const cap = ov.capacity;
-    const rows = ov.memberSummary.map((s, i) => {
-      const m = s.member;
-      const cls = s.over ? "wl-over" : (s.free <= cap * 0.2 ? "wl-under" : "wl-ok");
-      const label = s.over ? ("過剰 " + Math.round(-s.free) + "%") : ("空き " + Math.round(s.free) + "%");
-      const head = el("div", { class: "wl-head" }, [
-        el("span", { class: "wl-dot", style: "background:" + colorOf(m, i) + ";" }),
-        el("span", { class: "wl-name", text: m.name }),
-        el("span", { class: "wl-badge " + cls, text: label }),
-        el("span", { class: "wl-peak", text: "割当 " + Math.round(s.assigned) + "% / キャパ " + cap + "%" }),
-      ]);
-      return el("div", { class: "wl-member" }, [head, freeStrip(L().freeSeries(list, m.id, weeks, cap), weeks, cap)]);
-    });
-    return ui.card([el("h3", { text: "空き要員（週ごと・" + weeks[0] + " 〜）" })].concat(rows));
-  }
-  function freeStrip(vals, weeks, cap) {
-    const todayMon = MK.util.mondayOf(MK.util.todayISO());
-    const s = el("div", { class: "wl-strip" });
-    vals.forEach((v, i) => { const cell = el("div", { class: "wl-week" + (weeks[i] === todayMon ? " today" : ""), title: weeks[i] + "：空き " + Math.round(v) + "%" }); cell.style.background = freeColor(v, cap); s.appendChild(cell); });
-    return s;
-  }
-  // 空きが多い＝濃い緑、少ない＝薄い、負（過剰）＝赤。トークン参照でダーク追従。
-  function freeColor(v, cap) {
-    if (v < 0) return "var(--color-error)";
-    if (v <= 0) return "var(--color-surface)";
-    const ratio = Math.min(1, v / (cap || 100));
-    return "rgba(26,174,57," + (0.15 + ratio * 0.7).toFixed(2) + ")";
-  }
-
-  // ---- アサイン表（PJ×メンバー）----
-  function assignCard(ov, ms, tg) {
-    const table = el("table", { class: "mk-matrix" });
-    const thead = el("thead");
-    const hr = el("tr");
-    hr.appendChild(el("th", { class: "rowhead", text: "プロジェクト＼メンバー" }));
-    ms.forEach((m) => hr.appendChild(el("th", { text: m.name })));
-    hr.appendChild(el("th", { text: "PJ計" }));
-    thead.appendChild(hr);
-    table.appendChild(thead);
-
-    const tbody = el("tbody");
-    ov.rows.forEach((r) => {
-      const tr = el("tr");
-      tr.appendChild(el("td", { class: "rowhead", text: r.target.name, title: r.target.name }));
-      r.cells.forEach((c) => tr.appendChild(el("td", { class: "mk-heat", text: c.percent ? c.percent + "%" : "" })));
-      tr.appendChild(el("td", { class: "mk-heat", text: r.total ? r.total + "%" : "" }));
-      tbody.appendChild(tr);
-    });
-    // メンバー別の割当合計行
-    const foot = el("tr", { class: "domain-row" });
-    foot.appendChild(el("td", { class: "rowhead", text: "割当合計" }));
-    ov.memberSummary.forEach((s) => foot.appendChild(el("td", { class: "mk-heat" + (s.over ? " gap-short" : ""), text: Math.round(s.assigned) + "%" })));
-    foot.appendChild(el("td", { text: "" }));
-    tbody.appendChild(foot);
-    table.appendChild(tbody);
-
-    const wrap = el("div", { class: "mk-matrix-wrap" }, [table]);
-    return ui.card([el("h3", { text: "アサイン表（基準日 " + ov.date + "）" }), wrap]);
-  }
-
-  // メンバー表示色（People マスタの color 優先、無ければパレット循環）
-  const PALETTE = ["#5645d4", "#0075de", "#dd5b00", "#1aae39", "#ff64c8", "#2a9d99"];
-  function colorOf(m, i) { return (m && m.color) || PALETTE[i % PALETTE.length]; }
 
   // サンプルのアロケーション（計画）を共有マスタへ投入する。people/projects 投入後に呼ばれる
   // 前提で名寄せ（resolveOrCreate）が既存に一致する（shared/sample.js）。旧 staffing から移設（Issue #52）。
@@ -300,7 +261,7 @@
       { id: MK.util.uid("a"), memberId: sato, targetId: alpha, dim: "project", startDate: today, endDate: end, percent: 50, note: "" },
       { id: MK.util.uid("a"), memberId: tanaka, targetId: beta, dim: "project", startDate: today, endDate: end, percent: 80, note: "" },
     ]);
-    // 需要（供給と対）。alpha は供給110%に対し200%必要＝不足を可視化する（Issue #68）。
+    // 需要（供給と対）。alpha は確保1.1人に対し2.0人必要＝不足0.9人を可視化する（Issue #68 / #71）。
     if (MK.demands) MK.demands.replaceAll([
       { id: MK.util.uid("d"), targetId: alpha, dim: "project", startDate: today, endDate: end, requiredPercent: 200, note: "2名体制が必要" },
       { id: MK.util.uid("d"), targetId: beta, dim: "project", startDate: today, endDate: end, requiredPercent: 100, note: "" },
