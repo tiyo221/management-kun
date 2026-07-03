@@ -556,7 +556,11 @@
     const ul = el("ul", { class: "mk-list" });
     list.forEach((p) => {
       const meta = [el("span", { class: "chip", text: productStatusLabel(p.status) })];
-      if (p.owner) meta.push(el("span", { class: "sub", text: "責任者: " + p.owner }));
+      const owner = MK.products.ownerPerson(p);
+      if (owner) meta.push(el("span", { class: "chip" }, [
+        el("span", { style: "display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:" + (owner.color || "var(--color-steel)") + ";" }),
+        "責任者: " + owner.name,
+      ]));
       if (p.repo) meta.push(el("span", { class: "sub", text: p.repo }));
       (p.tags || []).forEach((t) => meta.push(el("span", { class: "chip", text: "#" + t })));
       MK.products.relatedProjects(p).forEach((proj) => meta.push(el("span", { class: "chip", text: "📁 " + proj.name })));
@@ -587,10 +591,11 @@
   function editProduct(p) {
     const f = {};
     const projectsField = projectCheckboxList(p.projectIds);
+    const ownerOptions = [{ value: "", label: "未設定" }].concat(MK.people.all().map((m) => ({ value: m.id, label: m.name })));
     const body = el("div", {}, [
       fld("プロダクト名", (f.name = inp(p.name))),
       fld("ステータス", (f.status = MK.ui.select(MK.products.STATUSES.map((s) => ({ value: s.key, label: s.label })), p.status))),
-      fld("責任者（メモ）", (f.owner = inp(p.owner))),
+      fld("責任者", (f.owner = MK.ui.select(ownerOptions, p.ownerId || ""))),
       fld("概要（提供価値）", (f.summary = inp(p.summary))),
       fld("リポジトリ / リンク", (f.repo = inp(p.repo))),
       fld("タグ（カンマ区切り）", (f.tags = inp((p.tags || []).join(", ")))),
@@ -602,7 +607,7 @@
       { label: "保存", variant: "btn-primary", onClick: (c) => {
           if (!f.name.value.trim()) { MK.ui.toast("プロダクト名を入力してください", "error"); return; }
           MK.products.update(p.id, {
-            name: f.name.value.trim(), status: f.status.value, owner: f.owner.value.trim(),
+            name: f.name.value.trim(), status: f.status.value, ownerId: f.owner.value || null,
             summary: f.summary.value, repo: f.repo.value.trim(),
             tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
             projectIds: projectsField.getSelected ? projectsField.getSelected() : [],
@@ -836,6 +841,7 @@
   MK.store.load();
   migrateScopedData(); // scoped 化前の単一キーを対象別へ移す（§3.7.4）。route より前に実行する。
   if (MK.allocations) MK.allocations.migrateFromWorkload(); // 旧 workload 内部のアロケーションを共有マスタへ昇格（Issue #45）。
+  if (MK.products) MK.products.migrateOwnerToPeople(); // 旧・自由文字列 owner を People マスタへ名寄せ移行（Issue #56）。
   applyTheme(getTheme());
   // 起動先: 既定は HOME。設定 startView === "last" のときだけ前回モジュールを復元する（spec §3.6）。
   const start0 = getSettings();
