@@ -1,13 +1,14 @@
-/* モジュール resource（リソース＝要員計画）— ロジック（PJ横断のアサイン集約・空き要員・月次供給）。DOM/UI に触れない。CONVENTIONS §1
+/* モジュール resource（リソース＝要員計画）— ロジック（人単位×3つの意思決定）。DOM/UI に触れない。CONVENTIONS §1
    People を主語に Project 次元を横断集約する cross ビュー（spec §3.7.5）。旧 staffing を発展させたもの（Issue #52）。
-   データ源は中立な共有マスタ MK.allocations（供給）。将来 MK.demands（需要）と対で月次ギャップを見る。
+   マネージャの3つの問い「① あと何人足りない？ ② 外注が要る？ ③ メンバーの負担は大丈夫？」に月次で答える（Issue #71）。
+   主単位は人（FTE、1人＝100%）。データ源は中立な共有マスタ MK.allocations（供給）と MK.demands（需要）。
    自前の永続データは持たず、マスタを参照・編集する。各モジュールの内部データ（WBS の担当 assigneeId 等）は
    覗かない＝モジュール独立を維持する。旧 workload の task ベース負荷には依存しない。 */
 (function () {
   "use strict";
   const MK = window.MK;
 
-  // 総キャパシティ既定値(%)。メンバー個別キャパのマスタは持たない（YAGNI）。空き＝キャパ − 全器割当合計。
+  // 総キャパシティ既定値(%)＝1人分。メンバー個別キャパのマスタは持たない（YAGNI）。
   const DEFAULT_CAPACITY = 100;
 
   /**
@@ -53,23 +54,19 @@
    */
   function capacityOf(mid) { return DEFAULT_CAPACITY; } // eslint-disable-line no-unused-vars
 
+  // ---- 人単位換算（FTE。1人＝100%。Issue #71）----
+  // 「需要200% / 供給110%」の頭の中の変換をツール側が肩代わりする。主表記は人、% は補助。
+
   /**
-   * 指定メンバー×指定器×指定日の割当率を合算する純関数（アサイン表の1セル）。
-   * 同一メンバー・同一器に期間の重なる複数アロケーションがあれば合算する。
-   * @param {Object[]} allocations - 対象アロケーション一覧
-   * @param {string} mid - メンバーID
-   * @param {string} targetId - 器のID
-   * @param {string} date - 対象日（YYYY-MM-DD）
-   * @returns {number} 割当率(%)
+   * %を人数（FTE）へ換算した表示ラベルを返す純関数（小数1桁へ丸め）。例: 90 → "0.9人"、200 → "2.0人"。
+   * @param {number} percent - 割当・需要などの率(%)。負値可（-20 → "-0.2人"）
+   * @returns {string} 人数ラベル（例 "0.9人"）
    */
-  function cellPercent(allocations, mid, targetId, date) {
-    let s = 0;
-    (allocations || []).forEach((a) => {
-      if (a.memberId !== mid || a.targetId !== targetId) return;
-      if (a.startDate && a.endDate && a.startDate <= date && date <= a.endDate) s += Number(a.percent) || 0;
-    });
-    return s;
+  function fteLabel(percent) {
+    const tenths = Math.round((Number(percent) || 0) / 10); // 0.1人単位へ丸める（例 90% → 9、85% → 9）
+    return (tenths / 10).toFixed(1) + "人";
   }
+
   /**
    * 指定メンバー・指定日の全器合計割当率を返す純関数（共有マスタの集計純関数へ委譲＝DRY）。
    * @param {Object[]} allocations - 対象アロケーション一覧
@@ -83,58 +80,20 @@
     let s = 0; (allocations || []).forEach((a) => { if (a.memberId !== mid) return; if (a.startDate && a.endDate && a.startDate <= date && date <= a.endDate) s += Number(a.percent) || 0; }); return s;
   }
   /**
-   * 指定メンバー・指定日の空き要員(%)を返す純関数（= キャパ − 全器合計割当）。
-   * 過剰アサインを可視化するため負値はクランプしない（100超の割当は負の空きとして表れる）。
+   * 指定メンバー・指定日の空き(%)を返す純関数（= キャパ − 全器合計割当）。
+   * 過負担を可視化するため負値はクランプしない（100超の割当は負の空きとして表れる）。
    * @param {Object[]} allocations - 対象アロケーション一覧
    * @param {string} mid - メンバーID
    * @param {string} date - 対象日（YYYY-MM-DD）
    * @param {number} [capacity] - 総キャパシティ(%)（既定 100）
-   * @returns {number} 空き(%)（過剰アサイン時は負値）
+   * @returns {number} 空き(%)（過負担時は負値）
    */
   function freeOn(allocations, mid, date, capacity) {
     const cap = capacity == null ? DEFAULT_CAPACITY : capacity;
     return cap - totalPercent(allocations, mid, date);
   }
-  /**
-   * 期間軸（週の月曜サンプル）での空き系列を返す純関数（#27「期間軸で算出・表示」）。
-   * @param {Object[]} allocations - 対象アロケーション一覧
-   * @param {string} mid - メンバーID
-   * @param {string[]} weeks - 週開始日（月曜）の配列
-   * @param {number} [capacity] - 総キャパシティ(%)（既定 100）
-   * @returns {number[]} 週ごとの空き(%)
-   */
-  function freeSeries(allocations, mid, weeks, capacity) {
-    return (weeks || []).map((w) => freeOn(allocations, mid, w, capacity));
-  }
 
-  /**
-   * 指定日時点の PJ×メンバー アサイン俯瞰を算出する純関数（横断ビューの中核）。
-   * @param {Object[]} allocations - 対象アロケーション一覧
-   * @param {Array<Object>} memberList - メンバー一覧（People レコード）
-   * @param {Target[]} targetList - 器の一覧
-   * @param {string} date - 対象日（YYYY-MM-DD）
-   * @param {number} [capacity] - 総キャパシティ(%)（既定 100）
-   * @returns {{
-   *   date: string, capacity: number,
-   *   rows: {target: Target, cells: {memberId: string, percent: number}[], total: number}[],
-   *   memberSummary: {member: Object, assigned: number, free: number, over: boolean}[]
-   * }} 器別の割当行と、メンバー別の割当合計・空き
-   */
-  function overviewOn(allocations, memberList, targetList, date, capacity) {
-    const cap = capacity == null ? DEFAULT_CAPACITY : capacity;
-    const rows = (targetList || []).map((t) => {
-      const cells = (memberList || []).map((m) => ({ memberId: m.id, percent: cellPercent(allocations, m.id, t.id, date) }));
-      const total = cells.reduce((s, c) => s + c.percent, 0);
-      return { target: t, cells, total };
-    });
-    const memberSummary = (memberList || []).map((m) => {
-      const assigned = totalPercent(allocations, m.id, date);
-      return { member: m, assigned, free: cap - assigned, over: assigned > cap };
-    });
-    return { date, capacity: cap, rows, memberSummary };
-  }
-
-  // ---- 月次集計（要員確保のリードタイムに合わせた粗い時間軸。Issue #52）----
+  // ---- 月次の時間軸（要員確保のリードタイムに合わせた粗い時間軸。Issue #52）----
   // 週次は凸凹が細かすぎ「見えても確保が間に合わない」ため、月次×長ホライズンで先まで見せる。
 
   // 1ヶ月あたりの平均週数（365.25 / 12 / 7 ≒ 4.345）。ホライズンの週数を月数へ丸める係数。
@@ -169,100 +128,139 @@
    */
   function monthSample(monthFirst) { return monthFirst.slice(0, 8) + "15"; }
 
+  // ---- ① あと何人足りない？（PJ別・月別の不足人数。Issue #71）----
+
   /**
-   * 月次の供給（割当）とキャパを算出する純関数。各月の代表日で全メンバーの割当合計を集計する。
-   * 「供給がキャパを超える月＝オーバーコミット」「空きが尽きる月」を導ける（早期警告）。
+   * 指定の器・指定日の必要率(%)を返す（共有マスタの集計純関数へ委譲＝DRY・未ロード時はフォールバック）。
+   * @param {Object[]} demands - 対象需要一覧
+   * @param {string} targetId - 器のID
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @returns {number} 必要率(%)
+   */
+  function targetDemandOn(demands, targetId, date) {
+    if (MK.demands && typeof MK.demands.demandOn === "function") return MK.demands.demandOn(demands, targetId, date);
+    let s = 0; (demands || []).forEach((x) => { if (x.targetId !== targetId) return; if (x.startDate && x.endDate && x.startDate <= date && date <= x.endDate) s += Number(x.requiredPercent) || 0; }); return s;
+  }
+  /**
+   * 指定の器・指定日の確保済み供給(%)＝その器への期間内アロケーション合計を返す純関数。
+   * @param {Object[]} allocations - 対象アロケーション一覧
+   * @param {string} targetId - 器のID
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @returns {number} 確保済み供給(%)
+   */
+  function targetSupplyOn(allocations, targetId, date) {
+    let s = 0;
+    (allocations || []).forEach((a) => { if (a.targetId !== targetId) return; if (a.startDate && a.endDate && a.startDate <= date && date <= a.endDate) s += Number(a.percent) || 0; });
+    return s;
+  }
+  /**
+   * PJ別×月別の不足（需要 − 確保済み供給）を一括算出する純関数（問い①の中核）。
+   * totals の不足合計は「不足している器の gap だけ」を足す（他 PJ の余剰で不足は相殺されない）。
+   * @param {Object[]} allocations - 対象アロケーション一覧（供給）
+   * @param {Object[]} demands - 対象需要一覧
+   * @param {Target[]} targetList - 器の一覧
+   * @param {string[]} months - 対象月（月初日）の配列
+   * @returns {{
+   *   rows: {target: Target, cells: {month: string, demand: number, supply: number, gap: number, short: boolean}[], anyShort: boolean}[],
+   *   totals: {month: string, shortage: number, short: boolean}[]
+   * }} 器ごとの月次セル（gap = 需要 − 供給、正なら不足）と、月ごとの不足合計
+   */
+  function shortageMatrix(allocations, demands, targetList, months) {
+    const rows = (targetList || []).map((t) => {
+      const cells = (months || []).map((mo) => {
+        const date = monthSample(mo);
+        const demand = targetDemandOn(demands, t.id, date);
+        const supply = targetSupplyOn(allocations, t.id, date);
+        const gap = demand - supply;
+        return { month: mo, demand, supply, gap, short: gap > 0 };
+      });
+      return { target: t, cells, anyShort: cells.some((c) => c.short) };
+    });
+    const totals = (months || []).map((mo, i) => {
+      const shortage = rows.reduce((s, r) => s + Math.max(0, r.cells[i].gap), 0);
+      return { month: mo, shortage, short: shortage > 0 };
+    });
+    return { rows, totals };
+  }
+
+  // ---- ② 外注が要る？（不足をチームの空き要員で吸収できるか。Issue #71）----
+
+  /**
+   * 指定日のチームの空き要員(%)合計を返す純関数。メンバーごとの空きを 0 で下限クランプして合算する
+   * （過負担メンバーの負の空きは、他の不足を埋める原資にならないため）。
+   * @param {Object[]} allocations - 対象アロケーション一覧
+   * @param {Array<Object>} memberList - メンバー一覧
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @param {number} [capacity] - メンバー1人あたり総キャパ(%)（既定 100）
+   * @returns {number} チームの空き(%)合計
+   */
+  function teamFreeOn(allocations, memberList, date, capacity) {
+    const cap = capacity == null ? DEFAULT_CAPACITY : capacity;
+    let s = 0;
+    (memberList || []).forEach((m) => { s += Math.max(0, cap - totalPercent(allocations, m.id, date)); });
+    return s;
+  }
+  /**
+   * 月ごとの外注要否を判定する純関数（問い②の中核）。「不足（①の合計）をチームの空き要員で
+   * 吸収できるか」を月次で判定し、吸収しきれない分＝外注候補として返す。
+   * @param {Object[]} allocations - 対象アロケーション一覧（供給）
+   * @param {Object[]} demands - 対象需要一覧
+   * @param {Target[]} targetList - 器の一覧
+   * @param {Array<Object>} memberList - メンバー一覧
+   * @param {string[]} months - 対象月（月初日）の配列
+   * @param {number} [capacity] - メンバー1人あたり総キャパ(%)（既定 100）
+   * @returns {{month: string, shortage: number, internalFree: number, absorbed: number, outsource: number, needsOutsource: boolean}[]}
+   *   月ごとの不足・チームの空き・内部吸収可能分・外注候補（%）・外注要否フラグ
+   */
+  function outsourcingByMonth(allocations, demands, targetList, memberList, months, capacity) {
+    const totals = shortageMatrix(allocations, demands, targetList, months).totals;
+    return totals.map((t) => {
+      const internalFree = teamFreeOn(allocations, memberList, monthSample(t.month), capacity);
+      const absorbed = Math.min(t.shortage, internalFree);
+      const outsource = Math.max(0, t.shortage - internalFree);
+      return { month: t.month, shortage: t.shortage, internalFree, absorbed, outsource, needsOutsource: outsource > 0 };
+    });
+  }
+
+  // ---- ③ メンバーの負担は大丈夫？（割当が1人分を超えるメンバー。Issue #71）----
+
+  /**
+   * メンバー別×月別の負荷（全器合計割当）を一括算出する純関数（問い③の中核）。
+   * 割当がキャパ（1人分＝100%）を超える月を over=true で返す。
    * @param {Object[]} allocations - 対象アロケーション一覧
    * @param {Array<Object>} memberList - メンバー一覧
    * @param {string[]} months - 対象月（月初日）の配列
    * @param {number} [capacity] - メンバー1人あたり総キャパ(%)（既定 100）
-   * @returns {{month: string, assigned: number, cap: number, free: number, overCount: number}[]}
-   *   月ごとの総割当・総キャパ・空き（負なら供給超過）・過剰アサイン人数
+   * @returns {{member: Object, cells: {month: string, assigned: number, over: boolean, overBy: number}[], peak: number, anyOver: boolean}[]}
+   *   メンバーごとの月次割当・超過フラグ・超過分(%)・ピーク割当
    */
-  function supplyByMonth(allocations, memberList, months, capacity) {
+  function memberLoadByMonth(allocations, memberList, months, capacity) {
     const cap = capacity == null ? DEFAULT_CAPACITY : capacity;
-    const totalCap = (memberList || []).length * cap;
-    return (months || []).map((mo) => {
-      const date = monthSample(mo);
-      let assigned = 0, overCount = 0;
-      (memberList || []).forEach((m) => {
-        const a = totalPercent(allocations, m.id, date);
-        assigned += a;
-        if (a > cap) overCount++;
+    return (memberList || []).map((m) => {
+      const cells = (months || []).map((mo) => {
+        const assigned = totalPercent(allocations, m.id, monthSample(mo));
+        return { month: mo, assigned, over: assigned > cap, overBy: Math.max(0, assigned - cap) };
       });
-      return { month: mo, assigned, cap: totalCap, free: totalCap - assigned, overCount };
-    });
-  }
-
-  // ---- 需要 × 供給ギャップ（いつまでに何人分の確保が必要か。Issue #68 / #52 Phase 2）----
-  // 需要（demand）は共有マスタ MK.demands の必要%、供給（supply）は allocations の割当合計（＝約束済み供給）。
-
-  /**
-   * 指定日の全器合計必要率(%)を返す（共有マスタの集計純関数へ委譲＝DRY・未ロード時はフォールバック）。
-   * @param {Object[]} demands - 対象需要一覧
-   * @param {string} date - 対象日（YYYY-MM-DD）
-   * @returns {number} 合計必要率(%)
-   */
-  function totalDemand(demands, date) {
-    if (MK.demands && typeof MK.demands.totalDemandOn === "function") return MK.demands.totalDemandOn(demands, date);
-    let s = 0; (demands || []).forEach((x) => { if (x.startDate && x.endDate && x.startDate <= date && date <= x.endDate) s += Number(x.requiredPercent) || 0; }); return s;
-  }
-  /**
-   * 指定日の約束済み供給(%)＝期間内アロケーションの割当合計（メンバー非依存の総 FTE%）を返す純関数。
-   * @param {Object[]} allocations - 対象アロケーション一覧
-   * @param {string} date - 対象日（YYYY-MM-DD）
-   * @returns {number} 約束済み供給(%)
-   */
-  function committedSupply(allocations, date) {
-    let s = 0;
-    (allocations || []).forEach((a) => { if (a.startDate && a.endDate && a.startDate <= date && date <= a.endDate) s += Number(a.percent) || 0; });
-    return s;
-  }
-  /**
-   * 月次の総需要を算出する純関数（各月の代表日で全器の必要%を合算）。
-   * @param {Object[]} demands - 対象需要一覧
-   * @param {string[]} months - 対象月（月初日）の配列
-   * @returns {{month: string, demand: number}[]} 月ごとの総需要
-   */
-  function demandByMonth(demands, months) {
-    return (months || []).map((mo) => ({ month: mo, demand: totalDemand(demands, monthSample(mo)) }));
-  }
-  /**
-   * 月次の「需要 vs 供給」ギャップを算出する純関数。gap = 需要 − 約束済み供給。
-   * gap > 0 の月は供給不足＝その月までに確保が必要（確保デッドライン）。
-   * @param {Object[]} allocations - 対象アロケーション一覧（供給）
-   * @param {Object[]} demands - 対象需要一覧
-   * @param {string[]} months - 対象月（月初日）の配列
-   * @returns {{month: string, demand: number, supply: number, gap: number, short: boolean}[]}
-   *   月ごとの需要・供給・ギャップ（正なら不足）・不足フラグ
-   */
-  function gapByMonth(allocations, demands, months) {
-    return (months || []).map((mo) => {
-      const date = monthSample(mo);
-      const demand = totalDemand(demands, date);
-      const supply = committedSupply(allocations, date);
-      const gap = demand - supply;
-      return { month: mo, demand, supply, gap, short: gap > 0 };
+      return { member: m, cells, peak: cells.reduce((s, c) => Math.max(s, c.assigned), 0), anyOver: cells.some((c) => c.over) };
     });
   }
 
   /**
-   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
-   * 本日時点の各メンバーの空きをチーム平均し、過剰アサイン（割当 > キャパ）人数を数える。
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。主表記は人（FTE。Issue #71）。
+   * 本日時点のチームの空き要員（人）と、過負担（割当 > 1人分）のメンバー数を返す。
    * データ源のアロケーションが皆無なら empty=true。
    * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
    */
   function summary() {
     const list = alloc(), mem = members(), today = MK.util.todayISO(), cap = DEFAULT_CAPACITY;
-    let freeSum = 0, over = 0;
-    mem.forEach((m) => { const assigned = totalPercent(list, m.id, today); freeSum += cap - assigned; if (assigned > cap) over++; });
-    const avgFree = mem.length ? Math.round(freeSum / mem.length) : 0;
+    let over = 0;
+    mem.forEach((m) => { if (totalPercent(list, m.id, today) > cap) over++; });
     return { empty: !list.length, stats: [
-      { label: "平均空き", value: avgFree + "%" },
-      { label: "過剰アサイン", value: over },
+      { label: "空き要員", value: fteLabel(teamFreeOn(list, mem, today, cap)) },
+      { label: "過負担", value: over + "人" },
     ] };
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.resource = { DEFAULT_CAPACITY, alloc, demandsAll, members, targets, capacityOf, cellPercent, totalPercent, freeOn, freeSeries, overviewOn, monthsInHorizon, monthSample, supplyByMonth, totalDemand, committedSupply, demandByMonth, gapByMonth, summary };
+  MK.logic.resource = { DEFAULT_CAPACITY, alloc, demandsAll, members, targets, capacityOf, fteLabel, totalPercent, freeOn, monthsInHorizon, monthSample, targetDemandOn, targetSupplyOn, shortageMatrix, teamFreeOn, outsourcingByMonth, memberLoadByMonth, summary };
 })();
