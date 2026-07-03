@@ -559,6 +559,7 @@
       if (p.owner) meta.push(el("span", { class: "sub", text: "責任者: " + p.owner }));
       if (p.repo) meta.push(el("span", { class: "sub", text: p.repo }));
       (p.tags || []).forEach((t) => meta.push(el("span", { class: "chip", text: "#" + t })));
+      MK.products.relatedProjects(p).forEach((proj) => meta.push(el("span", { class: "chip", text: "📁 " + proj.name })));
       if (p.summary) meta.push(el("span", { class: "sub", text: p.summary }));
       const info = el("div", { class: "grow" }, [el("div", { text: p.name }), el("div", { class: "sub" }, meta)]);
       const edit = el("button", { class: "btn btn-ghost", text: "編集" });
@@ -569,8 +570,23 @@
     });
     host.appendChild(ul);
   }
+  // プロジェクトのチェックボックス一覧を作る（Product⇄Project の緩い紐付け・Issue #55）。
+  function projectCheckboxList(selectedIds) {
+    const list = MK.projects.all();
+    if (!list.length) return el("div", { class: "sub", text: "プロジェクトがありません" });
+    const wrap = el("div", { class: "mk-stack", style: "max-height:160px;overflow:auto;" });
+    const boxes = list.map((proj) => {
+      const cb = MK.ui.checkbox((selectedIds || []).indexOf(proj.id) >= 0);
+      cb.dataset.projectId = proj.id;
+      wrap.appendChild(el("label", { style: "display:flex;gap:8px;align-items:center;cursor:pointer;" }, [cb, el("span", { text: proj.name })]));
+      return cb;
+    });
+    wrap.getSelected = () => boxes.filter((b) => b.checked).map((b) => b.dataset.projectId);
+    return wrap;
+  }
   function editProduct(p) {
     const f = {};
+    const projectsField = projectCheckboxList(p.projectIds);
     const body = el("div", {}, [
       fld("プロダクト名", (f.name = inp(p.name))),
       fld("ステータス", (f.status = MK.ui.select(MK.products.STATUSES.map((s) => ({ value: s.key, label: s.label })), p.status))),
@@ -578,6 +594,7 @@
       fld("概要（提供価値）", (f.summary = inp(p.summary))),
       fld("リポジトリ / リンク", (f.repo = inp(p.repo))),
       fld("タグ（カンマ区切り）", (f.tags = inp((p.tags || []).join(", ")))),
+      fld("関連プロジェクト", projectsField),
     ]);
     MK.ui.modal({ title: "プロダクトを編集", body, actions: [
       { label: "削除", variant: "btn-danger", onClick: (close) => MK.ui.confirm("このプロダクトを削除しますか？").then((ok) => { if (ok) { MK.products.remove(p.id); close(); } }) },
@@ -588,6 +605,7 @@
             name: f.name.value.trim(), status: f.status.value, owner: f.owner.value.trim(),
             summary: f.summary.value, repo: f.repo.value.trim(),
             tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
+            projectIds: projectsField.getSelected ? projectsField.getSelected() : [],
           });
           c();
         } },
