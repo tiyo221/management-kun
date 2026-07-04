@@ -380,7 +380,7 @@
     });
     const impBtn = el("button", { class: "btn btn-secondary", text: "CSV取込" });
     // applyCSV は masters:changed を発火し、下の bus ハンドラがビュー全体を再描画する。
-    impBtn.addEventListener("click", () => pickCSV((rows) => {
+    impBtn.addEventListener("click", () => MK.io.pickCsvFile((rows) => {
       const n = MK.people.applyCSV(rows);
       MK.ui.toast(n + " 件のメンバーを取り込みました", "success");
     }));
@@ -442,7 +442,7 @@
     });
     const impBtn = el("button", { class: "btn btn-secondary", text: "CSV取込" });
     // applyCSV は masters:changed を発火し、下の bus ハンドラがビュー全体を再描画する。
-    impBtn.addEventListener("click", () => pickCSV((rows) => {
+    impBtn.addEventListener("click", () => MK.io.pickCsvFile((rows) => {
       const n = MK.projects.applyCSV(rows);
       MK.ui.toast(n + " 件のプロジェクトを取り込みました", "success");
     }));
@@ -520,7 +520,7 @@
       MK.ui.toast("プロダクトCSVを書き出しました", "success");
     });
     const impBtn = el("button", { class: "btn btn-secondary", text: "CSV取込" });
-    impBtn.addEventListener("click", () => pickCSV((rows) => {
+    impBtn.addEventListener("click", () => MK.io.pickCsvFile((rows) => {
       const n = MK.products.applyCSV(rows); productFilter = "all";
       MK.ui.toast(n + " 件のプロダクトを取り込みました", "success");
     }));
@@ -617,17 +617,7 @@
         } },
     ] });
   }
-  // CSV ファイルを選択して parse 済み行データをコールバックに渡す共通ヘルパ（人/プロジェクト/プロダクト共用）。
-  function pickCSV(cb) {
-    const file = el("input", { type: "file", accept: ".csv,text/csv" });
-    file.addEventListener("change", () => {
-      const f = file.files[0]; if (!f) return;
-      const reader = new FileReader();
-      reader.onload = () => { try { cb(MK.io.csv.parse(reader.result)); } catch (e) { MK.ui.toast("CSV の読み込みに失敗しました", "error"); } };
-      reader.readAsText(f);
-    });
-    file.click();
-  }
+  // CSV ファイル選択の共通ヘルパは MK.io.pickCsvFile（shared/io.js §4.6.2）へ集約した。
 
   // ---- 設定 ----
   function renderSettings() {

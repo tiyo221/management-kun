@@ -152,6 +152,57 @@
    */
   function resolveProject(name) { return name && name.trim() ? MK.projects.resolveOrCreate(name) : null; }
 
+  // ---- CSV（整形・取込はロジック。ファイル選択/DLは view）spec §4.6.2 / spec/modules/todo.md ----
+  /**
+   * ステータス表記（key または日本語ラベル）を内部キーへ寄せる。不明・空は "inbox"。
+   * @param {string} v - ステータス表記
+   * @returns {string} ステータスキー（{@link STATUSES} の key）
+   */
+  function statusFromCSV(v) {
+    const s = MK.util.normalizeKey(String(v == null ? "" : v));
+    const hit = STATUSES.find((x) => MK.util.normalizeKey(x.key) === s || MK.util.normalizeKey(x.label) === s);
+    return hit ? hit.key : "inbox";
+  }
+  /**
+   * タスクを CSV 行データ（ヘッダ＋各行）に整形する。プロジェクトは名前で参照。
+   * @returns {string[][]} 2次元配列の CSV 行データ
+   */
+  function buildCSVRows() {
+    const label = (key) => { const s = STATUSES.find((x) => x.key === key); return s ? s.label : key; };
+    const rows = [["タイトル", "ステータス", "プロジェクト", "コンテキスト", "期限", "メモ"]];
+    tasks().forEach((t) => rows.push([
+      t.title, label(t.status), projectNameOf(t.projectId),
+      (t.contexts || []).join(" "), t.due || "", t.notes || "",
+    ]));
+    return rows;
+  }
+  /**
+   * CSV 行データからタスクを取り込み、全置換して保存する。タイトルが空の行はスキップする。
+   * プロジェクトは名前で名寄せ（未登録は新規作成、空は未割当）。ステータスは key/ラベル両対応。
+   * @param {string[][]} rows - CSV 行データ（1行目はヘッダ）
+   * @returns {{ok: number, skip: number}} 取り込み件数・スキップ件数
+   * ※ store へ保存する副作用あり（全置換）。未登録プロジェクト名は MK.projects へ作成する副作用あり。
+   */
+  function applyCSV(rows) {
+    const now = MK.util.nowISO();
+    let ok = 0, skip = 0;
+    const list = [];
+    rows.slice(1).forEach((r) => {
+      const title = (r[0] || "").trim();
+      if (!title) { skip++; return; }
+      const status = statusFromCSV(r[1]);
+      list.push({
+        id: MK.util.uid("t"), title, notes: (r[5] || "").trim(), status,
+        contexts: (r[3] || "").split(/[\s,]+/).map((s) => s.trim()).filter(Boolean),
+        projectId: resolveProject(r[2] || ""), due: (r[4] || "").trim() || null,
+        createdAt: now, updatedAt: now, completedAt: status === "done" ? now : null,
+      });
+      ok++;
+    });
+    save({ version: 1, tasks: list });
+    return { ok, skip };
+  }
+
   /**
    * エクスポート用に現在の全データを返す。
    * @returns {TodoData} 現在の todo データ
@@ -216,7 +267,7 @@
   MK.logic.todo = {
     STATUSES, load, save, tasks, counts, filtered,
     addTask, updateTask, toggleDone, removeTask,
-    projectNameOf, resolveProject, summary,
+    projectNameOf, resolveProject, statusFromCSV, buildCSVRows, applyCSV, summary,
     exportData, importData, loadSample,
   };
 })();

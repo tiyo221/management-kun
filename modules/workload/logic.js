@@ -186,6 +186,58 @@
    */
   function hasBaseline() { return !!load().baseline; }
 
+  // ---- CSV（整形・取込はロジック。ファイル選択/DLは view）spec §4.6.2 / spec/modules/workload.md ----
+  /**
+   * ステータス表記（key または日本語ラベル）を内部キーへ寄せる。不明・空は "todo"。
+   * @param {string} v - ステータス表記
+   * @returns {"todo"|"in_progress"|"done"} ステータスキー
+   */
+  function statusFromCSV(v) {
+    const s = MK.util.normalizeKey(String(v == null ? "" : v));
+    const hit = STATUS.find((x) => MK.util.normalizeKey(x.key) === s || MK.util.normalizeKey(x.label) === s);
+    return hit ? hit.key : "todo";
+  }
+  /**
+   * 稼働タスクを CSV 行データ（ヘッダ＋各行）に整形する。メンバーは名前で参照。
+   * @returns {string[][]} 2次元配列の CSV 行データ
+   */
+  function buildCSVRows() {
+    const label = (key) => { const s = STATUS.find((x) => x.key === key); return s ? s.label : key; };
+    const nameOf = (mid) => { if (!mid) return ""; const m = MK.people.get(mid); return m ? m.name : ""; };
+    const rows = [["メンバー", "タスク", "稼働率", "開始日", "終了予定日", "ステータス", "完了日", "備考"]];
+    tasks().forEach((t) => rows.push([
+      nameOf(t.memberId), t.title, t.load != null ? t.load : "",
+      t.startDate || "", t.endDate || "", label(t.status), t.completedDate || "", t.note || "",
+    ]));
+    return rows;
+  }
+  /**
+   * CSV 行データから稼働タスクを取り込み、全置換して保存する。タスク名が空の行はスキップする。
+   * メンバーは名前で名寄せ（未登録は新規作成、空は未割当）。ステータスは key/ラベル両対応。
+   * 稼働率は 0 以上の整数へ寄せる（不正値は 0）。
+   * @param {string[][]} rows - CSV 行データ（1行目はヘッダ）
+   * @returns {{ok: number, skip: number}} 取り込み件数・スキップ件数
+   * ※ store へ保存する副作用あり（全置換）。未登録メンバー名は MK.people へ作成する副作用あり。baseline は破棄。
+   */
+  function applyCSV(rows) {
+    let ok = 0, skip = 0;
+    const list = [];
+    rows.slice(1).forEach((r) => {
+      const title = (r[1] || "").trim();
+      if (!title) { skip++; return; }
+      const name = (r[0] || "").trim();
+      const status = statusFromCSV(r[5]);
+      list.push({
+        id: MK.util.uid("wt"), memberId: name ? MK.people.resolveOrCreate(name) : null, title,
+        load: Math.max(0, parseInt(r[2], 10) || 0), startDate: (r[3] || "").trim(), endDate: (r[4] || "").trim(),
+        status, completedDate: (r[6] || "").trim() || null, note: (r[7] || "").trim(),
+      });
+      ok++;
+    });
+    save({ version: 1, tasks: list, baseline: null, memberSettings: load().memberSettings });
+    return { ok, skip };
+  }
+
   /**
    * エクスポート用に現在の全データを返す。
    * @returns {WorkloadData} 現在の稼働データ
@@ -251,5 +303,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.workload = { STATUS, PERIODS, load, save, tasks, members, warnOf, colorOf, effEnd, weekMondays, series, planSeries, stats, summary, addTask, updateTask, removeTask, tasksOf, saveBaseline, clearBaseline, hasBaseline, exportData, importData, loadSample };
+  MK.logic.workload = { STATUS, PERIODS, load, save, tasks, members, warnOf, colorOf, effEnd, weekMondays, series, planSeries, stats, summary, addTask, updateTask, removeTask, tasksOf, saveBaseline, clearBaseline, hasBaseline, statusFromCSV, buildCSVRows, applyCSV, exportData, importData, loadSample };
 })();

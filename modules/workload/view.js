@@ -28,6 +28,8 @@
     bar.appendChild(ui.button("今日", { variant: "btn-ghost", onClick: () => { state.offset = 0; render(); } }));
     bar.appendChild(ui.button("▶", { variant: "btn-ghost", onClick: () => { state.offset++; render(); } }));
     bar.appendChild(ui.button("＋ タスク", { variant: "btn-primary", onClick: () => editTask(null) }));
+    bar.appendChild(ui.button("CSV出力", { onClick: () => { MK.io.downloadText("workload-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(L().buildCSVRows()), "text/csv"); MK.ui.toast("負荷 CSV を書き出しました", "success"); } }));
+    bar.appendChild(ui.button("CSV取込", { onClick: () => MK.io.pickCsvFile((rows) => { const r = L().applyCSV(rows); render(); MK.ui.toast("取込 " + r.ok + " 件" + (r.skip ? " / スキップ " + r.skip + " 件" : ""), r.skip ? "info" : "success"); }) }));
     bar.appendChild(ui.button("計画を保存", { onClick: () => { L().saveBaseline(); MK.ui.toast("計画を保存しました", "success"); render(); } }));
     if (L().hasBaseline()) {
       bar.appendChild(ui.button("計画を重ねる", { variant: state.showPlan ? "btn-primary" : "btn-secondary", onClick: () => { state.showPlan = !state.showPlan; render(); } }));

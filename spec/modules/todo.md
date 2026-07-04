@@ -17,7 +17,15 @@ GTD ベースの軽量タスク管理。
 - モジュール内部 ID は既存方式 `t_<epoch>_<rand>` を踏襲（[`spec.md`](../../spec.md) §4.7）。
 
 ## CSV
-なし（JSON のみ）。
+共通契約は [`import-migration.md`](../import-migration.md) §4.6.2（Issue #77）。
+
+- 列: `タイトル, ステータス, プロジェクト, コンテキスト, 期限, メモ`。
+- `タイトル` は必須（空の行はスキップし件数に数える）。
+- `ステータス` は key（`inbox` / `next` / `waiting` / `someday` / `done`）または表示ラベル（Inbox / Next / Waiting / Someday / Done）を受け付け、不明・空は `inbox` に寄せる。
+- `プロジェクト` は**名前**参照（§8 名寄せ。未登録は新規作成、空は未割当 `null`）。出力時はプロジェクト名へ展開。
+- `コンテキスト` は空白またはカンマ区切り（出力は空白区切り）。
+- `期限` は `YYYY-MM-DD`（空は未設定 `null`）。
+- 取込は**全置換**。`createdAt` / `updatedAt` は取込時刻で再生成し、`completedAt` は `ステータス=done` のとき取込時刻を入れる。
 
 ## 旧データ移行
 | 旧キー / 形状 | 移行先 |

@@ -15,3 +15,33 @@ test("todo: 追加は inbox・件数・完了・フィルタ", (MK) => {
   eq(T.filtered("done", "").length, 1);
   eq(T.filtered("all", "買い").length, 1);
 });
+
+test("todo: CSV ラウンドトリップ（ステータス/プロジェクト名寄せ・全置換）", (MK) => {
+  // 観点: buildCSVRows→applyCSV で往復でき、プロジェクトは名前で参照、ステータスは key/ラベル両対応
+  const T = MK.logic.todo;
+  const rows = [
+    ["タイトル", "ステータス", "プロジェクト", "コンテキスト", "期限", "メモ"],
+    ["企画書", "next", "新製品", "@pc @mail", "2026-07-10", "急ぎ"],
+    ["買い物", "Inbox", "", "", "", ""],        // ラベル表記・プロジェクト空
+    ["完了タスク", "Done", "新製品", "", "", ""], // ラベル表記 done
+    ["", "next", "無視", "", "", ""],             // タイトル空はスキップ
+  ];
+  const r = T.applyCSV(rows);
+  eq(r.ok, 3);
+  eq(r.skip, 1);
+  eq(T.counts().all, 3);
+  const kikaku = T.tasks().find((t) => t.title === "企画書");
+  eq(kikaku.status, "next");
+  eq(kikaku.contexts, ["@pc", "@mail"]);
+  eq(kikaku.due, "2026-07-10");
+  eq(T.projectNameOf(kikaku.projectId), "新製品"); // 名寄せでマスタ作成
+  const kanryo = T.tasks().find((t) => t.title === "完了タスク");
+  eq(kanryo.status, "done");                       // ラベル「Done」→ done
+  assert(kanryo.completedAt, "done は completedAt を持つ");
+  const kaimono = T.tasks().find((t) => t.title === "買い物");
+  eq(kaimono.projectId, null);                     // 空プロジェクトは未割当
+  // 往復: 出力ヘッダと再取込で件数が一致
+  const out = T.buildCSVRows();
+  eq(out[0], ["タイトル", "ステータス", "プロジェクト", "コンテキスト", "期限", "メモ"]);
+  eq(T.applyCSV(out).ok, 3);
+});

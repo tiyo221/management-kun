@@ -138,5 +138,26 @@
     },
   };
 
+  /**
+   * CSV ファイルを選択させ、パース済みの行データをコールバックへ渡す共通ヘルパ（§4.6.2）。
+   * モジュール view の「CSV取込」から使い、ファイル選択・読込・パースの重複実装をなくす。
+   * 読込/パース失敗時は握りつぶさずエラートーストを表示する。
+   * @param {(rows: string[][]) => void} onRows - パース済み行データを受け取るコールバック
+   * @returns {void}
+   */
+  io.pickCsvFile = function (onRows) {
+    const fail = () => MK.ui.toast("CSV の読み込みに失敗しました", "error");
+    const input = MK.util.el("input", { type: "file", accept: ".csv,text/csv" });
+    input.addEventListener("change", () => {
+      const f = input.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => { try { onRows(io.csv.parse(reader.result)); } catch (e) { fail(); } };
+      reader.onerror = fail;
+      reader.readAsText(f);
+    });
+    input.click();
+  };
+
   MK.io = io;
 })();
