@@ -15,6 +15,12 @@
     root.innerHTML = "";
     root.appendChild(ui.sectionTitle("ToDo"));
 
+    // ツールバー（CSV）
+    const bar = ui.toolbar([
+      ui.button("CSV出力", { onClick: () => { MK.io.downloadText("todo-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(L().buildCSVRows()), "text/csv"); MK.ui.toast("ToDo CSV を書き出しました", "success"); } }),
+      ui.button("CSV取込", { onClick: () => MK.io.pickCsvFile((rows) => { const r = L().applyCSV(rows); filter = "all"; search = ""; render(); MK.ui.toast("取込 " + r.ok + " 件" + (r.skip ? " / スキップ " + r.skip + " 件" : ""), r.skip ? "info" : "success"); }) }),
+    ]);
+
     // クイックキャプチャ
     const capture = ui.input({ placeholder: "やることを入力して Enter（Inbox に追加）", onEnter: (v) => { if (v.trim()) { L().addTask(v); render(); } } });
 
@@ -31,7 +37,7 @@
     const listHost = ui.card([], { flush: true });
     renderList(listHost);
 
-    root.appendChild(ui.stack([capture, tabsBar, listHost]));
+    root.appendChild(ui.stack([bar, capture, tabsBar, listHost]));
   }
 
   function pill(label, key, count) {

@@ -22,7 +22,7 @@
     // ツールバー（CSV）
     const bar = ui.toolbar([
       ui.button("CSV出力", { onClick: () => { MK.io.downloadText("techstack-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(L().buildCSVRows()), "text/csv"); MK.ui.toast("技術スタックCSVを書き出しました", "success"); } }),
-      ui.button("CSV取込", { onClick: () => pickCSV((rows) => { const n = L().applyCSV(rows); ring = "all"; category = "all"; render(); MK.ui.toast(n + " 件の技術を取り込みました", "success"); }) }),
+      ui.button("CSV取込", { onClick: () => MK.io.pickCsvFile((rows) => { const n = L().applyCSV(rows); ring = "all"; category = "all"; render(); MK.ui.toast(n + " 件の技術を取り込みました", "success"); }) }),
     ]);
 
     // リングタブ（件数バッジ）
@@ -124,17 +124,6 @@
           } },
       ],
     });
-  }
-
-  function pickCSV(cb) {
-    const file = el("input", { type: "file", accept: ".csv,text/csv" });
-    file.addEventListener("change", () => {
-      const f = file.files[0]; if (!f) return;
-      const reader = new FileReader();
-      reader.onload = () => { try { cb(MK.io.csv.parse(reader.result)); } catch (e) { MK.ui.toast("CSV の読み込みに失敗しました", "error"); } };
-      reader.readAsText(f);
-    });
-    file.click();
   }
 
   MK.registerModule("techstack", {

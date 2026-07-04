@@ -17,7 +17,7 @@ skill-mieru-kun（自前パーサ・UTF-8・BOM許容）と wbs-tool（BOM付き
 - **参照の持ち方**: メンバー・プロジェクトは **名前**で参照（人間/AI が読み書きしやすく、ID 非依存）。取込時に名前→マスタ解決。
 - **真偽・選択値**: skill-mieru-kun 準拠で寛容に解釈（`true`/`○`/`コア` 等を真、`false`/`×`/`非表示` 等を偽）。
 - **未登録・不正値**: マスタ未登録の参照や不正値の行はスキップし、件数を警告表示する。
-- CSV を提供するモジュール: 既存どおり **skills**・**wbs**。他モジュールは JSON のみ（CSV 化は必要時に同じ規約で追加）。
+- CSV を提供するモジュール: **skills**・**wbs**・**techstack**・**todo**・**workload**（§4.6.2 の共通契約に従って展開・Issue #77）。他モジュールは JSON のみ（CSV 化は必要時に同じ契約で追加）。
 
 ### 4.6.1 CSV 列仕様（共通形）
 
@@ -29,9 +29,25 @@ skill-mieru-kun（自前パーサ・UTF-8・BOM許容）と wbs-tool（BOM付き
 | プロジェクト（Project） | `プロジェクト名, 表示色, 状態, 備考`（状態は `active`/`archived`。`archived`/`アーカイブ` を archived、それ以外は既定 `active`。関連目標＝Goal 参照は将来拡張） |
 
 - 人・プロジェクトいずれも **氏名／プロジェクト名が空の行はスキップ**し、取込は**全置換**（プロダクトと同様。共通契約 §4.4.1 C に合わせ将来は名寄せ upsert へ寄せる）。
-- モジュール固有の CSV: **skills**（ユーザ / スキル / 紐づけ）→ [`spec/modules/skills.md`](modules/skills.md)、**wbs** → [`spec/modules/wbs.md`](modules/wbs.md)。
+- モジュール固有の CSV: **skills**（ユーザ / スキル / 紐づけ）→ [`spec/modules/skills.md`](modules/skills.md)、**wbs** → [`spec/modules/wbs.md`](modules/wbs.md)、**techstack** → [`spec/modules/techstack.md`](modules/techstack.md)、**todo** → [`spec/modules/todo.md`](modules/todo.md)、**workload** → [`spec/modules/workload.md`](modules/workload.md)。
 
-> 人・プロジェクト・プロダクトの各マスタは CSV 出力／取込に対応（Issue #37 / #57 / #58）。CSV は `MK.io.csv.stringify` / `MK.io.csv.parse`・`MK.io.downloadText`・ファイル選択の共通ヘルパを用いる（各マスタ view の「CSV出力」「CSV取込」）。
+> 人・プロジェクト・プロダクトの各マスタは CSV 出力／取込に対応（Issue #37 / #57 / #58）。CSV は `MK.io.csv.stringify` / `MK.io.csv.parse`・`MK.io.downloadText`・`MK.io.pickCsvFile`（ファイル選択の共通ヘルパ）を用いる（各マスタ view の「CSV出力」「CSV取込」）。
+
+### 4.6.2 モジュール CSV 対応の共通契約（Issue #77）
+
+モジュールが CSV に対応する際は、以下の共通契約に従う。個別実装を増やさず、既存の skills / wbs / techstack / マスタと同じ形にそろえる。
+
+- **列定義の所在**: 各モジュールの CSV 列は `spec/modules/<id>.md` の「CSV」節に定義する（1行目ヘッダ・日本語列名）。メンバー／プロジェクトは §4.6 のとおり**名前**で参照する。
+- **入出力 API（logic / view 分離）**: DOM 非依存の logic 側に整形・取込を置く。
+  - `buildCSVRows(): string[][]` — ヘッダ行＋各データ行を返す純関数（マスタ参照は**名前**へ展開）。
+  - `applyCSV(rows): number | { ok: number, skip: number }` — 取込・保存を行う。スキップが起こりうるモジュールは `{ ok, skip }` を返す。
+  - view は `MK.io.csv.stringify` / `MK.io.downloadText`（出力）・`MK.io.pickCsvFile`（取込。ファイル選択＋パース＋失敗トーストを共通化）で結線する。
+- **取込モード**: 既存 CSV と同じく**全置換**（`version:1` で作り直す）。将来の名寄せ upsert は §4.4.1 C に寄せる。
+- **名前参照の解決**: メンバー／プロジェクト名は §8 名寄せで解決する。**空参照は未割当（`null`）**、**未登録の非空参照は §8.4 ハイブリッド（MVP）に従い新規マスタを自動作成**する（`MK.people.resolveOrCreate` / `MK.projects.resolveOrCreate`）。評価のように参照先が必須で創出が無意味な場合のみ `resolve`（未解決行はスキップ）を使う（例: skills の紐づけ CSV）。
+- **スキップ／エラーの扱い（握りつぶさない）**:
+  - 必須列（タイトル・タスク名など）が空の行や、解決不能・不正値の行は**スキップして件数に数える**。view は取込後に「取込 n 件 / スキップ k 件」を表示し、`skip>0` は `info` トーストにする。
+  - パース例外など**取込全体が失敗**したときは `MK.io.pickCsvFile` の既定で `error` トーストを表示する（無言で握りつぶさない）。
+- **寛容パース（BOM・真偽・選択値）**: 真偽値・選択値（ステータス／リング等）は**寛容に解釈**する（内部 key と日本語ラベルの両対応・前後空白／英字大小を無視）。列の順序・欠落セルにも耐える（`(r[i] || "")` で欠損許容）。BOM は `MK.io.csv` が担保（読込は先頭 BOM 許容、書出しは UTF-8 + BOM）。
 
 ---
 

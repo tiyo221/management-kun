@@ -23,7 +23,7 @@
     const bar = ui.toolbar([
       ui.button("＋ スキルを追加", { variant: "btn-primary", onClick: () => editSkill(null) }),
       ui.button("スキルCSV出力", { onClick: () => { MK.io.downloadText("skills-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(L().buildSkillsCSVRows()), "text/csv"); MK.ui.toast("スキルCSVを書き出しました", "success"); } }),
-      ui.button("スキルCSV取込", { onClick: () => pickCSV((rows) => { const n = L().applySkillsCSV(rows); render(); MK.ui.toast(n + " 件のスキルを取り込みました（評価はクリア）", "success"); }) }),
+      ui.button("スキルCSV取込", { onClick: () => MK.io.pickCsvFile((rows) => { const n = L().applySkillsCSV(rows); render(); MK.ui.toast(n + " 件のスキルを取り込みました（評価はクリア）", "success"); }) }),
     ]);
     const list = L().skills();
     let content;
@@ -81,7 +81,7 @@
     const ms = L().members(), vs = L().visibleSkills();
     const bar = ui.toolbar([
       ui.button("紐づけCSV出力", { onClick: () => { MK.io.downloadText("skill-ratings-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(L().buildRatingsCSVRows()), "text/csv"); MK.ui.toast("紐づけCSVを書き出しました", "success"); } }),
-      ui.button("紐づけCSV取込", { onClick: () => pickCSV((rows) => { const r = L().applyRatingsCSV(rows); render(); MK.ui.toast("取込 " + r.ok + " 件 / スキップ " + r.skip + " 件", r.skip ? "info" : "success"); }) }),
+      ui.button("紐づけCSV取込", { onClick: () => MK.io.pickCsvFile((rows) => { const r = L().applyRatingsCSV(rows); render(); MK.ui.toast("取込 " + r.ok + " 件 / スキップ " + r.skip + " 件", r.skip ? "info" : "success"); }) }),
     ]);
     let content;
     if (!ms.length) content = ui.emptyState("メンバーがいません。「人の管理」で追加してください。");
@@ -165,17 +165,6 @@
     if (!v) return "";
     const a = { 1: 0.16, 2: 0.33, 3: 0.5, 4: 0.7, 5: 0.9 }[Number(v)] || 0;
     return "background:rgba(86,69,212," + a + ");color:" + (Number(v) >= 3 ? "#fff" : "var(--color-ink)") + ";";
-  }
-
-  function pickCSV(cb) {
-    const file = el("input", { type: "file", accept: ".csv,text/csv" });
-    file.addEventListener("change", () => {
-      const f = file.files[0]; if (!f) return;
-      const reader = new FileReader();
-      reader.onload = () => { try { cb(MK.io.csv.parse(reader.result)); } catch (e) { MK.ui.toast("CSV の読み込みに失敗しました", "error"); } };
-      reader.readAsText(f);
-    });
-    file.click();
   }
 
   MK.registerModule("skills", {
