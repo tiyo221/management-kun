@@ -50,6 +50,7 @@ window.MK_CONFIG = {
     { label: "自分", modules: ["todo", "goals", "questions"] },
     { label: "ピープル", modules: ["skills", "resource", "oneonone"] },
     { label: "デリバリー", modules: ["wbs"] },
+    { label: "プロダクト", modules: ["releases"] },
     { label: "テクノロジー", modules: ["techstack"] },
   ],
   // マスタ（人・プロジェクト）はゾーン配下ではなく、settings と同列の「シェルレベル管理
@@ -94,6 +95,8 @@ window.MK_CONFIG = {
 <script src="modules/oneonone/view.js"></script>
 <script src="modules/techstack/logic.js"></script>
 <script src="modules/techstack/view.js"></script>
+<script src="modules/releases/logic.js"></script>
+<script src="modules/releases/view.js"></script>
 
 <!-- シェル（ブートストラップ・ルーター。プロファイル非依存） -->
 <script src="shared/shell.js"></script>
