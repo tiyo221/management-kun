@@ -55,6 +55,13 @@
     MASTERS.forEach((a) => { set[a.view] = true; });
     return set;
   })();
+  // ゾーンに載るモジュール id の集合。hiddenModules の判定対象をこれに限定し、設定に
+  // 未知 id や特別ビュー名（home 等）が残っていても安全に無視する（Issue #35）。
+  const ZONE_MODULES = (function () {
+    const set = {};
+    ZONES.forEach((z) => { (z.modules || []).forEach((id) => { set[id] = true; }); });
+    return set;
+  })();
   const LEGACY_KEYS = {
     "mokuhyo-mieru-kun:v1": "goals",
     "skill-tool-data-v1": "skills",
@@ -76,6 +83,21 @@
   }
   function setSettings(patch) {
     MK.store.write("settings", Object.assign(getSettings(), patch));
+  }
+
+  // ---- モジュールの表示・非表示（Issue #35）----
+  // UI（ナビ / HOME）から隠すだけで、データ（mk:module:<id>:*）・マスタ連携は保持する（無効化ではない）。
+  function getHiddenModules() {
+    const h = getSettings().hiddenModules;
+    return Array.isArray(h) ? h : [];
+  }
+  function isHiddenModule(id) {
+    return ZONE_MODULES[id] === true && getHiddenModules().indexOf(id) >= 0;
+  }
+  function setModuleHidden(id, hidden) {
+    const h = getHiddenModules().filter((x) => x !== id);
+    if (hidden) h.push(id);
+    setSettings({ hiddenModules: h });
   }
 
   // ---- テーマ（ダークモード。spec §6.2）----
@@ -134,8 +156,9 @@
 
   // ---- ルーティング ----
   function route(view) {
-    // 配布プロファイルに載っていないビュー（例: 自分配布での master-people / master-projects）は先頭ゾーンへ退避
-    if (!ALLOWED[view]) view = firstView();
+    // 配布プロファイルに載っていないビュー（例: 自分配布での master-people / master-projects）と
+    // 非表示モジュール（Issue #35）は先頭ゾーンの表示中モジュールへ退避
+    if (!ALLOWED[view] || isHiddenModule(view)) view = firstView();
     if (mountedModule && typeof mountedModule.unmount === "function") mountedModule.unmount();
     mountedModule = null;
     main.innerHTML = "";
@@ -165,10 +188,11 @@
     }
   }
 
-  // 先頭ゾーンの最初のモジュール（起動・退避先のデフォルト）
+  // 先頭ゾーンの最初の表示中モジュール（起動・退避先のデフォルト）。
+  // 全モジュール非表示でも settings へ退避し、操作不能にならない（Issue #35）。
   function firstView() {
     for (let i = 0; i < ZONES.length; i++) {
-      const mods = ZONES[i].modules || [];
+      const mods = (ZONES[i].modules || []).filter((id) => !isHiddenModule(id));
       if (mods.length) return mods[0];
     }
     return "settings";
@@ -232,8 +256,8 @@
   function renderHome() {
     main.appendChild(el("h2", { class: "mk-section-title", text: "🏠 HOME" }));
     ZONES.forEach((zone) => {
-      // カタログ（META）未知の id だけ除外する。実装済み／未実装（＝準備中カード）はどちらも出す。
-      const mods = (zone.modules || []).filter((id) => META[id]);
+      // カタログ（META）未知の id と非表示（Issue #35）を除外する。実装済み／未実装（＝準備中カード）はどちらも出す。
+      const mods = (zone.modules || []).filter((id) => META[id] && !isHiddenModule(id));
       if (!mods.length) return;
       main.appendChild(el("h3", { class: "mk-home-zone", text: zone.label }));
       const grid = el("div", { class: "mk-home-grid" });
@@ -296,6 +320,7 @@
       (zone.modules || []).forEach((id) => {
         const m = META[id];
         if (!m) return; // カタログ未知のモジュールは無視
+        if (isHiddenModule(id)) return; // 非表示モジュールはナビに出さない（Issue #35）
         const implemented = !!MK.modules[id];
         items.push(navItem((m.icon ? m.icon + " " : "") + m.title + (implemented ? "" : "・準備中"), id));
       });
@@ -665,6 +690,7 @@
       card.appendChild(mig);
     }
     main.appendChild(card);
+    main.appendChild(renderModuleVisibility());
 
     if (MK.store.errors.length) {
       const warn = el("div", { class: "card", style: "margin-top:16px;border-color:var(--color-error);" });
@@ -672,6 +698,29 @@
       MK.store.errors.forEach((e) => warn.appendChild(el("div", { class: "sub", text: e.key + ": " + e.message })));
       main.appendChild(warn);
     }
+  }
+
+  // モジュールの表示・非表示トグル（ゾーンでグルーピング。Issue #35）。
+  // 変更は即ナビ・HOME へ反映する。非表示にしてもデータ・マスタ連携は保持される。
+  function renderModuleVisibility() {
+    const card = el("div", { class: "card", style: "margin-top:16px;" });
+    card.appendChild(el("h3", { text: "モジュールの表示" }));
+    card.appendChild(el("p", { class: "sub", text: "ナビと HOME に表示するモジュールを選びます。非表示にしてもデータは保持されます。" }));
+    ZONES.forEach((zone) => {
+      const mods = (zone.modules || []).filter((id) => META[id]);
+      if (!mods.length) return;
+      card.appendChild(el("h4", { class: "mk-home-zone", text: zone.label }));
+      const list = el("div", { class: "mk-stack" });
+      mods.forEach((id) => {
+        const m = META[id];
+        const cb = MK.ui.checkbox(!isHiddenModule(id));
+        cb.addEventListener("change", () => { setModuleHidden(id, !cb.checked); renderNav(); });
+        const label = (m.icon ? m.icon + " " : "") + m.title + (MK.modules[id] ? "" : "・準備中");
+        list.appendChild(el("label", { style: "display:flex;gap:8px;align-items:center;cursor:pointer;" }, [cb, el("span", { text: label })]));
+      });
+      card.appendChild(list);
+    });
+    return card;
   }
 
   function exportAll() {
@@ -837,7 +886,8 @@
   applyTheme(getTheme());
   // 起動先: 既定は HOME。設定 startView === "last" のときだけ前回モジュールを復元する（spec §3.6）。
   const start0 = getSettings();
-  const startView = start0.startView === "last" && start0.lastModule && ALLOWED[start0.lastModule]
+  const startView = start0.startView === "last" && start0.lastModule
+    && ALLOWED[start0.lastModule] && !isHiddenModule(start0.lastModule)
     ? start0.lastModule : "home";
   route(startView);
 
