@@ -30,7 +30,7 @@
 | `shared/people.js` / `projects.js`（マスタ） | **skills / workload / wbs / todo**（マスタを参照） | 自動＋該当画面の手動確認 |
 | `shared/products.js`（マスタ） | **releases**（Product マスタを参照） | 自動＋該当画面の手動確認 |
 | `shared/ui.js` / `design.css`（見た目の共通） | **全モジュールの view** | 手動（375/768/1280・ダーク・空状態） |
-| `index.html`（シェル/ナビ/移行/設定） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
+| `index.html` / `shared/shell.js`（シェル/ナビ/移行/設定） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
 
 > 現状モジュール間の直接依存はない（各モジュールは独立）。共通の依存は「shared」と「人/プロジェクトのマスタ」。
 
