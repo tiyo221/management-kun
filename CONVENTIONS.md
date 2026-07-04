@@ -62,6 +62,7 @@ modules/
 ### 2.3 一貫した状態表現
 - 一覧が空のときは必ず空状態メッセージ（`ui.emptyState`）を出す。
 - 破壊的操作（削除等）は確認（`MK.ui.confirm`）または取り消し導線を用意。
+- **ネイティブダイアログ禁止**: `confirm()` / `alert()` / `prompt()` を使わない。確認は `MK.ui.confirm(message)→Promise<bool>`、通知は `MK.ui.toast(message, type)`、入力・複雑な確認は `MK.ui.modal(...)` を使う（DESIGN トークン描画・ダークモード追従・Esc で閉じる操作性を共通化するため。[`spec.md`](spec.md) §6）。
 - テーマは `[data-theme="dark"]` に自動追従。グラフは **SVG で `var(--token)` 参照**すれば自動追従。Canvas を使う場合は描画時にトークンを読み、`MK.bus` の `theme:changed` で再描画する。
 
 ### 2.4 安全
@@ -83,7 +84,7 @@ modules/
 - レイアウト: `sectionTitle(text)` / `stack(children)` / `toolbar(children)` / `card(children, {flush})` / `emptyState(text)` / `statsRow([{num,label}])`
 - フォーム: `button(label, {variant,onClick,title})` / `field(label,control)` / `input({type,value,placeholder,onChange,onEnter})` / `textarea(value)` / `checkbox(checked)` / `select(options=[{value,label}], value, onChange)` / `pillTabs(tabs=[{key,label}], activeKey, onChange)`
 - オーバーレイ: `modal({title, body, actions:[{label,variant,onClick(close)}]})` / `toast(message, type)` / `confirm(message)→Promise<bool>`
-- 方針: **view は部品を自作しない**（`btn/fld/inp` 等をモジュール内に再定義しない）。
+- 方針: **view は部品を自作しない**（`btn/fld/inp` 等をモジュール内に再定義しない）。**ネイティブ `confirm/alert/prompt` は使わず**、上記オーバーレイ部品で代替する。
 
 ### `MK.util`（純粋ヘルパ / `shared/core.js`）
 - `el(tag, attrs, children)`（`text`=textContent、`html`=エスケープ済み前提、`onX`=イベント）
