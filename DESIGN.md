@@ -772,6 +772,7 @@ Notion's geometry is sober-editorial — `{rounded.md}` (8px) buttons distinguis
 - Don't mix link-blue ({colors.link-blue}) with primary-purple ({colors.primary}) — they have distinct roles
 - Don't apply heavy shadows on flat documentation cards
 - Don't replace Notion-Sans with a generic Inter
+- Don't use native browser dialogs (`confirm()` / `alert()` / `prompt()`) — they ignore the design tokens and dark mode. Use the shared overlays instead: `MK.ui.confirm` for confirmations, `MK.ui.toast` for notices, `MK.ui.modal` for input or richer dialogs (see [`CONVENTIONS.md`](CONVENTIONS.md) §2.3 / `spec.md` §6).
 
 ## Responsive Behavior
 
