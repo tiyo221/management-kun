@@ -44,6 +44,7 @@ const SCRIPTS = [
   "modules/skills/logic.js", "modules/workload/logic.js",
   "modules/resource/logic.js", "modules/oneonone/logic.js",
   "modules/techstack/logic.js",
+  "modules/releases/logic.js",
 ];
 
 function setup() {

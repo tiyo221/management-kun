@@ -18,15 +18,16 @@
     oneonone: { title: "1on1", icon: "🗣" },
     wbs: { title: "WBS", icon: "🗂" },
     techstack: { title: "技術スタック", icon: "🧰" },
+    releases: { title: "リリース", icon: "🚀" },
   };
   // ゾーン構成は配布プロファイル（window.MK_CONFIG.zones）から受け取る。未指定なら
   // マネージャ用の全部入りにフォールバックする（spec §1.4 / §1.5 / §6.4）。
-  // 分類は EM が見る領域で切る（自分＋4領域）。プロダクトは現状モジュールが無いため
-  // config には載せない（空グループを出さない。spec §1.4）。
+  // 分類は EM が見る領域で切る（自分＋4領域）。
   const DEFAULT_ZONES = [
     { label: "自分", modules: ["todo", "goals", "questions"] },
     { label: "ピープル", modules: ["skills", "resource", "oneonone"] },
     { label: "デリバリー", modules: ["wbs"] },
+    { label: "プロダクト", modules: ["releases"] },
     { label: "テクノロジー", modules: ["techstack"] },
   ];
   // マスタは特定ゾーンの持ち物ではなく、settings と同列の「シェルレベル管理グループ」
