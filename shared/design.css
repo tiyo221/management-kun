@@ -3,6 +3,7 @@
 :root {
   /* Brand & Primary */
   --color-primary: #5645d4;
+  --color-primary-rgb: 86, 69, 212;
   --color-primary-pressed: #4534b3;
   --color-on-primary: #ffffff;
   --color-brand-navy: #0a1530;
@@ -311,6 +312,7 @@ textarea.text-input { min-height: 80px; resize: vertical; }
   --color-steel: #94918a;
   --color-muted: #6e6c67;
   --color-primary: #7b6cf0;
+  --color-primary-rgb: 123, 108, 240;
   --color-primary-pressed: #6857e6;
   --color-link-blue: #69b0ff;
 }
