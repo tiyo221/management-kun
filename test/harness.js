@@ -6,14 +6,24 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-function makeLocalStorage() {
+function makeLocalStorage(opts) {
   const m = {};
-  return {
+  opts = opts || {};
+  const api = {
     getItem: (k) => (k in m ? m[k] : null),
-    setItem: (k, v) => { m[k] = String(v); },
+    setItem: (k, v) => {
+      // 容量超過をシミュレートするフック（store の QuotaExceededError 処理テスト用）。
+      if (opts.quota && Object.keys(m).join("").length + String(v).length > opts.quota) {
+        const e = new Error("quota exceeded"); e.name = "QuotaExceededError"; e.code = 22; throw e;
+      }
+      m[k] = String(v);
+    },
     removeItem: (k) => { delete m[k]; },
     clear: () => { Object.keys(m).forEach((k) => delete m[k]); },
+    key: (i) => { const ks = Object.keys(m); return i >= 0 && i < ks.length ? ks[i] : null; },
   };
+  Object.defineProperty(api, "length", { get: () => Object.keys(m).length });
+  return api;
 }
 function makeNode() {
   return {

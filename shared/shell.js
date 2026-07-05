@@ -6,6 +6,14 @@
   const MK = window.MK;
   const el = (t, a, c) => MK.util.el(t, a, c);
 
+  // ストレージ使用量の警告閾値（この比率を超えたら設定画面で警告する。Issue #76）。
+  const USAGE_WARN_RATIO = 0.8;
+  function formatBytes(b) {
+    if (b < 1024) return b + " B";
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
+    return (b / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
   // モジュールのメタ（未実装は「準備中」表示）spec §5。全モジュールの表示情報を持つ
   // カタログ。エントリが積まないモジュールの分は単に参照されないだけで無害。
   const META = {
@@ -690,6 +698,7 @@
       card.appendChild(mig);
     }
     main.appendChild(card);
+    main.appendChild(renderStorageUsage());
     main.appendChild(renderModuleVisibility());
 
     if (MK.store.errors.length) {
@@ -698,6 +707,27 @@
       MK.store.errors.forEach((e) => warn.appendChild(el("div", { class: "sub", text: e.key + ": " + e.message })));
       main.appendChild(warn);
     }
+  }
+
+  // ストレージ使用量の可視化（Issue #76 / §10.1）。閾値超過で警告表示し、
+  // バックアップ導線（全体 JSON）を案内する。
+  function renderStorageUsage() {
+    const u = MK.store.usage();
+    const pct = Math.round(u.ratio * 100);
+    const warn = u.ratio >= USAGE_WARN_RATIO;
+    const card = el("div", { class: "card", style: "margin-top:16px;" + (warn ? "border-color:var(--color-error);" : "") });
+    card.appendChild(el("h3", { text: "ストレージ使用量" }));
+    card.appendChild(el("p", { class: "sub", text: "ブラウザの保存領域（localStorage・約 5MB）の使用量です。上限に近づいたら不要データの整理と JSON バックアップを検討してください。" }));
+    card.appendChild(el("div", { style: "font-weight:600;", text: formatBytes(u.bytes) + " / 約 " + formatBytes(u.quota) + "（" + pct + "%・" + u.count + " キー）" }));
+    // 使用量バー
+    const track = el("div", { style: "margin-top:8px;height:8px;border-radius:4px;background:var(--color-hairline);overflow:hidden;" });
+    const fill = el("div", { style: "height:100%;width:" + Math.min(100, pct) + "%;background:" + (warn ? "var(--color-error)" : "var(--color-primary)") + ";" });
+    track.appendChild(fill);
+    card.appendChild(track);
+    if (warn) {
+      card.appendChild(el("p", { class: "sub", style: "margin-top:8px;color:var(--color-error);", text: "⚠ 使用量が上限の " + Math.round(USAGE_WARN_RATIO * 100) + "% を超えています。全体バックアップ（JSON）を取得し、不要なデータを整理してください。" }));
+    }
+    return card;
   }
 
   // モジュールの表示・非表示トグル（ゾーンでグルーピング。Issue #35）。
@@ -879,6 +909,26 @@
   if (menuBtn) menuBtn.addEventListener("click", toggleSidebar);
   const overlay = document.getElementById("mk-sidebar-overlay");
   if (overlay) overlay.addEventListener("click", closeSidebar);
+  // 書込失敗（特に容量超過）を握りつぶさず案内する（Issue #76 / §10.1）。容量超過時は
+  // 全体 JSON バックアップへの導線を提示する。失敗しても _cache には新値が残るため、
+  // ここから書き出せば直近の変更ごと退避できる。
+  MK.store.onWriteError = function (info) {
+    if (info && info.quota) {
+      MK.ui.modal({
+        title: "保存領域が上限に達しました",
+        body: el("div", {}, [
+          el("p", { text: "データを保存できませんでした（ブラウザ保存領域の容量超過）。直近の変更はこの画面には反映されていますが、まだ保存されていません。" }),
+          el("p", { text: "全体バックアップ（JSON）を書き出して退避したうえで、不要なデータを整理してください。" }),
+        ]),
+        actions: [
+          { label: "閉じる", variant: "btn-secondary", onClick: (c) => c() },
+          { label: "全体バックアップ（JSON）", variant: "btn-primary", onClick: (c) => { exportAll(); c(); } },
+        ],
+      });
+    } else {
+      MK.ui.toast("保存に失敗しました: " + (info ? info.ns : ""), "error");
+    }
+  };
   MK.store.load();
   migrateScopedData(); // scoped 化前の単一キーを対象別へ移す（§3.7.4）。route より前に実行する。
   if (MK.allocations) MK.allocations.migrateFromWorkload(); // 旧 workload 内部のアロケーションを共有マスタへ昇格（Issue #45）。
