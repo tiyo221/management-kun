@@ -12,7 +12,7 @@
 
 人とプロジェクトは性質も関係するモジュールも異なるため、**独立した2つの管理ドメイン**として分離する（別ストア `mk:people` / `mk:projects`、別管理画面）。両者を1つの「マスタ」に混ぜない。アロケーション（計画）・プロダクト（成果物）も同格の独立ドメインとして持つ。すべては §4.4.1 の共通契約に従う。
 
-モジュールごとの利用関係（軸が直交している＝分離が妥当な根拠）:
+モジュールごとの利用関係（軸が直交している＝分離が妥当な根拠）。この表は「各モジュールがどのマスタを使うか」という固有情報のため列挙を維持するが、**行（モジュール）の増減は [`spec.md`](../spec.md) §5 のモジュール一覧表と同期する**（モジュール id の一覧そのものは §5 が正）:
 
 | モジュール | People を使う | Project を使う |
 |---|---|---|
@@ -61,9 +61,11 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 
 #### C. CSV 取込は「名寄せ upsert」を標準とする
 - `applyCSV(rows)` は行ごとに `name` を正規化キーで既存と照合し、**一致すれば id を保ったまま更新／なければ新規作成**する（§8.3 / §8.4）。`name` が空の行はスキップ。
-- **id を振り直す全置換は禁止**（`memberId` / `projectId` 等のモジュール参照を孤立させるため）。参照を持たない台帳（現行 Product は全置換）も本契約に合わせ、順次 upsert へ寄せる。
+- **id を振り直す全置換は禁止**（`memberId` / `projectId` 等のモジュール参照を孤立させるため）。
 - 列は各マスタの [`import-migration.md`](import-migration.md) §4.6 の列仕様に従う。列挙値は key またはラベルを寛容に解釈して正規化する。
 - **CSV 出力 → 編集 → 取込で往復（round-trip）が保たれる**こと（名寄せ upsert により id が継続する）。
+
+> **現行の例外（全置換のまま・順次 upsert へ寄せる）**: **People / Project / Product の 3 マスタは現行 `applyCSV` が全置換実装**であり、本契約に合わせて順次 upsert へ寄せる（この移行が済んだら本注記を削除する）。upsert 化の際はここ 1 か所を直せばよく、各マスタ節・[`import-migration.md`](import-migration.md) §4.6.1 は本注記を参照する（個別注記は置かない）。
 
 #### D. シェル統合
 - `master-<domain>`（👤 / 📁 / 📦 …）を「マスタ」ナビグループの**特別ビュー**として持つ（§3.6・config の `masters` に載る分だけ表示。§1.5）。
@@ -90,7 +92,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
   - workload の `capacityWarnHigh` / `capacityWarnLow` → `mk:module:workload` 側に `memberSettings[memberId]` として保持。
   - skills の評価（ratings）は従来どおり skills 側に `memberId` キーで保持。
 - 旧 wbs-tool の `assignee`（文字列）は、マスタ Member への参照（`assigneeId`）へ移行。未解決の文字列は「未割当の表示名」として暫定保持し、マスタ登録を促す（§7）。
-- CSV 入出力に対応（§4.6）。列: `氏名, 役割, 表示色, 備考, 有効`。`有効` は空/未指定は true、`false`/`0`/`no`/`無効` を false と解釈。氏名が空の行はスキップ。**現行は全置換**（共通契約 §4.4.1 C に合わせ名寄せ upsert へ寄せる）。
+- CSV 入出力に対応（§4.6）。列: `氏名, 役割, 表示色, 備考, 有効`。`有効` は空/未指定は true、`false`/`0`/`no`/`無効` を false と解釈。氏名が空の行はスキップ。取込の全置換／upsert の現行状況は §4.4.1 C の「現行の例外」を正とする。
 
 ### Project マスタ — プロジェクト管理ドメイン … `mk:projects:v1`
 横断的な束ね概念。todo-kun の `project` 文字列、wbs の大項目、workload のタスク群を緩く束ねる。
@@ -106,7 +108,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 
 - 参照は原則 `projectId`。ただし **人間・AI 編集のしやすさ**のため、CSV/JSON では**名前による参照**も許容し、取込時に名前→ID解決する（未登録名は新規 Project として作成 or スキップを選択。既定は警告のうえスキップ）。
 - todo-kun の自由文字列 `project` は移行時に Project マスタへ名寄せ（同名は1つに集約）。後方互換として文字列のままも読めるようにする。
-- CSV 入出力に対応（§4.6）。列: `プロジェクト名, 表示色, 状態, 備考`。`状態` は `archived`/`アーカイブ` を archived、それ以外は既定 `active`。プロジェクト名が空の行はスキップ。**現行は全置換**（共通契約 §4.4.1 C に合わせ名寄せ upsert へ寄せる）。
+- CSV 入出力に対応（§4.6）。列: `プロジェクト名, 表示色, 状態, 備考`。`状態` は `archived`/`アーカイブ` を archived、それ以外は既定 `active`。プロジェクト名が空の行はスキップ。取込の全置換／upsert の現行状況は §4.4.1 C の「現行の例外」を正とする。
 
 ### アロケーションマスタ — 計画（人×器×期間×割当%） … `mk:allocations:v1`
 マネージャがトップダウンで planning する**共有された計画事実**（§3.7.5）。People / Projects と同格の**中立な共有マスタ**として独立させ、特定モジュールに属させない（Issue #45 で workload 内部から昇格）。参照・編集は `ctx.allocations` 経由（§3.5）で、直接 localStorage を触らない。編集（planning）はリソース（resource・旧 staffing）が担う。
@@ -161,5 +163,5 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 - People とは `ownerId` による**責任者参照**を持つ（Issue #56）。Project とは `projectIds` による**一方向の緩い紐付け**を持つ（プロダクト⇄デリバリー・Issue #55）。いずれも Project / People 側からプロダクトを必須参照にはしない（モジュール独立を崩さない）。参照先が削除された場合、存在しない id は `relatedProjects(product)` / `ownerPerson(product)`（表示用ガード）で無視され、UI は破綻しない。
 - 旧・自由文字列 `owner` は `migrateOwnerToPeople()` により起動時に一度だけ People へ名寄せ移行する（`ownerId` 未設定のもののみ対象・同名は既存 People に集約・`resolveOrCreate` で新規作成・冪等）。
 - 名寄せ（§8）: `resolve(name)` / `resolveOrCreate(name)` を提供（将来の次元対象解決・CSV 取込の名前参照用）。
-- CSV 入出力に対応（§4.6）。列: `プロダクト名, ステータス, 責任者, 概要, リポジトリ, タグ, 関連プロジェクト`。`ステータス` は key（`planned` 等）または日本語ラベル先頭語（計画 / 稼働 / 保守 / 終息）を受け付け、不明なら `planned`。`責任者` は People の氏名で、取込時に `MK.people.resolveOrCreate` により `ownerId` を解決する（未登録名は新規 People として作成）。出力も `ownerId` から People 氏名を引いて書き出す。`タグ` は空白 / カンマ区切り。`関連プロジェクト` は空白 / カンマ区切りのプロジェクト名で、取込時に `MK.projects.resolveOrCreate` により id 解決する（未登録名は新規 Project として作成）。**現行は全置換**だが、共通契約（§4.4.1 C）に合わせ名寄せ upsert へ寄せる。
+- CSV 入出力に対応（§4.6）。列: `プロダクト名, ステータス, 責任者, 概要, リポジトリ, タグ, 関連プロジェクト`。`ステータス` は key（`planned` 等）または日本語ラベル先頭語（計画 / 稼働 / 保守 / 終息）を受け付け、不明なら `planned`。`責任者` は People の氏名で、取込時に `MK.people.resolveOrCreate` により `ownerId` を解決する（未登録名は新規 People として作成）。出力も `ownerId` から People 氏名を引いて書き出す。`タグ` は空白 / カンマ区切り。`関連プロジェクト` は空白 / カンマ区切りのプロジェクト名で、取込時に `MK.projects.resolveOrCreate` により id 解決する（未登録名は新規 Project として作成）。取込の全置換／upsert の現行状況は §4.4.1 C の「現行の例外」を正とする。
 - バックアップは全体 JSON エンベロープの `products` 配列で入出力する（置換・マージ。§4.2）。

@@ -28,7 +28,7 @@ skill-mieru-kun（自前パーサ・UTF-8・BOM許容）と wbs-tool（BOM付き
 | 人（People） | `氏名, 役割, 表示色, 備考, 有効`（`有効` は空/未指定は true、`false`/`0`/`no`/`無効` を false と解釈） |
 | プロジェクト（Project） | `プロジェクト名, 表示色, 状態, 備考`（状態は `active`/`archived`。`archived`/`アーカイブ` を archived、それ以外は既定 `active`。関連目標＝Goal 参照は将来拡張） |
 
-- 人・プロジェクトいずれも **氏名／プロジェクト名が空の行はスキップ**し、取込は**全置換**（プロダクトと同様。共通契約 §4.4.1 C に合わせ将来は名寄せ upsert へ寄せる）。
+- 人・プロジェクトいずれも **氏名／プロジェクト名が空の行はスキップ**する。取込の全置換／upsert の現行状況は [`masters.md`](masters.md) §4.4.1 C の「現行の例外」を正とする（People / Project / Product は現行全置換・順次 upsert へ）。
 - モジュール固有の CSV: **skills**（ユーザ / スキル / 紐づけ）→ [`spec/modules/skills.md`](modules/skills.md)、**wbs** → [`spec/modules/wbs.md`](modules/wbs.md)、**techstack** → [`spec/modules/techstack.md`](modules/techstack.md)、**todo** → [`spec/modules/todo.md`](modules/todo.md)、**workload** → [`spec/modules/workload.md`](modules/workload.md)。
 
 > 人・プロジェクト・プロダクトの各マスタは CSV 出力／取込に対応（Issue #37 / #57 / #58）。CSV は `MK.io.csv.stringify` / `MK.io.csv.parse`・`MK.io.downloadText`・`MK.io.pickCsvFile`（ファイル選択の共通ヘルパ）を用いる（各マスタ view の「CSV出力」「CSV取込」）。
