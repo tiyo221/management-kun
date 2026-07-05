@@ -111,9 +111,11 @@ modules/
 3. [`index.html`](index.html): `<script src="modules/<id>/logic.js">` → `<script src="modules/<id>/view.js">` の順で追加し、`MK_CONFIG.zones`（自分／ピープル／デリバリー…＝§1.4 の領域）の該当グループに `<id>` を登録。ゾーンが未定義なら新しいゾーンを追加する。
 4. [`shared/shell.js`](shared/shell.js): カタログ `META` にタイトル/アイコンを登録（**META に無いモジュールはナビ・HOME に出ない**）。マネージャ全部入りのフォールバック `DEFAULT_ZONES` にも同様に `<id>` を追加する。
 5. 旧ツール移行が必要なら `shared/shell.js` の `migrateLegacy()` に分岐と `LEGACY_KEYS` を追加。
-6. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、[`spec.md`](spec.md) §5 のモジュール一覧に行を追加する。
-7. `test/<id>.test.js` を追加し、[`test/harness.js`](test/harness.js) の `SCRIPTS` に `modules/<id>/logic.js` を登録する（[`TESTING.md`](TESTING.md) §5）。
+6. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、**[`spec.md`](spec.md) §5 のモジュール一覧表に行を追加する（モジュール id の列挙はここだけ・単一ソース）**。マスタ利用の有無に増減があれば [`spec/masters.md`](spec/masters.md) §4.4 の利用関係表も同期する。§3.2 / §4.1 / §4.2 / §6.4・README は規則＋参照になっているため個別列挙の追記は不要（もし id を列挙している箇所を見つけたら参照へ直す）。
+7. `test/<id>.test.js` を追加し、[`test/harness.js`](test/harness.js) の `SCRIPTS` に `modules/<id>/logic.js` を登録する（[`TESTING.md`](TESTING.md) §5）。`test/` の一覧は [`TESTING.md`](TESTING.md) §7 を正とする。
 8. §6 のチェックリストで点検。
+
+> **モジュールを 1 つ追加するときに直すドキュメントはこの手順（§5）が唯一の道しるべ**。id の一覧は spec.md §5 に一元化してあるため、他のドキュメント（§3.2 / §4.1 / §4.2 / §6.4 / README）へ id を再列挙しない。
 
 ---
 
@@ -139,8 +141,12 @@ modules/
 - [ ] 日時は ISO 8601 UTC / 日付は `YYYY-MM-DD`、未設定は `null`/`[]`/`""`。
 
 **動作・テスト**
-- [ ] `node --check` 通過。`file://` で外部通信ゼロ・依存ゼロ。5モジュール切替・サンプル投入・バックアップで確認。
+- [ ] `node --check` 通過。`file://` で外部通信ゼロ・依存ゼロ。全モジュール切替・サンプル投入・バックアップで確認。
 - [ ] ロジックの自動テストが通る（`node test/run.js`）。変更したモジュール＋依存側をテスト（[`TESTING.md`](TESTING.md)）。バグ修正には再発防止テストを追加。
+
+**ドキュメント**
+- [ ] 作業中に参照したドキュメントと実装・現状の食い違いを放置していない（同じ PR で更新した or `[core]`・`documentation` ラベルの Issue 化した。[`CLAUDE.md`](CLAUDE.md) の開発ワークフロー）。
+- [ ] モジュール id を新たに列挙していない（一覧は [`spec.md`](spec.md) §5 の 1 か所・§5 手順 6）。
 
 ---
 
