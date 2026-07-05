@@ -348,7 +348,7 @@
       e.stopPropagation();
       setModulePinned(id, !pinned);
       route("home");
-      const again = main.querySelector('[data-pin="' + id + '"]');
+      const again = main.querySelector('[data-pin="' + CSS.escape(id) + '"]');
       if (again) again.focus();
     });
     return b;
