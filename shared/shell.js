@@ -24,6 +24,7 @@
     workload: { title: "負荷", icon: "📈" },
     resource: { title: "リソース", icon: "🧑‍🤝‍🧑" },
     oneonone: { title: "1on1", icon: "🗣" },
+    dashboard: { title: "ダッシュボード", icon: "🧭" },
     wbs: { title: "WBS", icon: "🗂" },
     techstack: { title: "技術スタック", icon: "🧰" },
     releases: { title: "リリース", icon: "🚀" },
@@ -171,6 +172,9 @@
     return {
       store: MK.store.scope(ns),
       scope,
+      // 横断集約ビュー（ダッシュボード等）が各サマリから該当モジュールへ遷移するための導線（spec §3.5）。
+      // project-scoped 同士（dashboard → wbs）は「現在の対象」が次元ごとに共有されるため PJ 文脈を引き継ぐ。
+      route,
       people: MK.people,
       projects: MK.projects,
       allocations: MK.allocations,

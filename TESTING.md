@@ -29,12 +29,13 @@
 | `shared/core.js` / `store.js` / `io.js` | **全モジュール**（全部が依存） | 自動フルスイート＋全モジュール手動スモーク |
 | `shared/scope.js`（スコープ次元） | **wbs**（project-scoped）・**シェル**（スイッチャ / `ctx.scope`） | 自動（`scope` / `wbs-scope`）＋切替の手動確認 |
 | `shared/people.js` / `projects.js`（マスタ） | **skills / workload / wbs / todo / resource / oneonone**（マスタを参照） | 自動＋該当画面の手動確認 |
-| `shared/products.js`（マスタ） | **releases**（Product マスタを参照） | 自動＋該当画面の手動確認 |
-| `shared/allocations.js` / `demands.js`（共有マスタ） | **resource**（要員計画がアロケーション/需要を参照） | 自動（`allocations` / `demands` / `resource`）＋要員計画画面の手動確認 |
+| `shared/products.js`（マスタ） | **releases / dashboard**（Product マスタを参照） | 自動＋該当画面の手動確認 |
+| `shared/allocations.js` / `demands.js`（共有マスタ） | **resource / dashboard**（要員計画・ダッシュボードがアロケーションを参照） | 自動（`allocations` / `demands` / `resource` / `dashboard`）＋要員計画・ダッシュボード画面の手動確認 |
+| `modules/wbs/logic.js`（進捗集計） | **dashboard**（WBS 進捗を対象別に集約する横断ビュー） | 自動（`dashboard`）＋ダッシュボード画面の手動確認 |
 | `shared/ui.js` / `design.css`（見た目の共通） | **全モジュールの view** | 手動（375/768/1280・ダーク・空状態） |
 | `index.html` / `shared/shell.js`（シェル/ナビ/移行/設定） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
 
-> 現状モジュール間の直接依存はない（各モジュールは独立）。共通の依存は「shared」と「人/プロジェクトのマスタ」。
+> 各モジュールは基本独立で、共通の依存は「shared」と「人/プロジェクトのマスタ」。例外は **dashboard**（横断集約ビュー）で、共有マスタに加え **wbs の対象別データ（`exportData(projectId)`）を読み取り専用で集約**する（編集はしない）。wbs の進捗集計を変えたら dashboard も確認する。
 
 ---
 
@@ -116,6 +117,7 @@ test("wbs: 依存の循環を検出", (MK) => {
 - **resource**: 要員計画（空き＝キャパ−全器割当）・横断集計
 - **oneonone**: 1on1メモの CRUD
 - **wbs**: ロールアップ・WBS番号・依存循環・削除/元に戻す
+- **dashboard**: PJ 横断集約（WBS 進捗・期限超過の基準日判定・対象PJのアロケーション/関連プロダクト抽出）
 - **techstack**: 技術スタック台帳の CRUD・CSV ラウンドトリップ
 - **releases**: 必須項目（プロダクト・バージョン）・時系列ソート・ステータス正規化・直近予定・削除済み Product 参照ガード
 
