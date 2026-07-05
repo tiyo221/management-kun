@@ -288,6 +288,7 @@
   // デリバリーゾーンが ZONES に無いため、自動的に「自分」だけになる。
   function renderHome() {
     main.appendChild(el("h2", { class: "mk-section-title", text: "🏠 HOME" }));
+    renderHomeAttention();
     renderHomePinned();
     ZONES.forEach((zone) => {
       // カタログ（META）未知の id・非表示（Issue #35）・ピン済み（先頭セクションに出る）を除外。
@@ -309,6 +310,39 @@
       mods.forEach((id) => row.appendChild(homeChip(id)));
       main.appendChild(row);
     });
+  }
+
+  // 「要対応」帯（Issue #102）。表示中モジュールの summary().attention を集約し、severity 別の
+  // バッジで表示する。attention は任意契約のため、未実装・不正形式のモジュールは単に出ない。
+  // 要対応が1件も無ければ帯そのものを描画しない。
+  const ATTENTION_RANK = { error: 0, warn: 1, info: 2 };
+  function renderHomeAttention() {
+    const items = [];
+    ZONES.forEach((zone) => (zone.modules || []).forEach((id) => {
+      if (!META[id] || isHiddenModule(id)) return;
+      const sum = moduleSummary(id);
+      if (!sum || !Array.isArray(sum.attention)) return;
+      sum.attention.forEach((a) => {
+        if (!a || typeof a.label !== "string") return;
+        items.push({ id, label: a.label, severity: ATTENTION_RANK[a.severity] !== undefined ? a.severity : "info" });
+      });
+    }));
+    if (!items.length) return;
+    // 重要度順（error → warn → info）。同重要度はゾーン順を保つ（sort は安定）。
+    items.sort((a, b) => ATTENTION_RANK[a.severity] - ATTENTION_RANK[b.severity]);
+    const bar = el("div", { class: "mk-home-attention" });
+    items.forEach((a) => {
+      const b = el("button", {
+        class: "mk-home-attn " + a.severity,
+        "aria-label": META[a.id].title + ": " + a.label,
+      }, [
+        el("span", { class: "mk-home-attn-icon", text: META[a.id].icon || "" }),
+        el("span", { text: a.label }),
+      ]);
+      b.addEventListener("click", () => route(a.id));
+      bar.appendChild(b);
+    });
+    main.appendChild(bar);
   }
 
   // ピン留めセクション。ピンが無ければ使い方の案内だけ出す。

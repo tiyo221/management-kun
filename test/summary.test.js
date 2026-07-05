@@ -63,6 +63,62 @@ test("summary: wbs は葉タスクが無ければ empty", (MK) => {
   eq(s.stats[1].value, "0%");
 });
 
+// ---- attention（要対応帯。Issue #102）----
+// 契約: attention は任意の配列。各要素は { label: string, severity: "error"|"warn"|"info" }。
+// 要対応が無ければ空配列（帯に出ない）。「今日」依存の集計は基準日を引数で固定する（決定的テスト）。
+
+test("attention: todo は期限切れ=error / 今日期限=warn を申告する（done・期限なしは対象外）", (MK) => {
+  // 観点: dueCounts の分類（過去/今日/未来/完了）と attention への変換
+  // 入力: 基準日 2026-07-05。期限切れ1・今日期限1・未来1・完了済み期限切れ1・期限なし1
+  // 期待: attention は [error(期限切れ1件), warn(今日期限1件)] の順。dueCounts も一致
+  const T = MK.logic.todo;
+  const today = "2026-07-05";
+  eq(T.summary(today).attention.length, 0, "空なら申告なし");
+  T.addTask("期限なし"); T.addTask("未来"); T.addTask("完了済み"); T.addTask("今日"); T.addTask("過去");
+  const ids = {}; T.tasks().forEach((t) => { ids[t.title] = t.id; });
+  T.updateTask(ids["過去"], { due: "2026-07-01" });
+  T.updateTask(ids["今日"], { due: today });
+  T.updateTask(ids["完了済み"], { due: "2026-07-01", status: "done" });
+  T.updateTask(ids["未来"], { due: "2026-07-10" });
+  const dc = T.dueCounts(today);
+  eq(dc.overdue, 1); eq(dc.dueToday, 1);
+  const att = T.summary(today).attention;
+  eq(att.length, 2);
+  eq(att[0].severity, "error"); assert(att[0].label.includes("期限切れ 1件"), "期限切れの件数を含む");
+  eq(att[1].severity, "warn"); assert(att[1].label.includes("今日期限 1件"), "今日期限の件数を含む");
+});
+
+test("attention: techstack は見直し期限の超過=error / 接近=warn を申告する", (MK) => {
+  // 観点: deadlineCounts（超過/90日以内）が attention に変換されること
+  // 入力: 基準日 2026-07-05。超過1・接近(30日後)1・余裕(200日後)1・期限なし1
+  // 期待: attention は [error(超過1件), warn(接近1件)]。期限なし・余裕は出ない
+  const T = MK.logic.techstack;
+  const today = "2026-07-05";
+  eq(T.summary(today).attention.length, 0, "空なら申告なし");
+  T.addItem("超過");   T.updateItem(T.items()[0].id, { reviewDate: "2026-07-01" });
+  T.addItem("接近");   T.updateItem(T.items()[0].id, { reviewDate: "2026-08-04" });
+  T.addItem("余裕");   T.updateItem(T.items()[0].id, { reviewDate: "2027-01-21" });
+  T.addItem("期限なし");
+  const att = T.summary(today).attention;
+  eq(att.length, 2);
+  eq(att[0].severity, "error"); assert(att[0].label.includes("超過 1件"));
+  eq(att[1].severity, "warn"); assert(att[1].label.includes("1件"));
+});
+
+test("attention: questions は未解決があるときだけ info を申告する", (MK) => {
+  // 観点: 未解決（open）件数の attention 変換と、全解決時の非申告
+  // 入力: 未解決2件 → うち1件を resolved に更新 → 残り1件も resolved
+  // 期待: 2件時 info「2件」、全解決後は空配列
+  const Q = MK.logic.questions;
+  eq(Q.summary().attention.length, 0, "空なら申告なし");
+  Q.addItem("q1"); Q.addItem("q2");
+  let att = Q.summary().attention;
+  eq(att.length, 1);
+  eq(att[0].severity, "info"); assert(att[0].label.includes("2件"));
+  Q.items().forEach((it) => Q.updateItem(it.id, { status: "resolved" }));
+  eq(Q.summary().attention.length, 0, "全解決なら申告なし");
+});
+
 test("summary: workload はタスクが無ければ empty", (MK) => {
   // 観点: workload の summary はタスクが無ければ empty、投入後は平均稼働を % 表記で返す
   // 入力: 空を確認 → 担当者1名に今週(月〜日)の負担40のタスクを1件

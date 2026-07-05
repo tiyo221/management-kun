@@ -295,17 +295,21 @@
 
   /**
    * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
-   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
-   *   `empty` はデータ皆無（空状態表示）、`stats` は表示する指標の配列。
+   * @param {string} [today] - 基準日（"YYYY-MM-DD"。省略時は本日。テスト用）
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention: {label: string, severity: string}[]}}
+   *   `empty` はデータ皆無（空状態表示）、`stats` は表示する指標、`attention` は要対応事項（HOME の帯・Issue #102）。
    */
-  function summary() {
+  function summary(today) {
     const c = counts();
-    const dc = deadlineCounts();
+    const dc = deadlineCounts(today);
+    const attention = [];
+    if (dc.overdue > 0) attention.push({ label: "見直し期限超過 " + dc.overdue + "件", severity: "error" });
+    if (dc.soon > 0) attention.push({ label: "見直し期限 " + DEADLINE_SOON_DAYS + "日以内 " + dc.soon + "件", severity: "warn" });
     return { empty: c.all === 0, stats: [
       { label: "技術", value: c.all },
       { label: "保留（Hold）", value: c.hold },
       { label: "期限 接近/超過", value: dc.soon + " / " + dc.overdue },
-    ] };
+    ], attention };
   }
 
   MK.logic = MK.logic || {};
