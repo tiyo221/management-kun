@@ -251,23 +251,44 @@
   }
 
   /**
-   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
-   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
-   *   `empty` はデータ皆無（空状態表示）、`stats` は表示する指標の配列。
+   * 期限（due）ベースの要対応件数を集計する。完了（done）と期限未設定は対象外。
+   * @param {string} [today] - 基準日（"YYYY-MM-DD"。省略時は本日）
+   * @returns {{overdue: number, dueToday: number}} 期限切れ・今日期限の件数
    */
-  function summary() {
+  function dueCounts(today) {
+    const t = today || MK.util.todayISO();
+    let overdue = 0, dueToday = 0;
+    tasks().forEach((x) => {
+      if (x.status === "done" || !x.due) return;
+      if (x.due < t) overdue++; // ISO 日付（YYYY-MM-DD）は辞書順＝時系列順
+      else if (x.due === t) dueToday++;
+    });
+    return { overdue, dueToday };
+  }
+
+  /**
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
+   * @param {string} [today] - 基準日（"YYYY-MM-DD"。省略時は本日。テスト用）
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention: {label: string, severity: string}[]}}
+   *   `empty` はデータ皆無（空状態表示）、`stats` は表示する指標、`attention` は要対応事項（HOME の帯・Issue #102）。
+   */
+  function summary(today) {
     const c = counts(); // counts() は全ステータスを 0 初期化するため c.done は常に数値
+    const dc = dueCounts(today);
+    const attention = [];
+    if (dc.overdue > 0) attention.push({ label: "期限切れ " + dc.overdue + "件", severity: "error" });
+    if (dc.dueToday > 0) attention.push({ label: "今日期限 " + dc.dueToday + "件", severity: "warn" });
     return { empty: c.all === 0, stats: [
       { label: "未完", value: c.all - c.done },
       { label: "全タスク", value: c.all },
-    ] };
+    ], attention };
   }
 
   MK.logic = MK.logic || {};
   MK.logic.todo = {
     STATUSES, load, save, tasks, counts, filtered,
     addTask, updateTask, toggleDone, removeTask,
-    projectNameOf, resolveProject, statusFromCSV, buildCSVRows, applyCSV, summary,
+    projectNameOf, resolveProject, statusFromCSV, buildCSVRows, applyCSV, dueCounts, summary,
     exportData, importData, loadSample,
   };
 })();

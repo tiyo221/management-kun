@@ -193,15 +193,17 @@
 
   /**
    * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
-   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
-   *   `empty` はデータ皆無（空状態表示）、`stats` は表示する指標の配列。
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention: {label: string, severity: string}[]}}
+   *   `empty` はデータ皆無（空状態表示）、`stats` は表示する指標、`attention` は要対応事項（HOME の帯・Issue #102）。
    */
   function summary() {
     const c = counts();
+    const attention = [];
+    if (c.open > 0) attention.push({ label: "未解決の質問 " + c.open + "件", severity: "info" });
     return { empty: c.all === 0, stats: [
       { label: "未解決", value: c.open },
       { label: "今週わかった", value: resolvedThisWeek() },
-    ] };
+    ], attention };
   }
 
   MK.logic = MK.logic || {};

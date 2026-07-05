@@ -33,3 +33,6 @@ GTD ベースの軽量タスク管理。
 | `todo-kun.data.v1` `{version, exportedAt, tasks}` | `mk:module:todo:v1`、`project` 文字列 → Project 名寄せ |
 
 移行フロー全体は [`import-migration.md`](../import-migration.md) §7、名寄せは §8 を参照。
+
+## サマリー（HOME 表示）
+`summary(today?)` は `未完 N` / `全タスク M` を返す純関数（[`spec.md`](../../spec.md) §3.6）。`attention` として期限切れ（error）／今日期限（warn）の件数を申告する（HOME の要対応帯・Issue #102。完了と期限未設定は対象外＝`dueCounts(today?)`）。
