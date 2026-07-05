@@ -108,6 +108,30 @@
     setSettings({ hiddenModules: h });
   }
 
+  // ---- HOME のピン留め（Issue #100）----
+  // ピン留めしたモジュールは HOME 先頭にフルカード、それ以外はゾーン配下のチップで出す。
+  // hiddenModules と同じく ZONE_MODULES で未知 id を無視し、非表示（hidden）が優先される。
+  function getPinnedModules() {
+    const p = getSettings().pinnedModules;
+    return Array.isArray(p) ? p : [];
+  }
+  function isPinnedModule(id) {
+    return ZONE_MODULES[id] === true && getPinnedModules().indexOf(id) >= 0;
+  }
+  function setModulePinned(id, pinned) {
+    const p = getPinnedModules().filter((x) => x !== id);
+    if (pinned) p.push(id);
+    setSettings({ pinnedModules: p });
+  }
+
+  // ---- HOME のゾーン折りたたみ（Issue #100。ナビの mk:settings.nav と同型）----
+  function getHomeZones() { return getSettings().homeZones || {}; }
+  function toggleHomeZone(label) {
+    const z = Object.assign({}, getHomeZones());
+    z[label] = !z[label];
+    setSettings({ homeZones: z });
+  }
+
   // ---- テーマ（ダークモード。spec §6.2）----
   function getTheme() {
     const t = getSettings().theme;
@@ -258,37 +282,90 @@
     return bar;
   }
 
-  // ---- HOME（玄関ダッシュボード。spec §3.6）----
-  // ZONES を入力にゾーン別セクション＋モジュールのサマリーカードを描画する。配布プロファイル
-  // （member.html）ではピープル/デリバリーゾーンが ZONES に無いため、自動的に「自分」だけになる。
+  // ---- HOME（玄関ダッシュボード。spec §3.6 / Issue #100）----
+  // 2段階の情報密度: ピン留め（pinnedModules）＝フルカード、それ以外＝ゾーン配下の1行チップ。
+  // ゾーンは折りたたみ可能（homeZones）。配布プロファイル（member.html）ではピープル/
+  // デリバリーゾーンが ZONES に無いため、自動的に「自分」だけになる。
   function renderHome() {
     main.appendChild(el("h2", { class: "mk-section-title", text: "🏠 HOME" }));
+    renderHomePinned();
     ZONES.forEach((zone) => {
-      // カタログ（META）未知の id と非表示（Issue #35）を除外する。実装済み／未実装（＝準備中カード）はどちらも出す。
-      const mods = (zone.modules || []).filter((id) => META[id] && !isHiddenModule(id));
-      if (!mods.length) return;
-      main.appendChild(el("h3", { class: "mk-home-zone", text: zone.label }));
-      const grid = el("div", { class: "mk-home-grid" });
-      mods.forEach((id) => grid.appendChild(homeCard(id)));
-      main.appendChild(grid);
+      // カタログ（META）未知の id・非表示（Issue #35）・ピン済み（先頭セクションに出る）を除外。
+      // 実装済み／未実装（＝準備中チップ）はどちらも出す。
+      const mods = (zone.modules || []).filter((id) => META[id] && !isHiddenModule(id) && !isPinnedModule(id));
+      if (!mods.length) return; // 全部ピン済み or 非表示のゾーンは見出しごと出さない
+      const collapsed = getHomeZones()[zone.label] === true;
+      const head = el("button", {
+        class: "mk-home-zone-toggle" + (collapsed ? " collapsed" : ""),
+        "aria-expanded": String(!collapsed),
+      }, [
+        el("span", { class: "mk-home-caret", text: "▸" }),
+        el("span", { class: "mk-home-zone-label", text: zone.label }),
+      ]);
+      head.addEventListener("click", () => { toggleHomeZone(zone.label); route("home"); });
+      main.appendChild(head);
+      if (collapsed) return;
+      const row = el("div", { class: "mk-home-chips" });
+      mods.forEach((id) => row.appendChild(homeChip(id)));
+      main.appendChild(row);
     });
+  }
+
+  // ピン留めセクション。ピンが無ければ使い方の案内だけ出す。
+  function renderHomePinned() {
+    const pinned = getPinnedModules().filter((id) => META[id] && ZONE_MODULES[id] && !isHiddenModule(id));
+    if (!pinned.length) {
+      main.appendChild(el("p", { class: "mk-home-pin-hint sub", text: "☆ を押してよく使うモジュールをピン留めすると、ここにサマリー付きで表示されます。" }));
+      return;
+    }
+    main.appendChild(el("h3", { class: "mk-home-zone", text: "📌 ピン留め" }));
+    const grid = el("div", { class: "mk-home-grid" });
+    pinned.forEach((id) => grid.appendChild(homeCard(id)));
+    main.appendChild(grid);
+  }
+
+  // summary は任意契約。未実装・例外でも HOME 全体を壊さない（null を返して呼び手がフォールバック）。
+  function moduleSummary(id) {
+    const mod = MK.modules[id];
+    if (!mod || typeof mod.summary !== "function") return null;
+    try { return mod.summary(); }
+    catch (e) { console.warn("summary() failed:", id, e); return null; } // 追跡用に記録（HOME は壊さない）
+  }
+
+  // ピン留めトグル（★/☆）。カード／チップのクリック遷移と衝突しないよう伝播を止める。
+  // 再描画後もフォーカスを同じトグルへ戻し、キーボード操作を連続できるようにする。
+  function pinButton(id) {
+    const pinned = isPinnedModule(id);
+    const b = el("button", {
+      class: "mk-home-pin" + (pinned ? " pinned" : ""),
+      "aria-label": (pinned ? "ピン留めを解除: " : "ピン留め: ") + META[id].title,
+      "aria-pressed": String(pinned),
+      title: pinned ? "ピン留めを解除" : "ピン留め",
+      "data-pin": id,
+      text: pinned ? "★" : "☆",
+    });
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setModulePinned(id, !pinned);
+      route("home");
+      const again = main.querySelector('[data-pin="' + id + '"]');
+      if (again) again.focus();
+    });
+    return b;
   }
 
   function homeCard(id) {
     const meta = META[id];
-    const mod = MK.modules[id];
     const card = el("div", { class: "card mk-home-card", role: "button", tabindex: "0" });
     card.appendChild(el("div", { class: "mk-home-card-head" }, [
       el("span", { class: "mk-home-icon", text: meta.icon || "" }),
       el("span", { class: "mk-home-title", text: meta.title }),
+      pinButton(id),
     ]));
-    if (!mod) {
+    if (!MK.modules[id]) {
       card.appendChild(el("div", { class: "sub", text: "準備中" }));
     } else {
-      let sum = null;
-      // summary は任意契約。例外・未実装でも HOME 全体を壊さない（カードは「開く」表示）。
-      try { if (typeof mod.summary === "function") sum = mod.summary(); }
-      catch (e) { sum = null; console.warn("summary() failed:", id, e); } // 追跡用に記録（HOME は壊さない）
+      const sum = moduleSummary(id);
       if (!sum || !Array.isArray(sum.stats)) {
         card.appendChild(el("div", { class: "sub", text: "開く" }));
       } else if (sum.empty) {
@@ -304,8 +381,29 @@
     }
     const go = () => route(id);
     card.addEventListener("click", go);
-    card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    // ピン留めトグル（内包 button）からのバブリングでは遷移しない（e.target を自分に限定）
+    card.addEventListener("keydown", (e) => { if (e.target !== card) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
     return card;
+  }
+
+  // ピンしていないモジュールの1行チップ（アイコン＋名前＋代表値1つ）。クリックで遷移。
+  function homeChip(id) {
+    const meta = META[id];
+    const chip = el("div", { class: "mk-home-chip", role: "button", tabindex: "0" });
+    chip.appendChild(el("span", { class: "mk-home-chip-icon", text: meta.icon || "" }));
+    chip.appendChild(el("span", { class: "mk-home-chip-title", text: meta.title }));
+    if (!MK.modules[id]) {
+      chip.appendChild(el("span", { class: "mk-home-chip-stat", text: "準備中" }));
+    } else {
+      const sum = moduleSummary(id);
+      const s = sum && Array.isArray(sum.stats) && !sum.empty ? sum.stats[0] : null;
+      if (s) chip.appendChild(el("span", { class: "mk-home-chip-stat", text: s.label + " " + String(s.value) }));
+    }
+    chip.appendChild(pinButton(id));
+    const go = () => route(id);
+    chip.addEventListener("click", go);
+    chip.addEventListener("keydown", (e) => { if (e.target !== chip) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    return chip;
   }
 
   function navItem(label, view) {
