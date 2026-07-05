@@ -57,21 +57,62 @@ test("techstack: CSV 出力・取込（ラベル/キー・タグ分割）", (MK)
   // 観点: buildCSVRows のヘッダ、applyCSV が全置換・ラベル/キー両対応・タグ空白区切り
   const T = MK.logic.techstack;
   const rows = [
-    ["技術名", "カテゴリ", "バージョン", "リング", "メモ", "タグ"],
-    ["React", "フロント", "18", "adopt", "標準", "web ui"],
-    ["jQuery", "フロント", "3", "保留", "撤去予定", "legacy"],
-    ["", "空行", "", "adopt", "", ""], // 技術名なしはスキップ
+    ["技術名", "カテゴリ", "バージョン", "リング", "メモ", "見直し期限", "タグ"],
+    ["React", "フロント", "18", "adopt", "標準", "2027-01-01", "web ui"],
+    ["jQuery", "フロント", "3", "保留", "撤去予定", "不正", "legacy"],
+    ["", "空行", "", "adopt", "", "", ""], // 技術名なしはスキップ
   ];
   const n = T.applyCSV(rows);
   eq(n, 2);
   eq(T.counts().all, 2);
   const react = T.items().find((x) => x.name === "React");
   eq(react.ring, "adopt");
+  eq(react.reviewDate, "2027-01-01");
   eq(react.tags, ["web", "ui"]);
   const jq = T.items().find((x) => x.name === "jQuery");
   eq(jq.ring, "hold"); // 日本語ラベル「保留」→ hold
+  eq(jq.reviewDate, ""); // 不正な日付は "" に正規化
   // 出力ヘッダ
-  eq(T.buildCSVRows()[0], ["技術名", "カテゴリ", "バージョン", "リング", "メモ", "タグ"]);
+  eq(T.buildCSVRows()[0], ["技術名", "カテゴリ", "バージョン", "リング", "メモ", "見直し期限", "タグ"]);
+});
+
+test("techstack: deadlineStatus は none/overdue/soon/ok を判定", (MK) => {
+  // 観点: 基準日 today からの残日数で状態を判定（閾値 90 日）
+  const T = MK.logic.techstack;
+  const today = "2026-07-05";
+  eq(T.deadlineStatus("", today), "none");
+  eq(T.deadlineStatus(null, today), "none");
+  eq(T.deadlineStatus("2026-07-04", today), "overdue"); // 昨日
+  eq(T.deadlineStatus("2026-07-05", today), "soon");     // 当日（残0）
+  eq(T.deadlineStatus("2026-10-03", today), "soon");     // 90日後（境界）
+  eq(T.deadlineStatus("2026-10-04", today), "ok");       // 91日後
+  eq(T.deadlineStatus("不正な日付", today), "none");     // 形式不正は none
+});
+
+test("techstack: deadlineCounts と summary の期限接近/超過", (MK) => {
+  // 観点: 接近・超過の件数を集計し summary の stats[2] に反映する
+  const T = MK.logic.techstack;
+  const today = "2026-07-05";
+  T.addItem("超過");   T.updateItem(T.items()[0].id, { reviewDate: "2026-01-01" });
+  T.addItem("接近");   T.updateItem(T.items()[0].id, { reviewDate: "2026-08-01" });
+  T.addItem("余裕");   T.updateItem(T.items()[0].id, { reviewDate: "2030-01-01" });
+  T.addItem("未設定"); // reviewDate ""
+  const dc = T.deadlineCounts(today);
+  eq(dc.overdue, 1);
+  eq(dc.soon, 1);
+  const s = T.summary();
+  eq(s.stats[2].label, "期限 接近/超過");
+});
+
+test("techstack: 不正な reviewDate は updateItem で '' に正規化", (MK) => {
+  // 観点: updateItem 経由の reviewDate も normalizeDate を通す
+  const T = MK.logic.techstack;
+  T.addItem("X");
+  const id = T.items()[0].id;
+  T.updateItem(id, { reviewDate: "2026/07/05" }); // スラッシュ区切りは不正
+  eq(T.items()[0].reviewDate, "");
+  T.updateItem(id, { reviewDate: "2026-07-05" });
+  eq(T.items()[0].reviewDate, "2026-07-05");
 });
 
 test("techstack: importData の replace と merge", (MK) => {

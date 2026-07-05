@@ -20,6 +20,7 @@
    * @property {string} version - 使用バージョン（任意）
    * @property {string} ring - 採用状況キー（{@link Ring} の key）
    * @property {string} note - 用途・所感・移行方針（任意）
+   * @property {string} reviewDate - EOL／見直し期限（任意。"YYYY-MM-DD" または ""）
    * @property {string[]} tags - 自由タグ（任意）
    * @property {string} createdAt - 作成日時（ISO 8601）
    * @property {string} updatedAt - 更新日時（ISO 8601）
@@ -40,6 +41,9 @@
     { key: "hold", label: "保留（Hold）" },
   ];
   const RING_KEYS = RINGS.map((r) => r.key);
+
+  /** 見直し期限が「接近」とみなされる残日数の閾値（この日数以内で soon）。 */
+  const DEADLINE_SOON_DAYS = 90;
 
   /**
    * ストアから techstack データを読み込む。未保存・不正形式なら空の初期データを返す。
@@ -71,6 +75,48 @@
   function normalizeRing(ring) {
     const r = String(ring == null ? "" : ring).trim().toLowerCase();
     return RING_KEYS.indexOf(r) >= 0 ? r : "assess";
+  }
+
+  /**
+   * 日付を "YYYY-MM-DD" に正規化する。形式が違う・空なら "" を返す。
+   * @param {string} v - 日付候補
+   * @returns {string} 正規化した日付、または ""
+   */
+  function normalizeDate(v) {
+    const s = String(v == null ? "" : v).trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
+  }
+
+  /**
+   * 見直し期限の状態を判定する（EOL 管理）。
+   * @param {string} reviewDate - 見直し期限（"YYYY-MM-DD" または ""）
+   * @param {string} [today] - 基準日（"YYYY-MM-DD"。省略時は本日）
+   * @returns {"none"|"overdue"|"soon"|"ok"} 未設定=none / 超過=overdue / 接近=soon / 余裕あり=ok
+   */
+  function deadlineStatus(reviewDate, today) {
+    const d = normalizeDate(reviewDate);
+    if (!d) return "none";
+    const t = today || MK.util.todayISO();
+    const days = MK.util.daysBetween(t, d);
+    if (days < 0) return "overdue";
+    if (days <= DEADLINE_SOON_DAYS) return "soon";
+    return "ok";
+  }
+
+  /**
+   * 見直し期限の接近／超過の件数を集計する。
+   * @param {string} [today] - 基準日（省略時は本日）
+   * @returns {{soon: number, overdue: number}} 接近・超過の件数
+   */
+  function deadlineCounts(today) {
+    const t = today || MK.util.todayISO();
+    let soon = 0, overdue = 0;
+    items().forEach((it) => {
+      const s = deadlineStatus(it.reviewDate, t);
+      if (s === "overdue") overdue++;
+      else if (s === "soon") soon++;
+    });
+    return { soon, overdue };
   }
 
   /**
@@ -128,7 +174,7 @@
     const now = MK.util.nowISO();
     d.items.unshift({
       id: MK.util.uid("ts"), name: n, category: "", version: "", ring: "assess",
-      note: "", tags: [], createdAt: now, updatedAt: now,
+      note: "", reviewDate: "", tags: [], createdAt: now, updatedAt: now,
     });
     save(d);
   }
@@ -146,6 +192,7 @@
     if (!it) return;
     Object.assign(it, patch);
     if (Object.prototype.hasOwnProperty.call(patch, "ring")) it.ring = normalizeRing(patch.ring);
+    if (Object.prototype.hasOwnProperty.call(patch, "reviewDate")) it.reviewDate = normalizeDate(patch.reviewDate);
     it.updatedAt = MK.util.nowISO();
     save(d);
   }
@@ -163,10 +210,10 @@
    * @returns {string[][]} 2次元配列のCSV行データ
    */
   function buildCSVRows() {
-    const rows = [["技術名", "カテゴリ", "バージョン", "リング", "メモ", "タグ"]];
+    const rows = [["技術名", "カテゴリ", "バージョン", "リング", "メモ", "見直し期限", "タグ"]];
     items().forEach((it) => rows.push([
       it.name, it.category || "", it.version || "", it.ring,
-      it.note || "", (it.tags || []).join(" "),
+      it.note || "", it.reviewDate || "", (it.tags || []).join(" "),
     ]));
     return rows;
   }
@@ -190,7 +237,8 @@
     const list = body.map((r) => ({
       id: MK.util.uid("ts"), name: (r[0] || "").trim(), category: (r[1] || "").trim(),
       version: (r[2] || "").trim(), ring: ringFromCSV(r[3]), note: (r[4] || "").trim(),
-      tags: (r[5] || "").split(/[\s,]+/).map((t) => t.trim()).filter(Boolean),
+      reviewDate: normalizeDate(r[5]),
+      tags: (r[6] || "").split(/[\s,]+/).map((t) => t.trim()).filter(Boolean),
       createdAt: now, updatedAt: now,
     }));
     save({ version: 1, items: list });
@@ -228,19 +276,20 @@
    */
   function loadSample() {
     const now = MK.util.nowISO();
+    const today = MK.util.todayISO();
     const it = (name, category, version, ring, opts) => Object.assign({
-      id: MK.util.uid("ts"), name, category, version, ring, note: "", tags: [],
+      id: MK.util.uid("ts"), name, category, version, ring, note: "", reviewDate: "", tags: [],
       createdAt: now, updatedAt: now,
     }, opts || {});
     save({ version: 1, items: [
       it("React", "フロントエンド", "18", "adopt", { note: "標準の画面ライブラリ", tags: ["web"] }),
       it("TypeScript", "言語", "5", "adopt", { note: "全新規リポジトリで採用", tags: ["web"] }),
-      it("PostgreSQL", "DB", "16", "adopt", { note: "基幹DB", tags: ["infra"] }),
+      it("PostgreSQL", "DB", "16", "adopt", { note: "基幹DB", tags: ["infra"], reviewDate: MK.util.addDays(today, 45) }),
       it("Vite", "ビルド", "5", "trial", { note: "新規は Vite で開始", tags: ["web"] }),
-      it("Bun", "ランタイム", "1.1", "assess", { note: "CI 高速化を検証中", tags: ["infra"] }),
+      it("Bun", "ランタイム", "1.1", "assess", { note: "CI 高速化を検証中", tags: ["infra"], reviewDate: MK.util.addDays(today, 200) }),
       it("Deno", "ランタイム", "", "assess", { tags: ["infra"] }),
-      it("jQuery", "フロントエンド", "3", "hold", { note: "新規採用しない・段階的に撤去", tags: ["web", "legacy"] }),
-      it("CoffeeScript", "言語", "", "hold", { note: "移行対象", tags: ["legacy"] }),
+      it("jQuery", "フロントエンド", "3", "hold", { note: "新規採用しない・段階的に撤去", tags: ["web", "legacy"], reviewDate: MK.util.addDays(today, -30) }),
+      it("CoffeeScript", "言語", "", "hold", { note: "移行対象", tags: ["legacy"], reviewDate: MK.util.addDays(today, -120) }),
     ] });
   }
 
@@ -251,15 +300,18 @@
    */
   function summary() {
     const c = counts();
+    const dc = deadlineCounts();
     return { empty: c.all === 0, stats: [
       { label: "技術", value: c.all },
       { label: "保留（Hold）", value: c.hold },
+      { label: "期限 接近/超過", value: dc.soon + " / " + dc.overdue },
     ] };
   }
 
   MK.logic = MK.logic || {};
   MK.logic.techstack = {
-    RINGS, load, save, items, normalizeRing, counts, categories, filtered,
+    RINGS, DEADLINE_SOON_DAYS, load, save, items, normalizeRing, normalizeDate,
+    deadlineStatus, deadlineCounts, counts, categories, filtered,
     addItem, updateItem, removeItem, buildCSVRows, applyCSV,
     summary, exportData, importData, loadSample,
   };

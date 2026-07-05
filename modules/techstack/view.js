@@ -79,6 +79,12 @@
     meta.push(el("span", { class: "chip", text: labelOf(it.ring) }));
     if (it.category) meta.push(el("span", { class: "chip", text: it.category }));
     if (it.version) meta.push(el("span", { class: "sub", text: "v" + it.version }));
+    if (it.reviewDate) {
+      const st = L().deadlineStatus(it.reviewDate);
+      const cls = st === "overdue" ? "chip chip-danger" : st === "soon" ? "chip chip-warn" : "chip";
+      const prefix = st === "overdue" ? "期限超過 " : st === "soon" ? "見直し間近 " : "見直し ";
+      meta.push(el("span", { class: cls, text: prefix + it.reviewDate }));
+    }
     (it.tags || []).forEach((t) => meta.push(el("span", { class: "chip", text: "#" + t })));
     if (it.note) meta.push(el("span", { class: "sub", text: it.note }));
 
@@ -96,6 +102,7 @@
     f.version = ui.input({ value: it.version });
     f.ring = ui.select(L().RINGS.map((r) => ({ value: r.key, label: r.label })), it.ring);
     f.note = ui.textarea(it.note);
+    f.reviewDate = ui.input({ type: "date", value: it.reviewDate || "" });
     f.tags = ui.input({ value: (it.tags || []).join(", ") });
 
     const body = ui.stack([
@@ -104,6 +111,7 @@
       ui.field("バージョン", f.version),
       ui.field("採用状況（リング）", f.ring),
       ui.field("メモ（用途・所感・移行方針）", f.note),
+      ui.field("見直し期限（EOL・任意）", f.reviewDate),
       ui.field("タグ（カンマ区切り）", f.tags),
     ]);
 
@@ -117,7 +125,7 @@
             if (!name) { MK.ui.toast("技術名を入力してください", "error"); return; }
             L().updateItem(it.id, {
               name, category: f.category.value.trim(), version: f.version.value.trim(),
-              ring: f.ring.value, note: f.note.value,
+              ring: f.ring.value, note: f.note.value, reviewDate: f.reviewDate.value,
               tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
             });
             close(); render();
