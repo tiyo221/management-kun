@@ -137,11 +137,16 @@
 
   /**
    * 今週（月曜起点）以降に解決したアイテム件数を数える。
+   * resolvedAt は UTC タイムスタンプ（nowISO）なので、現地日付に変換してから
+   * 現地日基準の月曜と比較する（.slice(0,10) の UTC 日付では TZ ズレで取りこぼす）。
+   * @param {string} [today] - 基準日（YYYY-MM-DD、現地）。省略時は現地の今日（テスト注入用・TESTING §1）
    * @returns {number} 今週わかった件数
    */
-  function resolvedThisWeek() {
-    const monday = MK.util.mondayOf(MK.util.todayISO());
-    return items().filter((it) => it.status === "resolved" && it.resolvedAt && it.resolvedAt.slice(0, 10) >= monday).length;
+  function resolvedThisWeek(today) {
+    const monday = MK.util.mondayOf(today || MK.util.todayISO());
+    return items().filter((it) =>
+      it.status === "resolved" && it.resolvedAt &&
+      MK.util.fmtDate(new Date(it.resolvedAt)) >= monday).length;
   }
 
   /**
