@@ -117,7 +117,7 @@
         bytes += (k.length + v.length) * 2;
         count++;
       });
-      return { bytes, count, quota: QUOTA_BYTES, ratio: QUOTA_BYTES ? bytes / QUOTA_BYTES : 0 };
+      return { bytes, count, quota: QUOTA_BYTES, ratio: bytes / QUOTA_BYTES };
     },
 
     // モジュール用スコープアクセサ（自分の名前空間のみ・spec §3.5）
@@ -125,7 +125,9 @@
       const self = this;
       return {
         get() { return self.read(ns); },
-        set(value) { self.write(ns, value); },
+        // write() の戻り値（保存成否）を呼び出し元へ伝播する。容量超過などで false に
+        // なった場合、モジュール側は保存されなかったことを判定できる（Issue #76 / PR #98）。
+        set(value) { return self.write(ns, value); },
       };
     },
   };
