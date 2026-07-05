@@ -20,9 +20,15 @@
 | questions | – | – |
 | skills | ✓ | – |
 | workload | ✓ | 任意 |
+| resource | ✓ | ✓（`allocations` / `demands` の器＝Project 参照経由） |
 | oneonone | ✓ | – |
 | todo | – | ✓ |
 | wbs | ✓ | 任意 |
+| techstack | – | – |
+| releases | – | –（**Product マスタ**を参照。器＝プロダクト） |
+
+- resource（要員計画）は People を主語に、Project 次元をアロケーション（`mk:allocations`）／需要（`mk:demands`）経由で横断集約する（§3.7.5）。
+- releases は People / Project ではなく **Product マスタ**（成果物・📦）を参照する。techstack はどのマスタも参照しない独立台帳。
 
 ### 4.4.1 マスタ共通設計（共通契約）
 
