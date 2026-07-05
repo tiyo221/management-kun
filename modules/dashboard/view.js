@@ -49,7 +49,7 @@
     }));
     const kids = [
       el("h3", { text: "プロジェクト" }),
-      el("div", { style: "font-weight:600;font-size:var(--font-lg);", text: project.name }),
+      el("div", { style: "font-weight:600;", text: project.name }),
       el("div", { class: "sub" }, meta),
     ];
     if (project.note) kids.push(el("p", { class: "sub", text: project.note }));
