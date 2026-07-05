@@ -27,8 +27,10 @@
 | `modules/<id>/logic.js` | その `<id>` のロジック | 自動（`test/<id>.test.js`） |
 | `modules/<id>/view.js` | その `<id>` の画面 | 手動スモーク（描画・操作） |
 | `shared/core.js` / `store.js` / `io.js` | **全モジュール**（全部が依存） | 自動フルスイート＋全モジュール手動スモーク |
-| `shared/people.js` / `projects.js`（マスタ） | **skills / workload / wbs / todo**（マスタを参照） | 自動＋該当画面の手動確認 |
+| `shared/scope.js`（スコープ次元） | **wbs**（project-scoped）・**シェル**（スイッチャ / `ctx.scope`） | 自動（`scope` / `wbs-scope`）＋切替の手動確認 |
+| `shared/people.js` / `projects.js`（マスタ） | **skills / workload / wbs / todo / resource / oneonone**（マスタを参照） | 自動＋該当画面の手動確認 |
 | `shared/products.js`（マスタ） | **releases**（Product マスタを参照） | 自動＋該当画面の手動確認 |
+| `shared/allocations.js` / `demands.js`（共有マスタ） | **resource**（要員計画がアロケーション/需要を参照） | 自動（`allocations` / `demands` / `resource`）＋要員計画画面の手動確認 |
 | `shared/ui.js` / `design.css`（見た目の共通） | **全モジュールの view** | 手動（375/768/1280・ダーク・空状態） |
 | `index.html` / `shared/shell.js`（シェル/ナビ/移行/設定） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
 
@@ -41,7 +43,7 @@
 | 対象 | 種別 | 手段 |
 |---|---|---|
 | ロジック（計算・集計・CRUD・CSV整形/取込・名寄せ） | 自動ユニット | `node test/run.js` |
-| shared（util / io / store / people / projects） | 自動ユニット | 同上 |
+| shared（util / io / store / people / projects / products / allocations / demands / scope） | 自動ユニット | 同上 |
 | view（描画・イベント） | 手動スモーク | プレビューで「描画される・コンソールエラーゼロ」 |
 | レイアウト・レスポンシブ・ダーク | 手動 | 375 / 768 / 1280px ＋ テーマ切替（CONVENTIONS §2.2 / §6） |
 | 全体 I/O・旧データ移行 | 自動（ロジック）＋手動（UI） | ラウンドトリップの自動テスト＋設定画面での実操作 |
@@ -97,12 +99,24 @@ test("wbs: 依存の循環を検出", (MK) => {
 
 ## 7. 現状のカバレッジ（自動）
 
-- **shared**: `util`（名寄せキー・日付）、`io.csv`（ラウンドトリップ）、`people`（名寄せ集約）
+`test/*.test.js` の一覧（`node test/run.js` で自動収集・実行）:
+
+- **shared**（`shared.test.js`）: `util`（名寄せキー・日付）、`io.csv`（ラウンドトリップ）
+- **people** / **projects** / **products**: マスタ CRUD・名寄せ（resolve / resolveOrCreate）・CSV upsert
+- **allocations**: 人×器×期間×% の CRUD・`percentOn`（期間内合算）
+- **demands**: 器×期間×必要% の CRUD・`demandOn` / `totalDemandOn`
+- **scope**: スコープ次元の汎用走査（Project / Product・`"project"` 決め打ちしないこと）
+- **wbs-scope**: wbs の対象別 namespace（`mk:module:wbs:<projectId>`）分離
+- **summary**: 各モジュールの `summary()`（HOME カード集計）
 - **todo**: 追加/件数/完了/フィルタ
 - **goals**: 進捗・いまここ・全完了で達成
-- **wbs**: ロールアップ・WBS番号・依存循環・削除/元に戻す
-- **workload**: 週次負荷（均等割り）・実効終了日・100超の非クランプ
+- **questions**: 追加/解決/フィルタ
 - **skills**: 平均・ギャップ判定・紐づけCSVラウンドトリップ
+- **workload**: 週次負荷（均等割り）・実効終了日・100超の非クランプ
+- **resource**: 要員計画（空き＝キャパ−全器割当）・横断集計
+- **oneonone**: 1on1メモの CRUD
+- **wbs**: ロールアップ・WBS番号・依存循環・削除/元に戻す
+- **techstack**: 技術スタック台帳の CRUD・CSV ラウンドトリップ
 - **releases**: 必須項目（プロダクト・バージョン）・時系列ソート・ステータス正規化・直近予定・削除済み Product 参照ガード
 
 view（描画・レスポンシブ・ダーク）は自動化対象外（手動スモーク＋DoD）。将来 DOM テストが必要になれば、依存ゼロ方針とのトレードオフを検討する。

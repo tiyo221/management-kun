@@ -93,9 +93,14 @@ modules/
 
 ### データ層（logic から使う）
 - `MK.store.scope("module:<id>")` → `{ get(), set(v) }`。破損時も個別 try/parse で他へ波及させない。
-- `MK.people` / `MK.projects`: `all() / get(id) / create(attrs) / update(id,patch) / remove(id) / resolve(name) / resolveOrCreate(name) / replaceAll(list)`。
-- `MK.io`: `buildEnvelope(scope) / download(name,obj) / downloadText(name,text,mime) / importEnvelope(env,mode) / csv.parse(text) / csv.stringify(rows)`。
-- `MK.bus`: `on(event,fn) / emit(event,payload)`。イベント: `masters:changed`（人/プロジェクト変更）・`theme:changed`（テーマ切替）。
+- **マスタ**（共通契約は [`spec/masters.md`](spec/masters.md) §4.4.1 B）:
+  - `MK.people` / `MK.projects` / `MK.products`: `all() / get(id) / create(attrs) / update(id,patch) / remove(id) / resolve(name) / resolveOrCreate(name) / replaceAll(list) / buildCSVRows() / applyCSV(rows)`。status を持つマスタ（projects / products）は加えて `STATUSES / normalize<Enum>() / counts()`。
+  - `MK.allocations`（アロケーション共有マスタ・人×器×期間×%）: `all() / get(id) / of(memberId) / forTarget(targetId) / create / update / remove / replaceAll / percentOn(list, memberId, date)`。
+  - `MK.demands`（需要共有マスタ・器×期間×必要%）: `all() / get(id) / forTarget(targetId) / create / update / remove / replaceAll / demandOn(list, targetId, date) / totalDemandOn(list, date)`。
+  - ※ allocations / demands は `memberId` / `targetId` の複合参照で成立するため CSV 取込対象外（JSON 入出力と要員計画 UI を正とする）。
+- **スコープ次元** `MK.scope`（[`spec.md`](spec.md) §3.7・`"project"` 決め打ち禁止）: `dims() / dimOf(scopeAttr) / master(dim) / entities(dim) / mode(count) / resolveTarget(dim, storedId) / storeNsFor(moduleId, scopeAttr, targetId) / ensureDefaultTarget(dim)`。scoped モジュールは `ctx.scope` の対象内に閉じる。
+- `MK.io`: `buildEnvelope(scope) / download(name,obj) / downloadText(name,text,mime) / importEnvelope(env,mode) / csv.parse(text) / csv.stringify(rows) / pickCsvFile(onRows)`。`pickCsvFile` はファイル選択→読込→パースを共通化し、失敗時はエラートーストを出す（view の「CSV取込」から使う。§4.6.2）。
+- `MK.bus`: `on(event,fn) / emit(event,payload)`。イベント: `masters:changed`（人/プロジェクト/プロダクト等のマスタ変更）・`theme:changed`（テーマ切替）。
 
 ---
 
