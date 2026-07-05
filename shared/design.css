@@ -231,7 +231,7 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-scope-empty { text-align: center; }
 .mk-scope-empty .btn { margin-top: var(--space-md); }
 
-/* ---- HOME ダッシュボード（spec §3.6）---- */
+/* ---- HOME ダッシュボード（spec §3.6 / Issue #100）---- */
 .mk-home-zone { font-size: 15px; font-weight: 600; color: var(--color-steel); margin: var(--space-xl) 0 var(--space-sm); }
 .mk-home-zone:first-of-type { margin-top: var(--space-sm); }
 .mk-home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-md); }
@@ -244,6 +244,45 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-home-stats { display: flex; flex-wrap: wrap; }
 .mk-home-stats .mk-stat .num { font-size: 26px; }
 .mk-home-empty { padding: var(--space-sm) 0; }
+
+/* ピン留めトグル（★/☆）。カード／チップ内の右端に置く */
+.mk-home-pin {
+  margin-left: auto; padding: 2px 6px; background: transparent; border: none;
+  font-size: 16px; line-height: 1; color: var(--color-muted); cursor: pointer;
+  border-radius: var(--rounded-sm);
+}
+.mk-home-pin:hover { color: var(--color-primary); background: var(--color-surface); }
+.mk-home-pin.pinned { color: var(--color-primary); }
+.mk-home-pin:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.mk-home-pin-hint { margin: var(--space-sm) 0 var(--space-xs); }
+
+/* ゾーン見出し（折りたたみトグル。ナビの .mk-nav-group と同型） */
+.mk-home-zone-toggle {
+  display: flex; align-items: center; gap: var(--space-xs); width: 100%;
+  margin: var(--space-lg) 0 var(--space-sm); padding: 2px 0;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 15px; font-weight: 600; color: var(--color-steel);
+}
+.mk-home-zone-toggle:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.mk-home-caret { font-size: 10px; transform: rotate(90deg); transition: transform .15s; }
+.mk-home-zone-toggle.collapsed .mk-home-caret { transform: rotate(0); }
+.mk-home-zone-label { text-align: left; }
+
+/* ピンしていないモジュールの1行チップ */
+.mk-home-chips { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.mk-home-chip {
+  display: inline-flex; align-items: center; gap: var(--space-xxs);
+  padding: 5px var(--space-xs) 5px var(--space-sm);
+  background: var(--color-canvas); border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-full); cursor: pointer; font-size: 13px;
+  transition: border-color .15s;
+}
+.mk-home-chip:hover { border-color: var(--color-primary); }
+.mk-home-chip:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.mk-home-chip-icon { font-size: 14px; }
+.mk-home-chip-title { font-weight: 500; color: var(--color-ink); }
+.mk-home-chip-stat { color: var(--color-steel); }
+.mk-home-chip .mk-home-pin { margin-left: 0; font-size: 14px; }
 
 /* ---- ダークモード（spec §6.2。DESIGN.md 未定義のため本アプリ独自の派生配色）---- */
 [data-theme="dark"] {
