@@ -6,16 +6,14 @@
   "use strict";
   const MK = window.MK;
 
-  // Project ステータスのラベル（マスタ表示と揃える。shell.js の PROJECT_STATUSES と同義）。
-  const PROJECT_STATUS_LABELS = { active: "進行中", archived: "アーカイブ" };
-
   /**
    * Project ステータスキーを表示ラベルへ変換する純関数（未知値はキーをそのまま返す）。
+   * ラベル定義は projects マスタの公開定義（MK.projects.STATUSES / statusLabel）を単一ソースとする（Issue #105）。
    * @param {string} key - ステータスキー（"active" | "archived"）
    * @returns {string} 表示ラベル
    */
   function projectStatusLabel(key) {
-    return PROJECT_STATUS_LABELS[key] || key || "";
+    return MK.projects.statusLabel(key);
   }
 
   /**

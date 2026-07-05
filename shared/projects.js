@@ -4,6 +4,28 @@
   const MK = window.MK;
   const NS = "projects";
 
+  /**
+   * プロジェクトの状態（ステータス）定義。key＝内部値、label＝表示名。表示順もこの配列順に従う。
+   * shell.js（マスタ編集・一覧）／dashboard（基本情報カード）はこの公開定義を参照する（単一ソース。Issue #105）。
+   * @typedef {Object} Status
+   * @property {string} key - 内部キー（"active" | "archived"）
+   * @property {string} label - 画面表示名
+   */
+  const STATUSES = [
+    { key: "active", label: "進行中" },
+    { key: "archived", label: "アーカイブ" },
+  ];
+
+  /**
+   * status キーを表示ラベルへ変換する純関数（未知・空はキーをそのまま返す）。
+   * @param {string} key - ステータスキー
+   * @returns {string} 表示ラベル
+   */
+  function statusLabel(key) {
+    const s = STATUSES.find((x) => x.key === key);
+    return s ? s.label : (key || "");
+  }
+
   function data() {
     const d = MK.store.read(NS);
     if (!d || !Array.isArray(d.projects)) return { version: 1, projects: [] };
@@ -15,6 +37,8 @@
   }
 
   const projects = {
+    STATUSES,
+    statusLabel,
     all() { return data().projects.slice(); },
     get(id) { return data().projects.find((p) => p.id === id) || null; },
 

@@ -622,13 +622,9 @@
     container.appendChild(host);
     renderProjectList(host);
   }
-  const PROJECT_STATUSES = [
-    { key: "active", label: "進行中" },
-    { key: "archived", label: "アーカイブ" },
-  ];
+  const PROJECT_STATUSES = MK.projects.STATUSES;
   function projectStatusLabel(key) {
-    const s = PROJECT_STATUSES.find((x) => x.key === key);
-    return s ? s.label : key;
+    return MK.projects.statusLabel(key);
   }
   function renderProjectList(host) {
     host.innerHTML = "";
