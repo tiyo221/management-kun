@@ -137,6 +137,7 @@
   MK.registerModule("techstack", {
     title: "技術スタック",
     icon: "🧰",
+    description: "使っている技術スタックを棚卸しする",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; },
     summary() { return L().summary(); },

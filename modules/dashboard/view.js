@@ -122,6 +122,7 @@
 
   MK.registerModule("dashboard", {
     title: "ダッシュボード", icon: "🧭",
+    description: "プロジェクトの状況をまとめて俯瞰する",
     scope: { dim: "project" },
     mount(container, context) { ctx = context; root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; ctx = null; },

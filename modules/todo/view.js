@@ -114,6 +114,7 @@
   MK.registerModule("todo", {
     title: "ToDo",
     icon: "✅",
+    description: "日々のやることを整理して前に進める",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; },
     summary() { return L().summary(); },

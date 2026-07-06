@@ -37,7 +37,7 @@ modules/
 **view.js（業務計算を持たない）**
 - DOM 生成・イベント・描画のみ。計算・保存は `MK.logic["<id>"]` に委譲し、更新後に自分で `render()` する。
 - UI は **`shared/ui.js` のヘルパ**（§4）を使い、部品を自作しない。
-- `MK.registerModule("<id>", { title, icon, mount, unmount, exportData, importData, loadSample })` を定義。`exportData`/`importData`/`loadSample` は logic に委譲する。
+- `MK.registerModule("<id>", { title, icon, description, mount, unmount, exportData, importData, loadSample })` を定義。`exportData`/`importData`/`loadSample` は logic に委譲する。`description` は「何ができるか」の1行説明で、HOME が見取り図として描画する（spec §3.6 / Issue #40）。
 
 ### 1.4 データ境界（サーバー移行の布石）
 - logic のデータアクセスは `store` 抽象の背後に閉じる。将来 `store` を API クライアントへ差し替えれば、view を変えずにサーバー化できる状態を保つ。
@@ -109,9 +109,9 @@ modules/
 ## 5. 新規モジュールの追加手順
 
 1. `modules/<id>/logic.js` を作成。`const store = MK.store.scope("module:<id>");` で始め、`load/save`・計算・CRUD・`exportData/importData/loadSample` を定義し、`MK.logic["<id>"] = {...}` で公開（DOM に触れない）。
-2. `modules/<id>/view.js` を作成。`const L = () => MK.logic["<id>"];`、`render()` を `MK.ui` ヘルパで組み、`MK.registerModule("<id>", { title, icon, mount, unmount, exportData:()=>L().exportData(), importData:(d,m)=>L().importData(d,m), loadSample:()=>L().loadSample() })`。
+2. `modules/<id>/view.js` を作成。`const L = () => MK.logic["<id>"];`、`render()` を `MK.ui` ヘルパで組み、`MK.registerModule("<id>", { title, icon, description, mount, unmount, exportData:()=>L().exportData(), importData:(d,m)=>L().importData(d,m), loadSample:()=>L().loadSample() })`。`description` は「何ができるか」の1行説明（HOME が見取り図として描画・spec §3.6 / Issue #40）。
 3. [`index.html`](index.html): `<script src="modules/<id>/logic.js">` → `<script src="modules/<id>/view.js">` の順で追加し、`MK_CONFIG.zones`（自分／ピープル／デリバリー…＝§1.4 の領域）の該当グループに `<id>` を登録。ゾーンが未定義なら新しいゾーンを追加する。
-4. [`shared/shell.js`](shared/shell.js): カタログ `META` にタイトル/アイコンを登録（**META に無いモジュールはナビ・HOME に出ない**）。マネージャ全部入りのフォールバック `DEFAULT_ZONES` にも同様に `<id>` を追加する。
+4. [`shared/shell.js`](shared/shell.js): カタログ `META` にタイトル/アイコンを登録（**META に無いモジュールはナビ・HOME に出ない**）。マネージャ全部入りのフォールバック `DEFAULT_ZONES` にも同様に `<id>` を追加する。1行説明 `description` は **META に足さず def 側に持たせる**（HOME が def から読む単一ソース。重複ハードコード禁止・§3.6 / Issue #40）。
 5. 旧ツール移行が必要なら `shared/shell.js` の `migrateLegacy()` に分岐と `LEGACY_KEYS` を追加。
 6. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、**[`spec.md`](spec.md) §5 のモジュール一覧表に行を追加する（モジュール id の列挙はここだけ・単一ソース）**。マスタ利用の有無に増減があれば [`spec/masters.md`](spec/masters.md) §4.4 の利用関係表も同期する。§3.2 / §4.1 / §4.2 / §6.4・README は規則＋参照になっているため個別列挙の追記は不要（もし id を列挙している箇所を見つけたら参照へ直す）。
 7. `test/<id>.test.js` を追加し、[`test/harness.js`](test/harness.js) の `SCRIPTS` に `modules/<id>/logic.js` を登録する（[`TESTING.md`](TESTING.md) §5）。`test/` の一覧は [`TESTING.md`](TESTING.md) §7 を正とする。
@@ -136,6 +136,7 @@ modules/
 - [ ] 色/余白/角丸/タイポはトークン経由。ダークで確認。
 - [ ] 空状態メッセージがある。破壊的操作に確認/取り消し。
 - [ ] 部品は `MK.ui` のヘルパを使用（自作していない）。
+- [ ] def に1行説明 `description`（何ができるか）を持たせ、HOME の見取り図に出る（[`spec.md`](spec.md) §3.6 / Issue #40）。
 
 **データ・安全**
 - [ ] ユーザー入力は `textContent`/エスケープ。

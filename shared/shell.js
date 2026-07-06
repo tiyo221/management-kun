@@ -362,6 +362,13 @@
     main.appendChild(grid);
   }
 
+  // モジュールの1行説明（＝「何ができるか」。Issue #40）。定義側 def.description を単一ソース
+  // にし、META へハードコードして二重管理しない。準備中（未実装＝def なし）は説明を持たない。
+  function moduleDescription(id) {
+    const mod = MK.modules[id];
+    return mod && typeof mod.description === "string" ? mod.description : "";
+  }
+
   // summary は任意契約。未実装・例外でも HOME 全体を壊さない（null を返して呼び手がフォールバック）。
   function moduleSummary(id) {
     const mod = MK.modules[id];
@@ -400,6 +407,9 @@
       el("span", { class: "mk-home-title", text: meta.title }),
       pinButton(id),
     ]));
+    // 1行説明（何ができるか。Issue #40）。stats の上に置き、初見でも用途が分かるようにする。
+    const desc = moduleDescription(id);
+    if (desc) card.appendChild(el("div", { class: "mk-home-desc", text: desc }));
     if (!MK.modules[id]) {
       card.appendChild(el("div", { class: "sub", text: "準備中" }));
     } else {
@@ -430,6 +440,9 @@
     const chip = el("div", { class: "mk-home-chip", role: "button", tabindex: "0" });
     chip.appendChild(el("span", { class: "mk-home-chip-icon", text: meta.icon || "" }));
     chip.appendChild(el("span", { class: "mk-home-chip-title", text: meta.title }));
+    // 1行説明（何ができるか。Issue #40）。初見でも用途が分かるよう名前の隣に添える。
+    const desc = moduleDescription(id);
+    if (desc) chip.appendChild(el("span", { class: "mk-home-chip-desc", text: desc }));
     if (!MK.modules[id]) {
       chip.appendChild(el("span", { class: "mk-home-chip-stat", text: "準備中" }));
     } else {

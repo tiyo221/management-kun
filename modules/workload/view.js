@@ -161,6 +161,7 @@
 
   MK.registerModule("workload", {
     title: "負荷", icon: "📈",
+    description: "メンバーの稼働負荷を把握する",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; },
     summary() { return L().summary(); },

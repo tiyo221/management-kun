@@ -186,6 +186,7 @@
 
   MK.registerModule("wbs", {
     title: "WBS", icon: "🗂",
+    description: "作業を分解して進捗とスケジュールを管理する",
     // Project 次元に属する scoped モジュール（§3.7.3）。シェルが現在の Project の
     // 対象別 store を ctx.store で渡してくるので、それに束ねてから描画する。
     scope: { dim: "project" },

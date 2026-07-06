@@ -242,6 +242,9 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-home-card-head { display: flex; align-items: center; gap: var(--space-xs); margin-bottom: var(--space-md); }
 .mk-home-icon { font-size: 20px; }
 .mk-home-title { font-size: 16px; font-weight: 600; }
+/* モジュールの1行説明（何ができるか。Issue #40）。カード見出しと stats の間に置く。
+   タイトル（ink・太字）より控えめな steel の二次テキストにする（.mk-row .sub と同系）。 */
+.mk-home-desc { margin: calc(-1 * var(--space-sm)) 0 var(--space-md); font-size: 13px; color: var(--color-steel); }
 .mk-home-stats { display: flex; flex-wrap: wrap; }
 .mk-home-stats .mk-stat .num { font-size: 26px; }
 .mk-home-empty { padding: var(--space-sm) 0; }
@@ -294,9 +297,13 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 }
 .mk-home-chip:hover { border-color: var(--color-primary); }
 .mk-home-chip:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-.mk-home-chip-icon { font-size: 14px; }
-.mk-home-chip-title { font-weight: 500; color: var(--color-ink); }
-.mk-home-chip-stat { color: var(--color-steel); }
+.mk-home-chip { max-width: 100%; }
+.mk-home-chip-icon { font-size: 14px; flex-shrink: 0; }
+.mk-home-chip-title { font-weight: 500; color: var(--color-ink); white-space: nowrap; flex-shrink: 0; }
+/* 1行説明（何ができるか。Issue #40）。名前より控えめな muted 色で添える。狭幅では
+   タイトル／代表値を折らずに説明だけを省略（…）して1行を保つ（375px でも崩れない）。 */
+.mk-home-chip-desc { color: var(--color-steel); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mk-home-chip-stat { color: var(--color-steel); white-space: nowrap; flex-shrink: 0; }
 .mk-home-chip .mk-home-pin { margin-left: 0; font-size: 14px; }
 
 /* ---- ダークモード（spec §6.2。DESIGN.md 未定義のため本アプリ独自の派生配色）---- */

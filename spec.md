@@ -139,7 +139,7 @@ management-kun/
 - 仕様は2層: **共通仕様 `spec.md`**（全モジュールに効く取り決め）＋ **個別仕様 `spec/modules/<id>.md`**（そのモジュールだけの取り決め）。修正・機能追加時は「共通仕様＋対象モジュールの個別仕様」だけを読めば足りるようにする。
 - 共通仕様のうち、**取込・移行・名寄せ（§4.6 CSV / §7 / §8）は [`spec/import-migration.md`](spec/import-migration.md) に分離**した。CSV/JSON 取込・旧データ移行・名寄せを触るときだけ読めばよく、通常のモジュール編集では不要。
 
-- 各モジュール JS は `window.MK.registerModule(id, { title, icon, mount, unmount })` で自身を登録する。
+- 各モジュール JS は `window.MK.registerModule(id, { title, icon, description, mount, unmount })` で自身を登録する。`description` は「何ができるか」の1行説明で、HOME が初見の見取り図として描画する（§3.6・Issue #40）。
 - シェルがナビゲーションを描画し、選択されたモジュールの `mount(container, ctx)` を呼ぶ。`ctx` には共通マスタ API・ストア・IO・UI 部品が渡る。
 - 分割は読み込み順に依存する単純な script タグの並びで足りる（依存解決ライブラリは持たない）。
 
@@ -165,6 +165,7 @@ management-kun/
 MK.registerModule("todo", {
   title: "ToDo",
   icon: "✅",
+  description: "日々のやることを整理して前に進める", // HOME が描画する1行説明（何ができるか。§3.6 / Issue #40）
   mount(container, ctx) { /* 描画 */ },
   unmount() { /* DOM破棄 */ },
   exportData() { return /* data */; },          // JSONエンベロープ modules.<id>.data 用
@@ -201,6 +202,7 @@ MK.registerModule("todo", {
 - **HOME は1枚**。ゾーンごとに別 HOME は作らない。中身は `ZONES`（配布プロファイル。§1.5）を入力に、**2段階の情報密度**で描画する（Issue #100）: 先頭に「**要対応」帯**（表示中モジュールの `summary().attention` を集約した severity 別の色バッジ。Issue #102）、次に「ピン留め」セクション（`pinnedModules`・§4.8 のモジュールをサマリーカードのグリッドで表示）、続いてゾーン別セクション（ピンしていないモジュールを**1行チップ**＝アイコン＋名前＋代表値1つ＝`summary().stats[0]` で表示）。配布用エントリ（`member.html`）では `ZONES` にピープル/デリバリーゾーンが無いため、HOME も自動的に「自分」セクションのみになる。
 - **要対応帯**: バッジは重要度順（error → warn → info。同重要度はゾーン順）に並べ、クリックで該当モジュールへ遷移する。要対応が1件も無ければ帯そのものを表示しない。非表示（`hiddenModules`）のモジュールの attention は集約しない。
 - カード／チップは該当モジュールへ `route` するランチャーを兼ねる（クリック／Enter・Space）。カタログ（`META`）未知のモジュールと非表示（`hiddenModules`・§4.8）のモジュールは出さない（**非表示はピン留めより優先**）。未実装モジュールは「準備中」表示。
+- **1行説明（何ができるか。Issue #40）**: 各モジュール def の `description` を、カードは見出しと stats の間・チップは名前の隣に添える。初見でも「どんなモジュールがあるか（用途）」がゾーン別に分かる見取り図にする。説明文は def を単一ソースとし、シェル（`META`）にハードコードして二重管理しない。狭幅（375px）ではチップの説明を省略（…）してタイトル／代表値を折らない。準備中（未実装＝def なし）は説明を持たない。
 - カード／チップ右端の ★/☆ トグルでピン留め・解除できる（`aria-pressed`。トグルはランチャーのクリックと独立）。ピンが1つも無いときはピン留めセクションの代わりに案内文を表示する。ピンの表示順は `pinnedModules` の配列順（＝ピン留めした順）。
 - ゾーン見出しは折りたたみトグル（状態は `homeZones`・§4.8 に保持）。ゾーン内の全モジュールがピン済み・非表示のゾーンは見出しごと出さない。
 - **起動先**は既定 HOME。設定 `mk:settings` の `startView`（`"home"` | `"last"`）が `"last"` のときだけ前回モジュール（`lastModule`）を復元する。設定画面のトグルで切替。

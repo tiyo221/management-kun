@@ -270,6 +270,7 @@
 
   MK.registerModule("resource", {
     title: "リソース", icon: "🧑‍🤝‍🧑",
+    description: "人が足りているかを判断する",
     scope: "global",
     mount(container, context) { ctx = context; root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; ctx = null; },
