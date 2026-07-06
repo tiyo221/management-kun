@@ -188,6 +188,77 @@
     return { achieveRate: list.length ? Math.round((achieved / list.length) * 100) : 0, achieved, total: list.length, totalDone, chart: list.map((g) => ({ label: g.title || "(無題)", value: g.steps.filter((s) => s.status === "done").length })) };
   }
 
+  // ---- CSV（整形・取込はロジック。ファイル選択/DLは view）----
+  /**
+   * 日付を "YYYY-MM-DD" に正規化する。形式が違う・空なら "" を返す。
+   * @param {string} v - 日付候補
+   * @returns {string} 正規化した日付、または ""
+   */
+  function normalizeCSVDate(v) { const s = String(v == null ? "" : v).trim(); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ""; }
+  /**
+   * 種別を正規化する。step（ステップ）以外はすべて goal（目標）に寄せる。
+   * @param {string} v - 種別候補
+   * @returns {"goal"|"step"} 正規化した種別
+   */
+  function typeFromCSV(v) { const s = String(v == null ? "" : v).trim().toLowerCase(); return (s === "step" || s === "ステップ") ? "step" : "goal"; }
+  /**
+   * ステップ状態を正規化する。done / 完了 は "done"、それ以外は "todo"。
+   * @param {string} v - 状態候補
+   * @returns {"todo"|"done"} 正規化した状態
+   */
+  function statusFromCSV(v) { const s = String(v == null ? "" : v).trim().toLowerCase(); return (s === "done" || s === "完了") ? "done" : "todo"; }
+
+  /**
+   * 目標をCSV行データ（ヘッダ＋各行）に整形する。入れ子は種別列でフラット化し、
+   * 1行＝目標(goal) または ステップ(step) を表す（step は直前の goal に属する）。
+   * @returns {string[][]} 2次元配列のCSV行データ
+   */
+  function buildCSVRows() {
+    const rows = [["種別", "タイトル", "説明", "期限", "状態", "完了日", "振り返り"]];
+    goals().forEach((g) => {
+      rows.push(["goal", g.title || "", g.description || "", g.deadline || "", "", "", ""]);
+      (g.steps || []).forEach((s) => rows.push([
+        "step", s.title || "", s.description || "", "", s.status, s.completedAt || "", s.review || "",
+      ]));
+    });
+    return rows;
+  }
+  /**
+   * CSV行データから目標を取り込み、全置換して保存する。種別列でフラット化された
+   * goal/step 行を入れ子へ復元する（step 行は直前の goal に属する）。
+   * タイトルが空の行、親 goal のない step 行はスキップする。createdAt は取込時刻、
+   * achievedAt は取込後の recompute で自動設定する。
+   * @param {string[][]} rows - CSV行データ（1行目はヘッダ）
+   * @returns {number} 取り込んだ目標(goal)の件数
+   * ※ commit 経由で store へ保存する副作用あり（全置換）。
+   */
+  function applyCSV(rows) {
+    const today = MK.util.todayISO();
+    const body = rows.slice(1).filter((r) => r.length >= 2 && (r[1] || "").trim());
+    const list = [];
+    let cur = null;
+    body.forEach((r) => {
+      const title = (r[1] || "").trim();
+      if (typeFromCSV(r[0]) === "step") {
+        if (!cur) return; // 親 goal のない step はスキップ
+        const status = statusFromCSV(r[4]);
+        cur.steps.push({
+          id: MK.util.uid("s"), title, description: (r[2] || "").trim(), status,
+          completedAt: status === "done" ? (normalizeCSVDate(r[5]) || today) : null, review: (r[6] || "").trim(),
+        });
+      } else {
+        cur = {
+          id: MK.util.uid("g"), title, description: (r[2] || "").trim(), deadline: normalizeCSVDate(r[3]) || null,
+          createdAt: today, achievedAt: null, steps: [],
+        };
+        list.push(cur);
+      }
+    });
+    const d = { version: 1, goals: list };
+    commit(d); // achievedAt を再計算して保存
+    return list.length;
+  }
+
   /**
    * エクスポート用に現在の全データを返す。
    * @returns {GoalsData} 現在の目標データ
@@ -237,5 +308,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.goals = { load, save, goals, getGoal, progress, isAchieved, currentStepId, addGoal, updateGoal, removeGoal, addStep, updateStep, toggleStep, removeStep, moveStep, dashboardData, summary, exportData, importData, loadSample };
+  MK.logic.goals = { load, save, goals, getGoal, progress, isAchieved, currentStepId, addGoal, updateGoal, removeGoal, addStep, updateStep, toggleStep, removeStep, moveStep, dashboardData, summary, buildCSVRows, applyCSV, exportData, importData, loadSample };
 })();
