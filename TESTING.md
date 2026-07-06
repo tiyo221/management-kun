@@ -109,6 +109,7 @@ test("wbs: 依存の循環を検出", (MK) => {
 - **scope**: スコープ次元の汎用走査（Project / Product・`"project"` 決め打ちしないこと）
 - **wbs-scope**: wbs の対象別 namespace（`mk:module:wbs:<projectId>`）分離
 - **summary**: 各モジュールの `summary()`（HOME カード集計）
+- **module-meta**: 全モジュール def が1行説明 `description` を持つこと（HOME の見取り図・Issue #40。view.js を読み込んで検証）
 - **todo**: 追加/件数/完了/フィルタ
 - **goals**: 進捗・いまここ・全完了で達成
 - **questions**: 追加/解決/フィルタ

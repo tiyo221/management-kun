@@ -169,6 +169,7 @@
 
   MK.registerModule("skills", {
     title: "スキル", icon: "📊",
+    description: "メンバーのスキルを一覧で可視化する",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; },
     summary() { return L().summary(); },

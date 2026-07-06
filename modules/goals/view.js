@@ -169,6 +169,7 @@
 
   MK.registerModule("goals", {
     title: "目標", icon: "🎯",
+    description: "目標を立てて達成度を追う",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; },
     summary() { return L().summary(); },

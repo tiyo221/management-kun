@@ -179,6 +179,7 @@
   MK.registerModule("oneonone", {
     title: "1on1",
     icon: "🗣",
+    description: "1on1の記録を残して振り返る",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; },
     summary() { return L().summary(); },

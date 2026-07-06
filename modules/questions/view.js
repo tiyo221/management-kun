@@ -118,6 +118,7 @@
   MK.registerModule("questions", {
     title: "わからないこと",
     icon: "❓",
+    description: "わからないことを書き出して解消する",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; },
     summary() { return L().summary(); },

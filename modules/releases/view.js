@@ -137,6 +137,7 @@
   MK.registerModule("releases", {
     title: "リリース",
     icon: "🚀",
+    description: "リリースの予定と実績を管理する",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; },
     summary() { return L().summary(); },
