@@ -16,6 +16,17 @@
     if (!MK.moduleOrder.includes(id)) MK.moduleOrder.push(id);
   };
 
+  // 任意契約リーダ（spec §9.5 柱1）。モジュールの summary() を「あれば読む／無ければ null」で
+  // 安全に読む単一プリミティブ。未搭載（MK_CONFIG から外した）・summary 未実装・summary が例外の
+  // いずれでも null を返し、横断表示（HOME サマリー・集約ビュー #83）を壊さない。DOM 非依存。
+  // 横断表示・集約ビューは他モジュールをハード参照せず必ずこれ経由で問い合わせること。
+  MK.readSummary = function (id, arg) {
+    const mod = MK.modules[id];
+    if (!mod || typeof mod.summary !== "function") return null;
+    try { return mod.summary(arg); }
+    catch (e) { console.warn("summary() failed:", id, e); return null; } // 追跡用に記録（呼び手は壊さない）
+  };
+
   // 軽量イベントバス（マスタ変更通知など）
   MK.bus = {
     on(event, handler) {

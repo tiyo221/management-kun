@@ -370,12 +370,8 @@
   }
 
   // summary は任意契約。未実装・例外でも HOME 全体を壊さない（null を返して呼び手がフォールバック）。
-  function moduleSummary(id) {
-    const mod = MK.modules[id];
-    if (!mod || typeof mod.summary !== "function") return null;
-    try { return mod.summary(); }
-    catch (e) { console.warn("summary() failed:", id, e); return null; } // 追跡用に記録（HOME は壊さない）
-  }
+  // 実体は DOM 非依存の共通プリミティブ MK.readSummary（core.js・spec §9.5 柱1）に委譲し単一ソース化する。
+  function moduleSummary(id) { return MK.readSummary(id); }
 
   // ピン留めトグル（★/☆）。カード／チップのクリック遷移と衝突しないよう伝播を止める。
   // 再描画後もフォーカスを同じトグルへ戻し、キーボード操作を連続できるようにする。

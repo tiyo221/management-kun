@@ -129,6 +129,7 @@ modules/
 - [ ] logic の公開関数に JSDoc（`@param`/`@returns`・副作用）が付いている。
 - [ ] ストアは自分の名前空間 `mk:module:<id>` のみ・mount 非依存。マスタは `MK.people`/`MK.projects` 経由。scoped モジュール（[`spec.md`](spec.md) §3.7）は対象別 `mk:module:<id>:<targetId>` に書き、`ctx.scope` の対象内に閉じる。
 - [ ] スコープ／次元を扱うなら `"project"` の決め打ち分岐が無い（config／配列を回して汎用。§3 / spec §3.7.6）。
+- [ ] 他モジュールを参照する横断表示・集約ビューは、相手をハード参照せず `MK.readSummary` 等の任意契約で問い合わせ、欠損（`MK_CONFIG` から外した／未実装）時は該当枠を黙って省く。相手モジュールを外しても起動・全画面・横断表示が壊れない（spec §9.5 柱1）。
 
 **UI・レイアウト**
 - [ ] 余白のインライン直書きが無い（`ui.stack` 等に委譲）。隣接ブロックが密着していない。
