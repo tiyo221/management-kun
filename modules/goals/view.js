@@ -42,7 +42,12 @@
 
     const mainPane = el("div", { class: "mk-goals-main" });
     const g = L().getGoal(selectedId);
-    if (!g) mainPane.appendChild(ui.emptyState("大目標を選択または作成してください"));
+    if (!g && !list.length) mainPane.appendChild(ui.emptyState({
+      title: "まだ大目標がありません",
+      hint: "達成したいことを大目標として登録し、ステップに分解して進捗を追いましょう。",
+      action: { label: "＋ 最初の大目標を追加", onClick: () => promptText("新しい大目標", "タイトル", (v) => { if (v) { selectedId = L().addGoal(v); render(); } }) },
+    }));
+    else if (!g) mainPane.appendChild(ui.emptyState("大目標を選択または作成してください"));
     else renderGoalDetail(mainPane, g);
 
     root.appendChild(el("div", { class: "mk-goals-layout" }, [side, mainPane]));

@@ -27,7 +27,11 @@
       ui.button("CSV 出力", { onClick: () => { MK.io.downloadText("wbs-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(L().buildCSVRows()), "text/csv"); MK.ui.toast("CSV を書き出しました", "success"); } }),
     ]);
 
-    if (!tasks.length) { root.appendChild(ui.stack([stats, bar, ui.emptyState("タスクがありません。「＋ 大項目」から追加してください。")])); return; }
+    if (!tasks.length) { root.appendChild(ui.stack([stats, bar, ui.emptyState({
+      title: "まだタスクがありません",
+      hint: "大項目を追加し、その下に小項目をぶら下げて WBS を組み立てます。進捗や期間はガントに反映されます。",
+      action: { label: "＋ 最初の大項目を追加", onClick: () => { L().addRoot(); render(); } },
+    })])); return; }
 
     const nums = L().wbsNumbers(tasks);
     const hidden = L().hiddenFlags(tasks);

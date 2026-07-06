@@ -7,7 +7,17 @@
   const L = () => MK.logic.skills;
 
   let root = null;
+  let ctx = null;
   let view = "matrix";
+
+  // メンバー0件の空状態。人はマスタ管理（人の管理）で登録するため、そこへの導線を併置する。
+  function membersEmpty(hint) {
+    return ui.emptyState({
+      title: "メンバーがいません",
+      hint: hint,
+      action: ctx && ctx.route ? { label: "人の管理を開く", onClick: () => ctx.route("master-people") } : null,
+    });
+  }
 
   function render() {
     if (!root) return;
@@ -27,7 +37,11 @@
     ]);
     const list = L().skills();
     let content;
-    if (!list.length) content = ui.emptyState("スキルがありません。「＋ スキルを追加」から登録してください。");
+    if (!list.length) content = ui.emptyState({
+      title: "まだスキルがありません",
+      hint: "評価したいスキル項目を登録すると、メンバーごとのレベルを紐づけ・可視化できます。",
+      action: { label: "＋ 最初のスキルを追加", onClick: () => editSkill(null) },
+    });
     else {
       content = ui.card([], { flush: true });
       L().domainsOrder(list).forEach((dom) => {
@@ -84,7 +98,7 @@
       ui.button("紐づけCSV取込", { onClick: () => MK.io.pickCsvFile((rows) => { const r = L().applyRatingsCSV(rows); render(); MK.ui.toast("取込 " + r.ok + " 件 / スキップ " + r.skip + " 件", r.skip ? "info" : "success"); }) }),
     ]);
     let content;
-    if (!ms.length) content = ui.emptyState("メンバーがいません。「人の管理」で追加してください。");
+    if (!ms.length) content = membersEmpty("スキルを紐づけるには、まず「人の管理」でメンバーを登録してください。");
     else if (!vs.length) content = ui.emptyState("表示中のスキルがありません。");
     else {
       const hint = el("div", { class: "sub mk-muted", style: "margin-bottom:6px;", text: "数字をクリックしてレベルを設定（同じ数字を再クリックで解除）。右端「対象外」は評価対象外。色が濃いほど高レベル。" });
@@ -170,8 +184,8 @@
   MK.registerModule("skills", {
     title: "スキル", icon: "📊",
     description: "メンバーのスキルを一覧で可視化する",
-    mount(container) { root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; },
+    mount(container, c) { ctx = c; root = el("div"); container.appendChild(root); render(); },
+    unmount() { root = null; ctx = null; },
     summary() { return L().summary(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },

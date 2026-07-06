@@ -51,7 +51,15 @@
   function renderList(host) {
     host.innerHTML = "";
     const items = L().filtered(filter, search);
-    if (!items.length) { host.appendChild(ui.emptyState("タスクはありません")); return; }
+    if (!items.length) {
+      // 全体で0件（初回）と、フィルタ/検索の結果0件を区別してガイドする
+      if (!L().counts().all) host.appendChild(ui.emptyState({
+        title: "まだタスクがありません",
+        hint: "上の入力欄にやることを書いて Enter を押すと、最初のタスクが Inbox に追加されます。",
+      }));
+      else host.appendChild(ui.emptyState("該当するタスクはありません"));
+      return;
+    }
     const list = el("ul", { class: "mk-list" });
     items.forEach((t) => list.appendChild(taskRow(t)));
     host.appendChild(list);

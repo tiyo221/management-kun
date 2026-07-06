@@ -7,6 +7,7 @@
   const L = () => MK.logic.workload;
 
   let root = null;
+  let ctx = null;
   const state = { view: "team", member: null, period: 13, offset: 0, showPlan: false };
 
   function render() {
@@ -14,7 +15,7 @@
     root.innerHTML = "";
     root.appendChild(ui.sectionTitle("負荷"));
     const bar = toolbar();
-    if (!L().members().length) { root.appendChild(ui.stack([bar, ui.emptyState("メンバーがいません。「人の管理」で追加してください。")])); return; }
+    if (!L().members().length) { root.appendChild(ui.stack([bar, membersEmpty()])); return; }
     const body = state.view === "team" ? renderTeam() : renderIndividual();
     root.appendChild(ui.stack([bar].concat(body)));
   }
@@ -36,6 +37,14 @@
       bar.appendChild(ui.button("計画クリア", { variant: "btn-ghost", onClick: () => { L().clearBaseline(); state.showPlan = false; render(); } }));
     }
     return bar;
+  }
+  // メンバー0件の空状態。人はマスタ管理（人の管理）で登録するため、そこへの導線を併置する。
+  function membersEmpty() {
+    return ui.emptyState({
+      title: "メンバーがいません",
+      hint: "負担を可視化するには、まず「人の管理」でメンバーを登録してください。",
+      action: ctx && ctx.route ? { label: "人の管理を開く", onClick: () => ctx.route("master-people") } : null,
+    });
   }
   // 単一グループの pill 群（active を強調）。ui.pillTabs は文字列 key 前提なので数値 period 用にこちらを使用
   function inlinePills(items, active, onChange) {
@@ -95,7 +104,11 @@
 
     const mine = L().tasksOf(m.id);
     let listCard;
-    if (!mine.length) listCard = ui.card([ui.emptyState("タスクがありません。「＋ タスク」から追加してください。")], { flush: true });
+    if (!mine.length) listCard = ui.card([ui.emptyState({
+      title: "このメンバーのタスクがありません",
+      hint: "担当タスクを追加すると、負担率が週ごとのグラフに反映されます。",
+      action: { label: "＋ タスクを追加", onClick: () => editTask(null) },
+    })], { flush: true });
     else { const ul = el("ul", { class: "mk-list" }); mine.forEach((t) => ul.appendChild(taskRow(t))); listCard = ui.card([ul], { flush: true }); }
 
     return [sel, chartCard, listCard];
@@ -162,8 +175,8 @@
   MK.registerModule("workload", {
     title: "負荷", icon: "📈",
     description: "メンバーの稼働負荷を把握する",
-    mount(container) { root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; },
+    mount(container, c) { ctx = c; root = el("div"); container.appendChild(root); render(); },
+    unmount() { root = null; ctx = null; },
     summary() { return L().summary(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },
