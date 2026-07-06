@@ -110,6 +110,7 @@ test("wbs: 依存の循環を検出", (MK) => {
 - **wbs-scope**: wbs の対象別 namespace（`mk:module:wbs:<projectId>`）分離
 - **summary**: 各モジュールの `summary()`（HOME カード集計）
 - **module-meta**: 全モジュール def が1行説明 `description` を持つこと（HOME の見取り図・Issue #40。view.js を読み込んで検証）
+- **spec-consistency**: spec.md §5 のモジュール一覧表が実装と一致すること（id ⇄ index.html のロード対象／CSV✓ ⇄ `build…CSVRows` を持つモジュール。仕様の陳腐化を検出・Issue #117）
 - **todo**: 追加/件数/完了/フィルタ
 - **goals**: 進捗・いまここ・全完了で達成
 - **questions**: 追加/解決/フィルタ

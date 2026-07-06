@@ -17,7 +17,7 @@ skill-mieru-kun（自前パーサ・UTF-8・BOM許容）と wbs-tool（BOM付き
 - **参照の持ち方**: メンバー・プロジェクトは **名前**で参照（人間/AI が読み書きしやすく、ID 非依存）。取込時に名前→マスタ解決。
 - **真偽・選択値**: skill-mieru-kun 準拠で寛容に解釈（`true`/`○`/`コア` 等を真、`false`/`×`/`非表示` 等を偽）。
 - **未登録・不正値**: マスタ未登録の参照や不正値の行はスキップし、件数を警告表示する。
-- CSV を提供するモジュール: **skills**・**wbs**・**techstack**・**todo**・**workload**（§4.6.2 の共通契約に従って展開・Issue #77）。他モジュールは JSON のみ（CSV 化は必要時に同じ契約で追加）。
+- CSV を提供するモジュールは [`spec.md`](../spec.md) §5 の一覧表（CSV 列＝✓）を正とする（§4.6.2 の共通契約に従って展開・Issue #77）。CSV 非対応モジュールは JSON のみ（CSV 化は必要時に同じ契約で追加）。
 
 ### 4.6.1 CSV 列仕様（共通形）
 
@@ -29,7 +29,7 @@ skill-mieru-kun（自前パーサ・UTF-8・BOM許容）と wbs-tool（BOM付き
 | プロジェクト（Project） | `プロジェクト名, 表示色, 状態, 備考`（状態は `active`/`archived`。`archived`/`アーカイブ` を archived、それ以外は既定 `active`。関連目標＝Goal 参照は将来拡張） |
 
 - 人・プロジェクトいずれも **氏名／プロジェクト名が空の行はスキップ**する。取込の全置換／upsert の現行状況は [`masters.md`](masters.md) §4.4.1 C の「現行の例外」を正とする（People / Project / Product は現行全置換・順次 upsert へ）。
-- モジュール固有の CSV: **skills**（ユーザ / スキル / 紐づけ）→ [`spec/modules/skills.md`](modules/skills.md)、**wbs** → [`spec/modules/wbs.md`](modules/wbs.md)、**techstack** → [`spec/modules/techstack.md`](modules/techstack.md)、**todo** → [`spec/modules/todo.md`](modules/todo.md)、**workload** → [`spec/modules/workload.md`](modules/workload.md)。
+- モジュール固有の CSV: **skills**（ユーザ / スキル / 紐づけ）→ [`spec/modules/skills.md`](modules/skills.md)、**wbs** → [`spec/modules/wbs.md`](modules/wbs.md)、**techstack** → [`spec/modules/techstack.md`](modules/techstack.md)、**todo** → [`spec/modules/todo.md`](modules/todo.md)、**workload** → [`spec/modules/workload.md`](modules/workload.md)、**questions** → [`spec/modules/questions.md`](modules/questions.md)、**goals** → [`spec/modules/goals.md`](modules/goals.md)、**oneonone** → [`spec/modules/oneonone.md`](modules/oneonone.md)。
 
 > 人・プロジェクト・プロダクトの各マスタは CSV 出力／取込に対応（Issue #37 / #57 / #58）。CSV は `MK.io.csv.stringify` / `MK.io.csv.parse`・`MK.io.downloadText`・`MK.io.pickCsvFile`（ファイル選択の共通ヘルパ）を用いる（各マスタ view の「CSV出力」「CSV取込」）。
 

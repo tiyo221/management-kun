@@ -113,7 +113,7 @@ modules/
 3. [`index.html`](index.html): `<script src="modules/<id>/logic.js">` → `<script src="modules/<id>/view.js">` の順で追加し、`MK_CONFIG.zones`（自分／ピープル／デリバリー…＝§1.4 の領域）の該当グループに `<id>` を登録。ゾーンが未定義なら新しいゾーンを追加する。
 4. [`shared/shell.js`](shared/shell.js): カタログ `META` にタイトル/アイコンを登録（**META に無いモジュールはナビ・HOME に出ない**）。マネージャ全部入りのフォールバック `DEFAULT_ZONES` にも同様に `<id>` を追加する。1行説明 `description` は **META に足さず def 側に持たせる**（HOME が def から読む単一ソース。重複ハードコード禁止・§3.6 / Issue #40）。
 5. 旧ツール移行が必要なら `shared/shell.js` の `migrateLegacy()` に分岐と `LEGACY_KEYS` を追加。
-6. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、**[`spec.md`](spec.md) §5 のモジュール一覧表に行を追加する（モジュール id の列挙はここだけ・単一ソース）**。マスタ利用の有無に増減があれば [`spec/masters.md`](spec/masters.md) §4.4 の利用関係表も同期する。§3.2 / §4.1 / §4.2 / §6.4・README は規則＋参照になっているため個別列挙の追記は不要（もし id を列挙している箇所を見つけたら参照へ直す）。
+6. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、**[`spec.md`](spec.md) §5 のモジュール一覧表に行を追加する（モジュール id の列挙・CSV 対応の ✓ はここだけ・単一ソース）**。CSV に対応させたら §5 表の CSV 列を ✓ にする（`build…CSVRows` を実装したのに ✓ を付け忘れる／逆に外し忘れると [`test/spec-consistency.test.js`](test/spec-consistency.test.js) が失敗する）。マスタ利用の有無に増減があれば [`spec/masters.md`](spec/masters.md) §4.4 の利用関係表も同期する。§3.2 / §4.1 / §4.2 / §4.6 / §6.4・README・CLAUDE.md は規則＋参照になっているため個別列挙の追記は不要（もし id や「CSV 対応＝○○」の列挙を見つけたら §5 への参照へ直す）。
 7. `test/<id>.test.js` を追加し、[`test/harness.js`](test/harness.js) の `SCRIPTS` に `modules/<id>/logic.js` を登録する（[`TESTING.md`](TESTING.md) §5）。`test/` の一覧は [`TESTING.md`](TESTING.md) §7 を正とする。
 8. §6 のチェックリストで点検。
 
