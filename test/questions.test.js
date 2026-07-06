@@ -60,6 +60,33 @@ test("questions: resolvedThisWeek は resolvedAt を現地日付で判定（UTC 
   eq(Q.resolvedThisWeek(today), 1);
 });
 
+test("questions: CSV 出力・取込（ラベル/キー・タグ分割・resolvedAt）", (MK) => {
+  // 観点: buildCSVRows のヘッダ、applyCSV が全置換・ステータス key/ラベル両対応・タグ分割・resolvedAt 再生成
+  const Q = MK.logic.questions;
+  const rows = [
+    ["タイトル", "詳細", "ステータス", "タグ", "わかったこと"],
+    ["localStorage の上限", "背景メモ", "resolved", "web css", "5MB 前後"],
+    ["rebase と merge", "", "調査中", "git", ""], // 日本語ラベル
+    ["不明ステータス", "", "なにこれ", "", ""], // 不明は open
+    ["", "空行", "open", "", ""], // タイトルなしはスキップ
+  ];
+  const n = Q.applyCSV(rows);
+  eq(n, 3);
+  eq(Q.counts().all, 3);
+  const a = Q.items().find((x) => x.title === "localStorage の上限");
+  eq(a.status, "resolved");
+  eq(a.tags, ["web", "css"]);
+  eq(a.resolvedNote, "5MB 前後");
+  assert(a.resolvedAt, "resolved は resolvedAt が付く");
+  const b = Q.items().find((x) => x.title === "rebase と merge");
+  eq(b.status, "investigating"); // 日本語ラベル「調査中」→ investigating
+  eq(b.resolvedAt, null);
+  const c = Q.items().find((x) => x.title === "不明ステータス");
+  eq(c.status, "open"); // 不明は open
+  // 出力ヘッダ
+  eq(Q.buildCSVRows()[0], ["タイトル", "詳細", "ステータス", "タグ", "わかったこと"]);
+});
+
 test("questions: importData の replace と merge", (MK) => {
   // 観点: replace は全置換、merge は id 一致で上書きしつつ既存を残す
   const Q = MK.logic.questions;

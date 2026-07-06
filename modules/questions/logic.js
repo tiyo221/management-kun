@@ -38,6 +38,21 @@
     { key: "investigating", label: "調査中" },
     { key: "resolved", label: "わかった" },
   ];
+  const STATUS_KEYS = STATUSES.map((s) => s.key);
+
+  /**
+   * ステータスを正規化する（未知・未指定は "open" に寄せる）。key（open 等）または
+   * 日本語ラベル（未解決 / 調査中 / わかった）を寛容に解釈する。
+   * @param {string} status - ステータス候補
+   * @returns {string} 正規化したステータスキー
+   */
+  function normalizeStatus(status) {
+    const s = String(status == null ? "" : status).trim();
+    const byLabel = { "未解決": "open", "調査中": "investigating", "わかった": "resolved" };
+    if (byLabel[s]) return byLabel[s];
+    const k = s.toLowerCase();
+    return STATUS_KEYS.indexOf(k) >= 0 ? k : "open";
+  }
 
   /**
    * ストアから questions データを読み込む。未保存・不正形式なら空の初期データを返す。
@@ -149,6 +164,42 @@
       MK.util.fmtDate(new Date(it.resolvedAt)) >= monday).length;
   }
 
+  // ---- CSV（整形・取込はロジック。ファイル選択/DLは view）----
+  /**
+   * わからないことをCSV行データ（ヘッダ＋各行）に整形する。
+   * @returns {string[][]} 2次元配列のCSV行データ
+   */
+  function buildCSVRows() {
+    const rows = [["タイトル", "詳細", "ステータス", "タグ", "わかったこと"]];
+    items().forEach((it) => rows.push([
+      it.title, it.detail || "", it.status, (it.tags || []).join(" "), it.resolvedNote || "",
+    ]));
+    return rows;
+  }
+  /**
+   * CSV行データからわからないことを取り込み、全置換して保存する。タイトルが空の行はスキップする。
+   * ステータスは key（open 等）または日本語ラベル（未解決/調査中/わかった）を受け付け、不明なら "open"。
+   * タグは空白またはカンマ区切り。createdAt/updatedAt は取込時刻、resolvedAt は resolved のとき取込時刻。
+   * @param {string[][]} rows - CSV行データ（1行目はヘッダ）
+   * @returns {number} 取り込んだ件数
+   * ※ store へ保存する副作用あり（全置換）。
+   */
+  function applyCSV(rows) {
+    const now = MK.util.nowISO();
+    const body = rows.slice(1).filter((r) => r.length >= 1 && (r[0] || "").trim());
+    const list = body.map((r) => {
+      const status = normalizeStatus(r[2]);
+      return {
+        id: MK.util.uid("q"), title: (r[0] || "").trim(), detail: (r[1] || "").trim(),
+        status, tags: (r[3] || "").split(/[\s,]+/).map((t) => t.trim()).filter(Boolean),
+        resolvedNote: (r[4] || "").trim(), createdAt: now, updatedAt: now,
+        resolvedAt: status === "resolved" ? now : null,
+      };
+    });
+    save({ version: 1, items: list });
+    return list.length;
+  }
+
   /**
    * エクスポート用に現在の全データを返す。
    * @returns {QuestionsData} 現在の questions データ
@@ -213,8 +264,8 @@
 
   MK.logic = MK.logic || {};
   MK.logic.questions = {
-    STATUSES, load, save, items, counts, filtered,
+    STATUSES, normalizeStatus, load, save, items, counts, filtered,
     addItem, updateItem, removeItem, resolvedThisWeek, summary,
-    exportData, importData, loadSample,
+    buildCSVRows, applyCSV, exportData, importData, loadSample,
   };
 })();

@@ -18,6 +18,12 @@
     // クイック追加（Enter で未解決に投入）
     const capture = ui.input({ placeholder: "わからないことを入力して Enter（未解決に追加）", onEnter: (v) => { if (v.trim()) { L().addItem(v); render(); } } });
 
+    // ツールバー（CSV）
+    const bar = ui.toolbar([
+      ui.button("CSV出力", { onClick: () => { MK.io.downloadText("questions-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(L().buildCSVRows()), "text/csv"); MK.ui.toast("わからないことCSVを書き出しました", "success"); } }),
+      ui.button("CSV取込", { onClick: () => MK.io.pickCsvFile((rows) => { const n = L().applyCSV(rows); filter = "all"; render(); MK.ui.toast(n + " 件のわからないことを取り込みました", "success"); }) }),
+    ]);
+
     // ステータスタブ（件数バッジ）
     const c = L().counts();
     const tabsBar = ui.toolbar([]);
@@ -31,7 +37,7 @@
     const listHost = ui.card([], { flush: true });
     renderList(listHost);
 
-    root.appendChild(ui.stack([capture, tabsBar, listHost]));
+    root.appendChild(ui.stack([capture, bar, tabsBar, listHost]));
   }
 
   function pill(label, key, count) {

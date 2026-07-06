@@ -19,7 +19,13 @@ People / Project マスタは**使わない**（todo と同じく個人用途）
 - モジュール内部 ID は `q_<epoch>_<rand>`（[`spec.md`](../../spec.md) §4.7）。
 
 ## CSV
-なし（JSON のみ）。
+共通契約（[`spec/import-migration.md`](../import-migration.md) §4.6.2）に沿う。列は `タイトル, 詳細, ステータス, タグ, わかったこと`。
+
+- `タイトル` は必須（空の行はスキップ・件数警告）。
+- `ステータス` は key（`open` / `investigating` / `resolved`）または日本語ラベル（未解決 / 調査中 / わかった）を寛容解釈する。不明・空は `open`。
+- `タグ` は空白またはカンマ区切り（techstack と同形）。
+- 取込は全置換。`createdAt` / `updatedAt` は取込時刻で再生成し、`resolvedAt` は `resolved` のとき取込時刻・それ以外は `null`。
+- ラウンドトリップ（出力→取込）が成立する（UTF-8 BOM・ステータス key/ラベル両対応・タグ分割）。
 
 ## 旧データ移行
 なし（新規モジュール）。
