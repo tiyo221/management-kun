@@ -247,6 +247,24 @@ summary() {
 - `attention` は **stats 同様に任意**。未実装・不正形式でも HOME は壊さない（帯に出ないだけ）。実装例: todo=期限切れ/今日期限、techstack=見直し期限の超過/接近、questions=未解決件数。
 - 集計は logic 側の純関数に置き、テスト可能にする（`test/summary.test.js`）。例: todo=未完/全タスク数、goals=達成率/目標数、skills=メンバー/スキル項目数、workload=平均稼働率/過負荷人数、wbs=進行中/進捗率。「今日」に依存する集計は基準日を引数で受け取れるようにする（決定的テスト。TESTING §1）。
 
+#### 3.6.1 エンティティ単位の任意契約 `summaryFor(entityType, id)`
+
+`summary()` が**モジュール全体**を主語にするのに対し、`summaryFor(entityType, id)` は「**この人**のスキル概況」「**このPJ**の WBS 進捗」のように**エンティティ1件**を主語にしたサマリーを返す。人・プロジェクト詳細への関連情報集約ビュー（Issue #83）が、他モジュールをハード参照せずに各枠を問い合わせるための任意契約（柱1・§9.5 の欠損時グレースフルの実証対象）。
+
+```js
+summaryFor(entityType, id) {
+  // entityType: マスタ種別 "person" | "project" | "product" 等（汎用。"project" 決め打ち分岐をしない・§3.7.6）
+  // id: そのマスタの entityId
+  return { empty: false, stats: [{ label: "担当タスク", value: 5 }] }; // summary() と完全に同型（{ empty, stats, attention? }）
+}
+```
+
+- **戻り値は `summary()` 契約と完全に同型**（`{ empty, stats:[{label,value}], attention? }`）。遷移導線（クリックで該当モジュールへ飛ぶ）は消費側の集約ビュー（#83）が `ctx.route`（§3.5・§3.7.3）で別途組み立てるものとし、契約には持たせない（YAGNI）。
+- **該当データ無し（empty）と契約未実装（null）を区別する**: そのモジュールが `summaryFor` を実装していても、当該エンティティに紐づくデータが無い場合は `{ empty: true, stats: [...] }` を返す。契約自体を実装しない（＝そのモジュールはエンティティ単位のサマリーを提供しない）場合はリーダが `null` を返す（下記）。
+- **汎用**: `entityType` はマスタ種別に汎用で、`"project"` 等の特定種別に分岐しない（§3.7.6）。対応しない種別には `{ empty: true, ... }`（データ無し）で応える。
+- 横断表示・集約ビューは他モジュールをハード参照せず、必ずコアのリーダ **`MK.readEntitySummary(moduleId, entityType, entityId)`** 経由で問い合わせる。リーダは `MK.readSummary`（§9.5）と同一原則で、**未搭載（`MK_CONFIG` から外した）・`summaryFor` 未実装・`summaryFor` が例外**のいずれでも `null` を返し、呼び手（#83）を壊さない。
+- 集計は logic 側の純関数に置きテスト可能にする（契約テスト `test/read-entity-summary.test.js`）。
+
 ### 3.7 スコープ次元（横断 / 単位のスコープ軸）
 
 ゾーン分類（§1.4）に**直交する第2軸**として、「**同種のものを複数持つ／単一で持つ**」を統一的に扱う仕組みを定義する。§1.4 で予約し §14 で将来送りにしていた「PJ 横断 / PJ 単位」軸を、**Project 専用ではなく汎用の型**として起こす。
