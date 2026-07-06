@@ -76,17 +76,25 @@ a { color: var(--color-link-blue); }
 .mk-brand { font-weight: 600; font-size: 16px; white-space: nowrap; }
 .mk-brand .mk-logo { margin-right: var(--space-xs); }
 
-/* サイドバー: ブランド → ナビ（縦積み・伸縮） → アクション（下部固定）。デスクトップは常時表示。 */
+/* サイドバー: ブランド（上部固定） → ナビ（縦積み・スクロール） → アクション（下部固定）。デスクトップは常時表示。
+   問題: サイドバー全体を overflow:auto にすると、モジュールが増えて一覧があふれた際に下部の
+     アクションと重なる（Issue #34）。
+   解決: スクロールをサイドバー全体ではなく .mk-nav の内側だけで起こす（.mk-sidebar は overflow:hidden）。
+   効果: ブランドは上部・アクションは下部に固定され、はみ出すモジュール一覧だけがナビ内でスクロールする。 */
 .mk-sidebar {
   position: sticky; top: 0; z-index: 20; flex: 0 0 240px; width: 240px;
-  height: 100vh; overflow-y: auto;
+  height: 100vh; overflow: hidden;
   display: flex; flex-direction: column; gap: var(--space-sm);
   padding: var(--space-md) var(--space-sm);
   background: var(--color-surface-soft);
   border-right: 1px solid var(--color-hairline);
 }
 .mk-sidebar > .mk-brand { padding: var(--space-xs) var(--space-sm); }
-.mk-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; }
+/* モジュール一覧が縦にあふれたらここだけスクロールさせる（min-height:0 で flex 子の縮小を許可） */
+.mk-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; overflow-y: auto; }
+/* あふれたときは各項目を縮めず（flex-shrink:0）スクロールで逃がす。縮めると HOME 等の項目高が
+   潰れて文字が見切れる（flex 子は既定で flex-shrink:1）。 */
+.mk-nav > * { flex-shrink: 0; }
 .mk-nav-item {
   display: block; width: 100%; text-align: left;
   font-size: 14px; color: var(--color-ink); background: transparent;
