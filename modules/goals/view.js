@@ -15,6 +15,11 @@
     root.innerHTML = "";
     root.appendChild(ui.sectionTitle("目標"));
     root.appendChild(ui.pillTabs([{ key: "roadmap", label: "ロードマップ" }, { key: "dashboard", label: "ダッシュボード" }], view, (k) => { view = k; render(); }));
+    // ツールバー（CSV）— 種別列でフラット化した goal/step を入出力する
+    root.appendChild(ui.toolbar([
+      ui.button("CSV出力", { onClick: () => { MK.io.downloadText("goals-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(L().buildCSVRows()), "text/csv"); MK.ui.toast("目標CSVを書き出しました", "success"); } }),
+      ui.button("CSV取込", { onClick: () => MK.io.pickCsvFile((rows) => { const n = L().applyCSV(rows); selectedId = null; render(); MK.ui.toast(n + " 件の目標を取り込みました", "success"); }) }),
+    ]));
     if (view === "dashboard") renderDashboard(); else renderRoadmap();
   }
 
