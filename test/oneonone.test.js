@@ -66,6 +66,50 @@ test("oneonone: summary は未完アクション件数と記録数", (MK) => {
   eq(s.stats[1].value, 2); // 記録数
 });
 
+test("oneonone: CSV ラウンドトリップ（メンバー名寄せ・温度感・アクション複数行）", (MK) => {
+  // 観点: buildCSVRows→applyCSV で往復でき、メンバーは名前で名寄せ、温度感は key/ラベル両対応、
+  //       アクションは1セル複数行（状態|期限|やること）で復元、メンバー空はスキップ
+  const O = MK.logic.oneonone;
+  const rows = [
+    ["メンバー", "実施日", "話したこと", "温度感", "アクション"],
+    ["佐藤 花子", "2026-07-01", "稼働の相談", "good", "done|2026-07-10|レビュー当番表を作る\ntodo||隔週に変更"],
+    ["鈴木 一郎", "不正日付", "キャリア面談", "😐 normal", "todo|2026-07-20|スキルマップ整理"],
+    ["", "2026-07-02", "メンバー空はスキップ", "bad", ""],
+  ];
+  const r = O.applyCSV(rows);
+  eq(r.ok, 2);
+  eq(r.skip, 1);
+  eq(O.entries().length, 2);
+  const sato = O.entries().find((e) => e.body === "稼働の相談");
+  eq(MK.people.get(sato.memberId).name, "佐藤 花子"); // 名寄せでマスタ作成
+  eq(sato.mood, "good");
+  eq(sato.date, "2026-07-01");
+  eq(sato.actions.length, 2);
+  eq(sato.actions[0].done, true);
+  eq(sato.actions[0].due, "2026-07-10");
+  eq(sato.actions[0].text, "レビュー当番表を作る");
+  eq(sato.actions[1].done, false);
+  eq(sato.actions[1].due, null);
+  assert(sato.actions[0].id[0] === "a", "アクション id は再採番される");
+  const suzuki = O.entries().find((e) => e.body === "キャリア面談");
+  eq(suzuki.mood, "normal"); // ラベル「😐 normal」→ normal
+  eq(suzuki.date, MK.util.todayISO()); // 不正日付は取込日
+  // 往復: 出力ヘッダと再取込で件数一致
+  const out = O.buildCSVRows();
+  eq(out[0], ["メンバー", "実施日", "話したこと", "温度感", "アクション"]);
+  eq(O.applyCSV(out).ok, 2);
+});
+
+test("oneonone: parseActionsCell は区切り不足に寛容・空 text を除外", (MK) => {
+  // 観点: `状態|期限|やること`（3項）/ `状態|やること`（2項）/ `やること`（1項）を解釈、空行は除外
+  const O = MK.logic.oneonone;
+  const acts = O.parseActionsCell("done|2026-07-01|三項\ntodo|二項だが期限なし\n一項だけ\n   ");
+  eq(acts.length, 3);
+  eq(acts[0].done, true); eq(acts[0].due, "2026-07-01"); eq(acts[0].text, "三項");
+  eq(acts[1].done, false); eq(acts[1].text, "二項だが期限なし");
+  eq(acts[2].done, false); eq(acts[2].due, null); eq(acts[2].text, "一項だけ");
+});
+
 test("oneonone: importData の replace と merge", (MK) => {
   // 観点: replace は全置換、merge は id 一致で上書きしつつ既存を残す
   const O = MK.logic.oneonone;

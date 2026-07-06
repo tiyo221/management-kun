@@ -195,6 +195,98 @@
     save(d);
   }
 
+  // ---- CSV（整形・取込はロジック。ファイル選択/DLは view）spec §4.6.2 / spec/modules/oneonone.md ----
+  /**
+   * 日付を "YYYY-MM-DD" に正規化する。形式が違う・空なら "" を返す。
+   * @param {string} v - 日付候補
+   * @returns {string} 正規化した日付、または ""
+   */
+  function normalizeCSVDate(v) { const s = String(v == null ? "" : v).trim(); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ""; }
+  /**
+   * 温度感表記を内部キーへ寄せる。key（good/normal/bad）またはラベル（😊 good 等）を寛容解釈。
+   * 空・不明は null（温度感は任意）。
+   * @param {string} v - 温度感表記
+   * @returns {("good"|"normal"|"bad"|null)} 温度感キー、または null
+   */
+  function moodFromCSV(v) {
+    const s = String(v == null ? "" : v).trim().toLowerCase();
+    if (!s) return null;
+    const hit = MOODS.find((m) => s.indexOf(m.key) >= 0);
+    return hit ? hit.key : null;
+  }
+  /**
+   * アクション配列を1セル文字列へ整形する。1アクション＝1行、`状態|期限|やること` の順
+   * （やることは最後尾なので `|` を含んでもよい）。状態は done/todo、期限は空可。
+   * @param {OneOnOneAction[]} actions - アクション配列
+   * @returns {string} セル文字列（改行区切り）
+   */
+  function actionsToCell(actions) {
+    return (actions || [])
+      .map((a) => (a.done ? "done" : "todo") + "|" + (a.due || "") + "|" + (a.text || ""))
+      .join("\n");
+  }
+  /**
+   * 1セル文字列をアクション配列へ復元する。1行＝1アクション、`状態|期限|やること`。
+   * 区切りが1つ・0個でも寛容に解釈する（1個＝状態+やること、0個＝やることのみ）。
+   * text が空の行は除外する（normalizeActions でも再度除外される）。
+   * @param {string} cell - セル文字列
+   * @returns {{text: string, done: boolean, due: (string|null)}[]} アクション配列（id は未採番）
+   */
+  function parseActionsCell(cell) {
+    const s = String(cell == null ? "" : cell);
+    if (!s.trim()) return [];
+    return s.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+      const parts = line.split("|");
+      let state = "", due = "", text = "";
+      if (parts.length >= 3) { state = parts[0]; due = parts[1]; text = parts.slice(2).join("|"); }
+      else if (parts.length === 2) { state = parts[0]; text = parts[1]; }
+      else { text = parts[0]; }
+      state = state.trim().toLowerCase();
+      const d = normalizeCSVDate(due);
+      return { text: text.trim(), done: state === "done" || state === "完了" || state === "x", due: d || null };
+    }).filter((a) => a.text);
+  }
+
+  /**
+   * 1on1 エントリを CSV 行データ（ヘッダ＋各行）に整形する。メンバーは名前で参照。
+   * @returns {string[][]} 2次元配列の CSV 行データ
+   */
+  function buildCSVRows() {
+    const nameOf = (mid) => { if (!mid) return ""; const m = MK.people.get(mid); return m ? m.name : ""; };
+    const rows = [["メンバー", "実施日", "話したこと", "温度感", "アクション"]];
+    entries().forEach((e) => rows.push([
+      nameOf(e.memberId), e.date || "", e.body || "", e.mood || "", actionsToCell(e.actions),
+    ]));
+    return rows;
+  }
+  /**
+   * CSV 行データから 1on1 エントリを取り込み、全置換して保存する。メンバー名が空の行はスキップする。
+   * メンバーは名前で名寄せ（未登録は新規作成・spec §8.4）。温度感は key/ラベル両対応・不明は null。
+   * 実施日は YYYY-MM-DD のみ採用し、不正・空は取込日。アクションは1セル複数行を復元する。
+   * @param {string[][]} rows - CSV 行データ（1行目はヘッダ）
+   * @returns {{ok: number, skip: number}} 取り込み件数・スキップ件数
+   * ※ store へ保存する副作用あり（全置換）。未登録メンバー名は MK.people へ作成する副作用あり。
+   */
+  function applyCSV(rows) {
+    const now = MK.util.nowISO();
+    const today = MK.util.todayISO();
+    let ok = 0, skip = 0;
+    const list = [];
+    rows.slice(1).forEach((r) => {
+      const name = (r[0] || "").trim();
+      if (!name) { skip++; return; } // メンバーは必須（名寄せ対象）
+      list.push({
+        id: MK.util.uid("o"), memberId: MK.people.resolveOrCreate(name),
+        date: normalizeCSVDate(r[1]) || today, body: (r[2] || "").trim(),
+        actions: normalizeActions(parseActionsCell(r[4])), mood: moodFromCSV(r[3]),
+        createdAt: now, updatedAt: now,
+      });
+      ok++;
+    });
+    save({ version: 1, entries: list });
+    return { ok, skip };
+  }
+
   /**
    * エクスポート用に現在の全データを返す。
    * @returns {OneOnOneData} 現在の oneonone データ
@@ -267,6 +359,7 @@
   MK.logic.oneonone = {
     MOODS, load, save, entries, entriesOf, openActionsOf, openActionCount, lastDateOf,
     normalizeActions, addEntry, updateEntry, removeEntry, toggleAction,
+    moodFromCSV, actionsToCell, parseActionsCell, buildCSVRows, applyCSV,
     summary, exportData, importData, loadSample,
   };
 })();
