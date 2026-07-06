@@ -222,6 +222,10 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-section-title { font-size: 22px; font-weight: 600; margin: 0 0 var(--space-lg); }
 .mk-toolbar { display: flex; gap: var(--space-xs); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-lg); }
 .mk-empty { color: var(--color-steel); padding: var(--space-xxl); text-align: center; }
+/* 空状態ガイド（Issue #41）— タイトル（ink・太字）＋ヒント（steel）＋主要操作ボタン */
+.mk-empty-title { font-weight: 600; color: var(--color-ink); }
+.mk-empty-hint { margin-top: var(--space-xs); font-size: 14px; }
+.mk-empty .btn { margin-top: var(--space-md); }
 .mk-done { text-decoration: line-through; color: var(--color-muted); }
 
 /* ---- スコープ次元スイッチャ（spec §3.7）---- */

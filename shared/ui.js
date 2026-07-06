@@ -75,7 +75,17 @@
     if (opts.flush) attrs.style = "padding:0;overflow:hidden;";
     return el("div", attrs, children || []);
   };
-  ui.emptyState = function (text) { return el("div", { class: "mk-empty", text: text }); };
+  // 空状態ガイド（Issue #41）。文字列は従来どおり1行表示。
+  // オブジェクト { title, hint, action:{label, onClick, variant} } で「次の一手」を案内する。
+  // 文言は呼び出し側（各モジュール）が持つ。器のレイアウト/トーンだけここで共通化する。
+  ui.emptyState = function (arg) {
+    if (arg == null || typeof arg === "string") return el("div", { class: "mk-empty", text: arg || "" });
+    const box = el("div", { class: "mk-empty" });
+    if (arg.title) box.appendChild(el("div", { class: "mk-empty-title", text: arg.title }));
+    if (arg.hint) box.appendChild(el("div", { class: "mk-empty-hint", text: arg.hint }));
+    if (arg.action) box.appendChild(ui.button(arg.action.label, { variant: arg.action.variant || "btn-primary", onClick: arg.action.onClick }));
+    return box;
+  };
   ui.statsRow = function (items) {
     return el("div", { class: "card" }, (items || []).map((it) =>
       el("div", { class: "mk-stat" }, [el("div", { class: "num", text: String(it.num) }), el("div", { class: "lbl", text: it.label })])));
