@@ -168,11 +168,33 @@ MK.registerModule("todo", {
   description: "日々のやることを整理して前に進める", // HOME が描画する1行説明（何ができるか。§3.6 / Issue #40）
   mount(container, ctx) { /* 描画 */ },
   unmount() { /* DOM破棄 */ },
+  summary() { return /* {...} */; },             // 任意。HOME サマリー（§3.6）
+  searchItems() { return /* [...] */; },         // 任意。グローバル検索の対象レコード（§3.5.1）
   exportData() { return /* data */; },          // JSONエンベロープ modules.<id>.data 用
   importData(data, mode) { /* "replace" | "merge" */ },
   migrate(data, fromVersion) { return data; }    // §4.5
 });
 ```
+
+#### 3.5.1 グローバル検索と `searchItems()` 契約（任意。Issue #82）
+
+シェルは **Ctrl+K（Mac: Cmd+K）** でコマンドパレットを開き、モジュール横断でインクリメンタル検索する（キーボードのみで完結＝↑↓選択・Enter 決定・Esc 閉じる。§10.2）。検索対象はシェルが1本の配列に集約する:
+
+- **マスタ**: 人（People）・プロジェクト（Project）・プロダクト（Product）。到達可能なマスタ（配布プロファイルで有効なもの）だけを候補にする。
+- **モジュール名**（画面ジャンプ）: ナビと同じ条件（カタログ既知・非表示除外・到達可能）。
+- **各モジュールの主要レコード**: 各 def が**任意**で `searchItems()` を実装して供給する。
+
+```js
+searchItems() {
+  return [
+    { id: "t_xxx", label: "ログイン画面を直す", sub: "Next · 認証基盤", keywords: ["OAuth"] }
+  ];
+}
+```
+
+- `label`（主・必須）／`sub`（補助表示・任意）／`keywords`（追加の探索対象・任意）。選択するとそのモジュールへ遷移する（`route(<id>)`）。
+- **`searchItems` は任意契約**（`summary()` と同型）。未実装・例外・不正形式のモジュールはシェルが無視し、候補が増えないだけで壊れない。
+- マッチング（正規化・部分一致スコア・複数トークン AND・並べ替え）は DOM 非依存の純関数 `MK.search`（`shared/search.js`）に置き、テスト可能にする（`test/search.test.js`）。実装例: todo=未完タスク、questions=未解決の質問。
 
 ホストが `mount(container, ctx)` に渡す `ctx`:
 

@@ -284,11 +284,27 @@
     ], attention };
   }
 
+  /**
+   * グローバル検索（コマンドパレット）用のレコードを返す（任意契約 def.searchItems・spec §3.5）。
+   * 完了済み（done）は除き、進行中のタスクだけを候補にする。label＝タイトル、sub＝ステータス＋PJ、
+   * keywords にメモを含めて本文検索できるようにする。
+   * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
+   */
+  function searchItems() {
+    const label = (key) => { const s = STATUSES.find((x) => x.key === key); return s ? s.label : key; };
+    return tasks().filter((t) => t.status !== "done").map((t) => {
+      const pj = projectNameOf(t.projectId);
+      return { id: t.id, label: t.title,
+        sub: [label(t.status), pj].filter(Boolean).join(" · "),
+        keywords: [t.notes].filter(Boolean) };
+    });
+  }
+
   MK.logic = MK.logic || {};
   MK.logic.todo = {
     STATUSES, load, save, tasks, counts, filtered,
     addTask, updateTask, toggleDone, removeTask,
     projectNameOf, resolveProject, statusFromCSV, buildCSVRows, applyCSV, dueCounts, summary,
-    exportData, importData, loadSample,
+    searchItems, exportData, importData, loadSample,
   };
 })();

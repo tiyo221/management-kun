@@ -220,6 +220,26 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-modal-body { padding: var(--space-xl); }
 .mk-modal-foot { padding: var(--space-md) var(--space-xl); border-top: 1px solid var(--color-hairline); display: flex; justify-content: flex-end; gap: var(--space-xs); }
 
+/* ---- グローバル検索（コマンドパレット。Issue #82） ---- */
+.mk-palette-overlay { position: fixed; inset: 0; background: rgba(15,15,15,.35); display: flex; align-items: flex-start; justify-content: center; z-index: 600; padding: 10vh var(--space-md) var(--space-md); }
+.mk-palette { background: var(--color-canvas); border-radius: var(--rounded-lg); width: 100%; max-width: 560px; max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: rgba(15,15,15,.20) 0 20px 56px -8px; }
+.mk-palette-input { border: 0; border-bottom: 1px solid var(--color-hairline); padding: var(--space-md) var(--space-lg); font-size: 16px; color: var(--color-ink); background: transparent; outline: none; }
+.mk-palette-list { overflow-y: auto; padding: var(--space-xs); }
+.mk-palette-empty { padding: var(--space-lg); text-align: center; color: var(--color-steel); font-size: 14px; }
+.mk-palette-item { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-radius: var(--rounded-md); cursor: pointer; }
+.mk-palette-item.active { background: var(--color-surface); }
+.mk-palette-icon { flex: 0 0 auto; font-size: 16px; width: 20px; text-align: center; }
+.mk-palette-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mk-palette-label { font-size: 14px; color: var(--color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-palette-sub { font-size: 12px; color: var(--color-steel); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-palette-kind { flex: 0 0 auto; font-size: 11px; color: var(--color-steel); border: 1px solid var(--color-hairline); border-radius: var(--rounded-sm); padding: 1px 6px; }
+.mk-palette-kind:empty { display: none; }
+/* サイドバーの検索導線・topbar の検索ボタン */
+.mk-nav-search { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+.mk-nav-kbd { font-size: 11px; color: var(--color-steel); border: 1px solid var(--color-hairline); border-radius: var(--rounded-sm); padding: 0 5px; }
+.mk-topbar-search { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 10px; background: transparent; border: 1px solid var(--color-hairline); border-radius: var(--rounded-md); color: var(--color-ink); cursor: pointer; }
+.mk-topbar-search-hint { font-size: 11px; color: var(--color-steel); }
+
 /* ---- リスト/テーブル汎用 ---- */
 .mk-list { list-style: none; margin: 0; padding: 0; }
 .mk-row { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--color-hairline); background: var(--color-canvas); }
