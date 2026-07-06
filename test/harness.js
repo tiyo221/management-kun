@@ -47,24 +47,45 @@ function makeDocument() {
   };
 }
 
-const SCRIPTS = [
+// 共有資産（全構成で常にロードする土台）。
+const SHARED_SCRIPTS = [
   "shared/core.js", "shared/store.js", "shared/scope.js", "shared/io.js",
   "shared/people.js", "shared/projects.js", "shared/products.js", "shared/search.js", "shared/allocations.js", "shared/demands.js", "shared/ui.js", "shared/sample.js",
-  "modules/todo/logic.js", "modules/goals/logic.js", "modules/questions/logic.js", "modules/wbs/logic.js",
-  "modules/dashboard/logic.js",
-  "modules/skills/logic.js", "modules/workload/logic.js",
-  "modules/resource/logic.js", "modules/oneonone/logic.js",
-  "modules/techstack/logic.js",
-  "modules/releases/logic.js",
 ];
 
-function setup() {
+// モジュール id → logic.js。着脱テスト（Issue #123・spec §9.5 柱1）でサブセット構成を
+// 作れるよう一覧化する。既定（setup() 引数なし）では全モジュールを従来と同じ順序でロードし、
+// 既存テスト・挙動は不変とする。view.js は DOM を触るためここには含めない（logic＋core 層まで）。
+const MODULE_LOGIC = {
+  todo: "modules/todo/logic.js",
+  goals: "modules/goals/logic.js",
+  questions: "modules/questions/logic.js",
+  wbs: "modules/wbs/logic.js",
+  dashboard: "modules/dashboard/logic.js",
+  skills: "modules/skills/logic.js",
+  workload: "modules/workload/logic.js",
+  resource: "modules/resource/logic.js",
+  oneonone: "modules/oneonone/logic.js",
+  techstack: "modules/techstack/logic.js",
+  releases: "modules/releases/logic.js",
+};
+const ALL_MODULE_IDS = Object.keys(MODULE_LOGIC);
+
+// opts.modules: ロードするモジュール id の配列（未指定＝全モジュール＝従来挙動）。
+// サブセットを渡すと「そのモジュールだけ搭載した構成」で起動を再現できる。
+function setup(opts) {
+  opts = opts || {};
+  const ids = opts.modules || ALL_MODULE_IDS;
+  ids.forEach((id) => {
+    if (!(id in MODULE_LOGIC)) throw new Error("unknown module id: " + id);
+  });
   global.window = {};
   global.localStorage = makeLocalStorage();
   global.document = makeDocument();
   global.requestAnimationFrame = (f) => { if (f) f(); return 0; };
   const rootDir = path.join(__dirname, "..");
-  SCRIPTS.forEach((rel) => {
+  const scripts = SHARED_SCRIPTS.concat(ids.map((id) => MODULE_LOGIC[id]));
+  scripts.forEach((rel) => {
     const code = fs.readFileSync(path.join(rootDir, rel), "utf8");
     vm.runInThisContext(code, { filename: rel });
   });
@@ -77,4 +98,4 @@ function reset(MK) {
   MK.store._cache = {};
 }
 
-module.exports = { setup, reset };
+module.exports = { setup, reset, ALL_MODULE_IDS };

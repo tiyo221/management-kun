@@ -147,6 +147,7 @@ modules/
 **動作・テスト**
 - [ ] `node --check` 通過。`file://` で外部通信ゼロ・依存ゼロ。全モジュール切替・サンプル投入・バックアップで確認。
 - [ ] ロジックの自動テストが通る（`node test/run.js`）。変更したモジュール＋依存側をテスト（[`TESTING.md`](TESTING.md)）。バグ修正には再発防止テストを追加。
+- [ ] 着脱耐性の手動チェック（DOM 層・spec §9.5 柱1）: `MK_CONFIG` からモジュールを1つ外して `file://` で開き、HOME・全画面・検索が壊れないことを確認（logic＋core 層は `test/module-detach.test.js` が担保）。
 
 **ドキュメント**
 - [ ] 作業中に参照したドキュメントと実装・現状の食い違いを放置していない（同じ PR で更新した or `[core]`・`documentation` ラベルの Issue 化した。[`CLAUDE.md`](CLAUDE.md) の開発ワークフロー）。
