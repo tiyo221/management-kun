@@ -262,10 +262,24 @@
     ], attention };
   }
 
+  /**
+   * グローバル検索（コマンドパレット）用のレコードを返す（任意契約 def.searchItems・spec §3.5）。
+   * 解決済み（resolved）は除き、未解決・調査中の質問だけを候補にする。label＝タイトル、
+   * sub＝ステータス、keywords に詳細・タグを含めて本文検索できるようにする。
+   * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
+   */
+  function searchItems() {
+    const label = (key) => { const s = STATUSES.find((x) => x.key === key); return s ? s.label : key; };
+    return items().filter((it) => it.status !== "resolved").map((it) => ({
+      id: it.id, label: it.title, sub: label(it.status),
+      keywords: [it.detail].concat(it.tags || []).filter(Boolean),
+    }));
+  }
+
   MK.logic = MK.logic || {};
   MK.logic.questions = {
     STATUSES, normalizeStatus, load, save, items, counts, filtered,
     addItem, updateItem, removeItem, resolvedThisWeek, summary,
-    buildCSVRows, applyCSV, exportData, importData, loadSample,
+    searchItems, buildCSVRows, applyCSV, exportData, importData, loadSample,
   };
 })();
