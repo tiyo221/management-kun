@@ -77,20 +77,38 @@
   function items() { return load().items; }
 
   /**
-   * ステータス別および全体のアイテム件数を集計する。
-   * @returns {Object.<string, number>} `all` と各ステータスキーをキーに持つ件数マップ
+   * アイテムがナレッジ（再利用できる資産）かを判定する。
+   * ナレッジの条件は「解決済み（resolved）かつ 後で読める答え（resolvedNote）を持つ」こと。
+   * 答えを残さず閉じただけ（resolved・note 空）はナレッジではない（Issue #81）。
+   * @param {QuestionItem} it - 判定対象アイテム
+   * @returns {boolean} ナレッジなら true
+   */
+  function isKnowledge(it) {
+    return !!it && it.status === "resolved" && MK.util.normalizeKey(it.resolvedNote) !== "";
+  }
+
+  /**
+   * ステータス別・全体・ナレッジのアイテム件数を集計する。
+   * `knowledge` は {@link isKnowledge} を満たす件数（＝答えありの resolved）。
+   * @returns {Object.<string, number>} `all` / 各ステータスキー / `knowledge` を持つ件数マップ
    */
   function counts() {
-    const c = { all: 0 };
+    const c = { all: 0, knowledge: 0 };
     STATUSES.forEach((s) => (c[s.key] = 0));
-    items().forEach((it) => { c.all++; c[it.status] = (c[it.status] || 0) + 1; });
+    items().forEach((it) => {
+      c.all++;
+      c[it.status] = (c[it.status] || 0) + 1;
+      if (isKnowledge(it)) c.knowledge++;
+    });
     return c;
   }
 
   /**
    * ステータスと検索語でアイテムを絞り込む。
+   * 検索語はタイトル・詳細・タグに加え、解決内容（resolvedNote）も対象にする。
+   * これにより「わかった」タブがナレッジ（FAQ）ビューとして、回答本文からも引ける。
    * @param {string} filter - 絞り込むステータスキー（"all" または未指定で全件）
-   * @param {string} search - タイトル・詳細・タグを対象とする検索語（名寄せキーで部分一致）
+   * @param {string} search - タイトル・詳細・タグ・解決内容を対象とする検索語（名寄せキーで部分一致）
    * @returns {QuestionItem[]} 条件に合致したアイテム一覧
    */
   function filtered(filter, search) {
@@ -100,9 +118,19 @@
     if (q) list = list.filter((it) =>
       MK.util.normalizeKey(it.title).includes(q) ||
       MK.util.normalizeKey(it.detail).includes(q) ||
+      MK.util.normalizeKey(it.resolvedNote).includes(q) ||
       (it.tags || []).some((t) => MK.util.normalizeKey(t).includes(q)));
     return list;
   }
+
+  /**
+   * ナレッジ（答えありの解決済み）だけをキーワードで絞り込んで返す。
+   * 答えを残さず閉じただけの resolved は含めない（{@link isKnowledge}・B案：棚の純度優先）。
+   * キーワードはタイトル・詳細・タグ・解決内容に部分一致する。
+   * @param {string} [search] - 絞り込みキーワード（省略でナレッジ全件）
+   * @returns {QuestionItem[]} キーワードに合致したナレッジ一覧
+   */
+  function knowledge(search) { return filtered("resolved", search).filter(isKnowledge); }
 
   /**
    * わからないことを1件追加して保存する（先頭に挿入、status は "open"）。
@@ -142,6 +170,18 @@
     it.updatedAt = now;
     save(d);
   }
+  /**
+   * 指定アイテムを「わかった（resolved）」にし、解決内容を記録する。未解決／調査中から
+   * ナレッジへ移す導線用の薄いラッパ（{@link updateItem} が resolvedAt を設定する）。
+   * @param {string} id - 対象アイテムID
+   * @param {string} [note] - 解決内容（前後空白は trim。省略で空のまま）
+   * @returns {void}
+   * ※ store へ保存する副作用あり。
+   */
+  function resolve(id, note) {
+    updateItem(id, { status: "resolved", resolvedNote: (note || "").trim() });
+  }
+
   /**
    * 指定アイテムを削除して保存する。
    * @param {string} id - 対象アイテムID
@@ -264,22 +304,24 @@
 
   /**
    * グローバル検索（コマンドパレット）用のレコードを返す（任意契約 def.searchItems・spec §3.5）。
-   * 解決済み（resolved）は除き、未解決・調査中の質問だけを候補にする。label＝タイトル、
-   * sub＝ステータス、keywords に詳細・タグを含めて本文検索できるようにする。
+   * 候補はバックログ（未解決・調査中）＋ナレッジ（答えありの解決済み）。#81 の狙いが再利用導線
+   * であるため、ナレッジはグローバル検索から引けるようにする。答え未記入の「わかった」は再利用
+   * 対象がないので除外する。label＝タイトル、sub＝ナレッジ or ステータス、keywords に詳細・答え・
+   * タグを含めて本文検索できるようにする。
    * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
    */
   function searchItems() {
     const label = (key) => { const s = STATUSES.find((x) => x.key === key); return s ? s.label : key; };
-    return items().filter((it) => it.status !== "resolved").map((it) => ({
-      id: it.id, label: it.title, sub: label(it.status),
-      keywords: [it.detail].concat(it.tags || []).filter(Boolean),
+    return items().filter((it) => it.status !== "resolved" || isKnowledge(it)).map((it) => ({
+      id: it.id, label: it.title, sub: isKnowledge(it) ? "ナレッジ" : label(it.status),
+      keywords: [it.detail, it.resolvedNote].concat(it.tags || []).filter(Boolean),
     }));
   }
 
   MK.logic = MK.logic || {};
   MK.logic.questions = {
-    STATUSES, normalizeStatus, load, save, items, counts, filtered,
-    addItem, updateItem, removeItem, resolvedThisWeek, summary,
+    STATUSES, normalizeStatus, load, save, items, counts, filtered, knowledge, isKnowledge,
+    addItem, updateItem, removeItem, resolve, resolvedThisWeek, summary,
     searchItems, buildCSVRows, applyCSV, exportData, importData, loadSample,
   };
 })();

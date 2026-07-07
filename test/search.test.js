@@ -85,13 +85,20 @@ test("todo.searchItems: 未完タスクのみを label/sub/keywords 付きで返
   assert(login.keywords.indexOf("OAuth まわり") >= 0, "メモを keywords に含む");
 });
 
-test("questions.searchItems: 未解決の質問のみを返す", (MK) => {
-  MK.logic.questions.load();
-  MK.logic.questions.addItem("Kafka の再送設計");
-  const q = MK.logic.questions.items()[0];
-  MK.logic.questions.updateItem(q.id, { status: "resolved" });
-  MK.logic.questions.addItem("gRPC のタイムアウト");
-  const rows = MK.logic.questions.searchItems();
+test("questions.searchItems: 未解決とナレッジを返し、答えなしの解決済みは除外", (MK) => {
+  const Q = MK.logic.questions;
+  Q.addItem("Kafka の再送設計"); // 答えなしで解決 → 再利用対象なし・除外
+  const closed = Q.items()[0];
+  Q.updateItem(closed.id, { status: "resolved" });
+  Q.addItem("gRPC のタイムアウト"); // 未解決 → 含む
+  Q.addItem("HTTP 冪等性とは"); // ナレッジ化 → 含む
+  const know = Q.items().find((x) => x.title === "HTTP 冪等性とは");
+  Q.resolve(know.id, "同じ操作を何度呼んでも結果が変わらない性質");
+  const rows = Q.searchItems();
   assert(rows.some((r) => r.label === "gRPC のタイムアウト"), "未解決を含む");
-  assert(!rows.some((r) => r.label === "Kafka の再送設計"), "resolved は除外");
+  assert(rows.some((r) => r.label === "HTTP 冪等性とは"), "ナレッジを含む");
+  assert(!rows.some((r) => r.label === "Kafka の再送設計"), "答えなしの解決済みは除外");
+  const k = rows.find((r) => r.label === "HTTP 冪等性とは");
+  eq(k.sub, "ナレッジ");
+  assert(k.keywords.some((w) => w.includes("何度呼んでも")), "keywords に答え本文を含む");
 });

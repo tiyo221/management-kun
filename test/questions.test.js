@@ -30,6 +30,51 @@ test("questions: resolved 遷移で resolvedAt が付き、戻すと null", (MK)
   eq(Q.items()[0].resolvedAt, null);
 });
 
+test("questions: filtered は解決内容（resolvedNote）も検索対象にする", (MK) => {
+  // 観点: ナレッジ用途。回答本文のキーワードでも引ける。タイトル/タグに無い語で resolvedNote から命中
+  const Q = MK.logic.questions;
+  Q.addItem("Promise の違い");
+  const it = Q.items()[0];
+  Q.resolve(it.id, "allSettled は全件の結果を待つ");
+  eq(Q.filtered("all", "allSettled").length, 1); // 回答本文から命中
+  eq(Q.filtered("all", "存在しない語").length, 0);
+  // resolvedNote 未設定（旧データ）でも壊れない
+  Q.addItem("未解決のまま");
+  eq(Q.filtered("all", "allSettled").length, 1);
+});
+
+test("questions: knowledge は答えありの解決済みだけを絞り込む（答えなしは除外）", (MK) => {
+  // 観点: ナレッジ = resolved かつ resolvedNote あり。open/investigating も答えなし resolved も含めない
+  const Q = MK.logic.questions;
+  Q.addItem("解決するもの");
+  Q.addItem("未解決のもの");
+  Q.addItem("答えなしで閉じたもの");
+  const done = Q.items().find((x) => x.title === "解決するもの");
+  Q.resolve(done.id, "答え: これはナレッジ");
+  // 答えを残さず閉じた resolved（＝ナレッジではない）
+  const closed = Q.items().find((x) => x.title === "答えなしで閉じたもの");
+  Q.updateItem(closed.id, { status: "resolved" });
+  eq(Q.counts().resolved, 2); // resolved は2件
+  eq(Q.counts().knowledge, 1); // うちナレッジは答えありの1件だけ
+  eq(Q.knowledge().length, 1);
+  eq(Q.knowledge("ナレッジ").length, 1);
+  eq(Q.knowledge("未解決").length, 0); // 未解決タイトルはヒットしない
+  eq(Q.isKnowledge(Q.items().find((x) => x.title === "解決するもの")), true);
+  eq(Q.isKnowledge(Q.items().find((x) => x.title === "答えなしで閉じたもの")), false); // 答えなしはナレッジではない
+});
+
+test("questions: resolve は resolved 化と resolvedNote 記録と resolvedAt 設定", (MK) => {
+  // 観点: 未解決→ナレッジ導線。resolve で status/resolvedNote/resolvedAt が揃う。note は trim
+  const Q = MK.logic.questions;
+  Q.addItem("解決対象");
+  const it = Q.items()[0];
+  Q.resolve(it.id, "  余白付きの答え  ");
+  const after = Q.items()[0];
+  eq(after.status, "resolved");
+  eq(after.resolvedNote, "余白付きの答え");
+  assert(after.resolvedAt, "resolvedAt should be set");
+});
+
 test("questions: summary は未解決件数と今週わかった件数", (MK) => {
   // 観点: summary.stats[0]=未解決, stats[1]=今週わかった。今日解決＝今週にカウント
   const Q = MK.logic.questions;
