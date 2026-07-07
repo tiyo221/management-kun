@@ -28,8 +28,9 @@
     const c = L().counts();
     const tabsBar = ui.toolbar([]);
     tabsBar.appendChild(pill("全て", "all", c.all));
-    tabsBar.appendChild(pill("未解決", "open", c.open));
-    tabsBar.appendChild(pill("調査中", "investigating", c.investigating));
+    // 未解決/調査中はバックログ。resolved は素の状態タブを出さず「ナレッジ」（答えあり）に集約する
+    L().STATUSES.filter((s) => s.key !== "resolved")
+      .forEach((s) => tabsBar.appendChild(pill(s.label, s.key, c[s.key])));
     tabsBar.appendChild(pill("ナレッジ", "knowledge", c.knowledge));
     const searchBox = ui.input({ placeholder: "検索…（タイトル・タグ・答え）", value: search });
     searchBox.style.maxWidth = "220px";
