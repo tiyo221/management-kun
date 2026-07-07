@@ -468,7 +468,7 @@
     // 人マスタ
     if (ALLOWED["master-people"] && MK.people) {
       MK.people.all().forEach((m) => items.push({ kind: "person", icon: "👤", label: m.name,
-        sub: [m.role, m.note].filter(Boolean).join(" / ") || "人（マスタ）", view: "master-people" }));
+        sub: [m.role, m.note].filter(Boolean).join(" / ") || "人（マスタ）", view: "master-people", entityId: m.id }));
     }
     // プロジェクトマスタ
     if (ALLOWED["master-projects"] && MK.projects) {
@@ -525,7 +525,10 @@
     }
     function activate(item) {
       close();
-      if (item) route(item.view);
+      if (!item) return;
+      // 人を選んだら一覧ではなく集約ビュー（詳細）を開く（Issue #83）。
+      if (item.kind === "person" && item.entityId) peopleDetailId = item.entityId;
+      route(item.view);
     }
     function renderList() {
       list.innerHTML = "";
@@ -588,7 +591,8 @@
 
   function navItem(label, view) {
     const b = el("button", { class: "mk-nav-item" + (current === view ? " active" : ""), text: label });
-    b.addEventListener("click", () => { route(view); closeSidebar(); });
+    // ナビからの遷移は常にトップ（人マスタなら一覧）を出す。開きっぱなしの人詳細（#83）はここで畳む。
+    b.addEventListener("click", () => { peopleDetailId = null; route(view); closeSidebar(); });
     return b;
   }
 
@@ -671,7 +675,15 @@
   }
 
   // ---- マスタ管理（人＝ピープル / プロジェクト＝デリバリー。ドメイン別のビューに分離。spec §6.4）----
+  // 開いている人詳細の personId。null なら一覧。masters:changed 再描画をまたいで保持する（productFilter と同様）。
+  let peopleDetailId = null;
   function renderPeopleView() {
+    // 詳細を開いている場合はそちらを描画（対象が削除されていたら一覧へ退避）。
+    if (peopleDetailId) {
+      const person = MK.people.get(peopleDetailId);
+      if (person) { renderPersonDetail(person); return; }
+      peopleDetailId = null;
+    }
     main.appendChild(el("h2", { class: "mk-section-title", text: "👤 人（マスタ）" }));
     const body = el("div", {});
     main.appendChild(body);
@@ -682,6 +694,114 @@
     const body = el("div", {});
     main.appendChild(body);
     renderProjects(body);
+  }
+
+  // ---- 人の詳細（関連情報の集約ビュー。Issue #83 / spec §3.6.1・§9.5 柱1）----
+  // その人に紐づく各モジュールの概況を「読み取り専用の集約＋各モジュールへの遷移」で一望する。
+  // 各枠は他モジュールをハード参照せず MK.readEntitySummary（"person", personId）経由で問い合わせる。
+  //  - null（未搭載・未ロード・summaryFor 未実装・例外）→ 枠を黙って省く（疎結合。§9.5 保証3）
+  //  - { empty: true } → 枠は出すが空状態案内（該当データ無し）
+  //  - stats あり → 集約値を表示し、該当モジュールへ「開く →」で遷移
+  // プロジェクト側の集約は dashboard（#78・project-scoped）が担い、ここでは重複させない（§9.6 判断記録）。
+  function renderPersonDetail(person) {
+    main.appendChild(el("h2", { class: "mk-section-title", text: "👤 " + person.name }));
+    const back = el("button", { class: "btn btn-ghost", text: "← 人マスタ一覧へ" });
+    back.addEventListener("click", () => { peopleDetailId = null; route("master-people"); });
+    main.appendChild(el("div", { class: "mk-toolbar" }, [back]));
+
+    const cards = [personInfoCard(person)];
+    // 登録済みモジュールを表示順（moduleOrder）に走査。非表示モジュールは集約から除く（要対応帯と同様）。
+    MK.moduleOrder.forEach((id) => {
+      if (isHiddenModule(id)) return;
+      const sum = MK.readEntitySummary(id, "person", person.id);
+      if (!sum) return;                       // 未搭載/未実装/例外 → 枠を黙って省く（疎結合）
+      cards.push(personSummaryCard(id, sum));
+    });
+    const prod = personProductsCard(person);  // 関連プロダクト（owner）。products マスタ未ロードなら null
+    if (prod) cards.push(prod);
+    main.appendChild(el("div", { class: "mk-stack" }, cards));
+  }
+
+  // 人の基本情報（マスタ: 役割・備考・表示色）＋編集導線。
+  function personInfoCard(person) {
+    const meta = [];
+    if (person.color) meta.push(el("span", {
+      style: "display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:" + person.color + ";vertical-align:middle;",
+    }));
+    if (person.role) meta.push(el("span", { class: "chip", text: person.role }));
+    const kids = [el("h3", { text: "基本情報" }), el("div", { style: "font-weight:600;", text: person.name })];
+    if (meta.length) kids.push(el("div", { class: "sub" }, meta));
+    if (person.note) kids.push(el("p", { class: "sub", text: person.note }));
+    const edit = el("button", { class: "btn btn-secondary", text: "編集" });
+    edit.addEventListener("click", () => editMemberThenRefresh(person));
+    kids.push(edit);
+    return el("div", { class: "card" }, [el("div", { class: "mk-stack" }, kids)]);
+  }
+  // 詳細から編集する。保存後は masters:changed で詳細が再描画されるため、専用の再描画は不要。
+  function editMemberThenRefresh(person) {
+    const f = {};
+    const body = el("div", {}, [
+      fld("氏名", (f.name = inp(person.name))),
+      fld("役割", (f.role = inp(person.role))),
+      fld("表示色", (f.color = inp(person.color, "color"))),
+      fld("備考", (f.note = inp(person.note))),
+    ]);
+    MK.ui.modal({ title: "メンバーを編集", body, actions: [
+      { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
+      { label: "保存", variant: "btn-primary", onClick: (c) => {
+          if (!f.name.value.trim()) { MK.ui.toast("氏名を入力してください", "error"); return; }
+          MK.people.update(person.id, { name: f.name.value.trim(), role: f.role.value, color: f.color.value, note: f.note.value });
+          c();
+        } },
+    ] });
+  }
+
+  // 1モジュール分の集約カード（summary() と同型の { empty, stats, attention? } を描画）。
+  function personSummaryCard(id, sum) {
+    const meta = META[id] || {};
+    const kids = [el("h3", { text: (meta.icon ? meta.icon + " " : "") + (meta.title || id) })];
+    if (sum.empty || !Array.isArray(sum.stats) || !sum.stats.length) {
+      kids.push(MK.ui.emptyState("この人の" + (meta.title || "データ") + "はまだありません。"));
+    } else {
+      kids.push(MK.ui.statsRow(sum.stats.map((s) => ({ num: s.value, label: s.label }))));
+    }
+    if (Array.isArray(sum.attention)) {
+      sum.attention.forEach((a) => { if (a && a.label) kids.push(el("p", { class: "sub", style: "color:var(--color-error);", text: "⚠ " + a.label })); });
+    }
+    // 遷移導線は集約ビュー側が組み立てる（契約には持たせない・§3.6.1）。到達可能なモジュールのみ。
+    if (ALLOWED[id] && !isHiddenModule(id)) {
+      const go = el("button", { class: "btn btn-secondary", text: (meta.title || id) + " を開く →" });
+      go.addEventListener("click", () => route(id));
+      kids.push(go);
+    }
+    return el("div", { class: "card" }, [el("div", { class: "mk-stack" }, kids)]);
+  }
+
+  // 関連プロダクト（owner。Product マスタ・§4.4）。products は共有マスタのため MK.products を直接参照する
+  // （モジュールではないので readEntitySummary の対象外）。未ロード（member 配布等）なら枠ごと出さない。
+  function personProductsCard(person) {
+    if (!MK.products) return null;
+    const owned = MK.products.all().filter((p) => p.ownerId === person.id);
+    const kids = [el("h3", { text: "📦 関連プロダクト（オーナー）" })];
+    if (!owned.length) {
+      kids.push(MK.ui.emptyState("この人がオーナーのプロダクトはありません。"));
+    } else {
+      const ul = el("ul", { class: "mk-list" });
+      owned.forEach((p) => {
+        const meta = [el("span", { class: "chip", text: productStatusLabel(p.status) })];
+        if (p.summary) meta.push(el("span", { class: "sub", text: p.summary }));
+        ul.appendChild(el("li", { class: "mk-row" }, [
+          el("div", { class: "grow" }, [el("div", { text: p.name }), el("div", { class: "sub" }, meta)]),
+        ]));
+      });
+      kids.push(ul);
+    }
+    if (ALLOWED["master-products"]) {
+      const go = el("button", { class: "btn btn-secondary", text: "プロダクトを開く →" });
+      go.addEventListener("click", () => route("master-products"));
+      kids.push(go);
+    }
+    return el("div", { class: "card" }, [el("div", { class: "mk-stack" }, kids)]);
   }
 
   // ---- 人の管理 ----
@@ -716,8 +836,11 @@
     if (!members.length) { host.appendChild(el("div", { class: "mk-empty", text: "メンバーがいません" })); return; }
     const ul = el("ul", { class: "mk-list" });
     members.forEach((m) => {
+      // 氏名クリックで関連情報の集約ビュー（詳細）へ（Issue #83）。
+      const nameLink = el("button", { class: "mk-linklike", text: m.name });
+      nameLink.addEventListener("click", () => { peopleDetailId = m.id; route("master-people"); });
       const info = el("div", { class: "grow" }, [
-        el("div", { text: m.name }),
+        nameLink,
         el("div", { class: "sub", text: [m.role, m.note].filter(Boolean).join(" / ") }),
       ]);
       const edit = el("button", { class: "btn btn-ghost", text: "編集" });

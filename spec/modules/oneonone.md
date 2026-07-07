@@ -18,6 +18,9 @@
 - メンバー選択のプルダウンにはアクティブなメンバー（`active !== false`）を並べる。退職メンバー（`active:false`）や、マスタから削除された参照切れメンバーでも、記録が残っていれば過去ログ閲覧のため選択肢に残す（退職者は「（退職）」表示）。
 - `memberId` の参照が壊れていても（該当メンバーがマスタに存在しなくても）モジュールは起動し、「(不明なメンバー)」として表示する。
 
+## エンティティ集約（`summaryFor`・[`spec.md`](../../spec.md) §3.6.1）
+人詳細の集約ビュー（#83）向けに `summaryFor("person", memberId)` を実装する。その人の**記録数・最終実施日・未完アクション数**を返す（記録が無ければ `empty:true`・最終実施は `"-"`）。`person` 以外の種別は該当なし（`empty:true`）で応える。集計は `MK.logic.oneonone.summaryFor`（純関数・`test/summary-for.test.js`）。なお 1on1 は機微情報のため `member.html` には登録しない（上記）＝配布プロファイルでは未搭載になり、人詳細でもこの枠はリーダが `null` を返して黙って省かれる（疎結合の実例）。
+
 ## 固有データ
 - `entries[]`: `{ id, memberId, date, body, actions[], mood, createdAt, updatedAt }`。`mk:module:oneonone:v1`。
   - `memberId`: People マスタ参照（必須）。

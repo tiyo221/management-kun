@@ -254,6 +254,31 @@
     ] };
   }
 
+  /**
+   * エンティティ単位の任意契約（spec §3.6.1）。人1人のスキル評価概況を返す。
+   * 対応するのは person のみ。その他のマスタ種別（project 等）は該当データ無し（empty）で応える
+   * （§3.6.1・"project" 決め打ち分岐をしない）。集約ビュー（#83）は MK.readEntitySummary 経由で読む。
+   * @param {string} entityType - マスタ種別（"person" のみ対応）
+   * @param {string} id - エンティティID（person なら memberId）
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   */
+  function summaryFor(entityType, id) {
+    if (entityType !== "person") return { empty: true, stats: [] };
+    const d = load();
+    let rated = 0, total = 0, coreStrong = 0, coreCount = 0;
+    skills().forEach((s) => {
+      const v = d.ratings[id + ":" + s.id];
+      const n = v && v !== "-" ? Number(v) : null;
+      if (n != null) { rated++; total += n; }
+      if (s.core) { coreCount++; if (n != null && (s.targetLevel == null || n >= s.targetLevel)) coreStrong++; }
+    });
+    return { empty: rated === 0, stats: [
+      { label: "評価済みスキル", value: rated },
+      { label: "平均レベル", value: rated ? (total / rated).toFixed(1) : "-" },
+      { label: "コア充足", value: coreCount ? coreStrong + "/" + coreCount : "-" },
+    ] };
+  }
+
   MK.logic = MK.logic || {};
-  MK.logic.skills = { load, save, skills, visibleSkills, members, rating, setRating, domainsOrder, avgLevel, countAtLeast, gapOf, clampLv, addSkill, updateSkill, removeSkill, buildSkillsCSVRows, applySkillsCSV, buildRatingsCSVRows, applyRatingsCSV, summary, exportData, importData, loadSample };
+  MK.logic.skills = { load, save, skills, visibleSkills, members, rating, setRating, domainsOrder, avgLevel, countAtLeast, gapOf, clampLv, addSkill, updateSkill, removeSkill, buildSkillsCSVRows, applySkillsCSV, buildRatingsCSVRows, applyRatingsCSV, summary, summaryFor, exportData, importData, loadSample };
 })();

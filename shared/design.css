@@ -165,6 +165,13 @@ a { color: var(--color-link-blue); }
 .btn-ghost:hover { background: var(--color-surface); }
 .btn-danger { color: var(--color-error); border-color: var(--color-hairline-strong); background: var(--color-canvas); }
 .btn:disabled { background: var(--color-hairline); color: var(--color-muted); cursor: default; }
+/* テキストをリンク風にみせるボタン（マスタ一覧→詳細への遷移など。Issue #83） */
+.mk-linklike {
+  font-family: inherit; font-size: inherit; font-weight: 600; line-height: inherit;
+  padding: 0; border: none; background: transparent; cursor: pointer;
+  color: var(--color-primary); text-align: left;
+}
+.mk-linklike:hover { text-decoration: underline; }
 
 /* ---- pill タブ ---- */
 .pill-tab {
