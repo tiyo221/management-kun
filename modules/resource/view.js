@@ -275,6 +275,7 @@
     mount(container, context) { ctx = context; root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; ctx = null; },
     summary() { return L().summary(); },
+    summaryFor(entityType, id) { return L().summaryFor(entityType, id); },
     loadSample,
   });
 })();

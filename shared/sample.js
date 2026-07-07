@@ -30,8 +30,12 @@
       MK.projects.replaceAll(PROJECTS.map((p) =>
         Object.assign({ id: MK.util.uid("p"), color: "", status: "active", note: "" }, p)));
       const now = MK.util.nowISO();
-      MK.products.replaceAll(PRODUCTS.map((p) =>
-        Object.assign({ id: MK.util.uid("prod"), status: "planned", owner: "", summary: "", repo: "", tags: [], createdAt: now, updatedAt: now }, p)));
+      // owner（旧・自由文字列）を People マスタへ名寄せして ownerId を持たせる（人詳細の関連プロダクト集約・#83 が使う）。
+      // resolve のみ（新規作成しない）＝ People に居ない owner（"自分" 等）は未設定のまま。
+      MK.products.replaceAll(PRODUCTS.map((p) => {
+        const owner = p.owner ? MK.people.resolve(p.owner) : null;
+        return Object.assign({ id: MK.util.uid("prod"), status: "planned", owner: "", ownerId: owner ? owner.id : null, summary: "", repo: "", tags: [], createdAt: now, updatedAt: now }, p);
+      }));
       // 各モジュールが loadSample を持っていれば呼ぶ（projects 投入後なので名寄せが既存に一致する）
       MK.moduleOrder.forEach((id) => {
         const mod = MK.modules[id];

@@ -264,7 +264,8 @@ summaryFor(entityType, id) {
 - **該当データ無し（empty）と契約未実装（null）を区別する**: そのモジュールが `summaryFor` を実装していても、当該エンティティに紐づくデータが無い場合は `{ empty: true, stats: [...] }` を返す。契約自体を実装しない（＝そのモジュールはエンティティ単位のサマリーを提供しない）場合はリーダが `null` を返す（下記）。
 - **汎用**: `entityType` はマスタ種別に汎用で、`"project"` 等の特定種別に分岐しない（§3.7.6）。対応しない種別には `{ empty: true, ... }`（データ無し）で応える。
 - 横断表示・集約ビューは他モジュールをハード参照せず、必ずコアのリーダ **`MK.readEntitySummary(moduleId, entityType, entityId)`** 経由で問い合わせる。リーダは `MK.readSummary`（§9.5）と同一原則で、**未搭載（`MK_CONFIG` から外した）・`summaryFor` 未実装・`summaryFor` が例外**のいずれでも `null` を返し、呼び手（#83）を壊さない。
-- 集計は logic 側の純関数に置きテスト可能にする（契約テスト `test/read-entity-summary.test.js`）。
+- 集計は logic 側の純関数に置きテスト可能にする（リーダの契約テスト `test/read-entity-summary.test.js`、各モジュールの集約ロジックは `test/summary-for.test.js`）。
+- **実装状況（#83）**: 消費者は**人詳細の集約ビュー**（シェルの `master-people` 詳細）。`skills` / `resource` / `oneonone` が `summaryFor("person", id)` を実装し、詳細画面は登録済みモジュールを `MK.readEntitySummary` で走査して `null` は省き・`empty` は空状態・`stats` は集約値＋「開く →」導線で描画する。プロジェクト側の集約は `dashboard`（#78・project-scoped）に一本化し master 側へは二重実装しない（役割分担は §9.6 の判断記録）。関連プロダクト（owner）は共有マスタ `MK.products` を直接参照する（モジュールではないため契約対象外）。
 
 ### 3.7 スコープ次元（横断 / 単位のスコープ軸）
 
@@ -624,7 +625,7 @@ Phase 2 の完了は次の2点で判定する。両方を満たしたら Phase 3
 
 | 日付 | 対象 | 判断 | 理由 |
 |---|---|---|---|
-| （まだ記録なし） | | | |
+| 2026-07-07 | 人・プロジェクト詳細の集約ビュー（#83）と プロジェクト・ダッシュボード（#78・`dashboard`） | **統合せず役割分担で共存**。人詳細＝**マスタ側**（`master-people`）の集約ビューとしてシェルに実装（新規）。プロジェクトの集約は既存 `dashboard`（project-scoped モジュール）に一本化し、**master 側にプロジェクト詳細は作らない**（重複回避）。人・プロジェクトどちらも同じ任意契約 `summaryFor(entityType,id)`＋リーダ `MK.readEntitySummary` を土台にする。 | People は参照マスタ（スコープ次元にしない・§3.7.1）ゆえ「その中に入る」dashboard 型の scoped ビューに載せられず、マスタ一覧からの詳細が自然。一方 Project はスコープ次元で既に `dashboard` が「1 PJ を主語に WBS 進捗・アサイン・関連プロダクトを集約」する器を持つため、同じ表示を master 側に二重実装しない。両者を1つの汎用契約で賄うことで柱1（§9.5）の実証を兼ねる。 |
 
 **廃止時の作法**: 廃止するモジュールは、まずモジュール単位で JSON エクスポート（`scope:"module"`）→ その後 `mk:module:<id>` キーを削除する。専用の廃止機構は作らない（手順として運用する）。
 

@@ -23,6 +23,7 @@
 - resource（要員計画）が「各モジュール内部を覗かない」制約（§3.7.5）を持つのは、People 主語の cross ビューを共有アロケーションだけで完結させ、WBS 内部（担当 `assigneeId`）に依存させないため。
 - dashboard は spec §9.2 / §14 が Phase 2 として明示していた**プロジェクト・ダッシュボードそのもの**であり、WBS の進捗を集約することが目的に含まれる（Issue #78 の受け入れ条件）。ただし依存は**一方向・読み取り専用**に限定する: dashboard が wbs の対象別データ（`MK.logic.wbs.exportData(projectId)`）を読むだけで、wbs は dashboard を一切知らない。wbs 側の独立性は保たれる。
 - 編集導線はすべて他モジュールへの遷移（`ctx.route`）で、dashboard 自身はどのマスタ・モジュールデータも書き換えない。
+- **人詳細の集約ビュー（#83）との役割分担**: プロジェクトを主語にした集約は本 dashboard に一本化し、マスタ側（`master-projects`）にプロジェクト詳細は作らない。人（People は参照マスタでスコープ次元にしない・§3.7.1）を主語にした集約は、マスタ側の**人詳細ビュー**（シェルの `master-people` 詳細）が担う。両者は同じ任意契約 `summaryFor(entityType,id)`＋リーダ `MK.readEntitySummary`（§3.6.1）を土台に共存する（判断記録は spec.md §9.6）。
 
 ## 共通マスタ関係
 - **Project マスタ**を参照（現在の対象＝`ctx.scope.entity`。基本情報の表示元）。

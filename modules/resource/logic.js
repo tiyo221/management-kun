@@ -261,6 +261,31 @@
     ] };
   }
 
+  /**
+   * エンティティ単位の任意契約（spec §3.6.1）。人1人の本日時点のアサイン状況を返す。
+   * 主表記は人（FTE。Issue #71）。割当が1人分（100%）を超える人は attention（warn）で申告する。
+   * 対応するのは person のみ。その他のマスタ種別（project 等）は該当データ無し（empty）で応える
+   * （§3.6.1・"project" 決め打ち分岐をしない。project 集約は dashboard #78 が担う）。
+   * @param {string} entityType - マスタ種別（"person" のみ対応）
+   * @param {string} id - エンティティID（person なら memberId）
+   * @param {string} [baseDate] - 基準日（YYYY-MM-DD、既定 本日）。決定的テスト用の注入点。
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention?: {label: string, severity: string}[]}}
+   */
+  function summaryFor(entityType, id, baseDate) {
+    if (entityType !== "person") return { empty: true, stats: [] };
+    const list = alloc();
+    const today = baseDate || MK.util.todayISO();
+    const mine = list.filter((a) => a.memberId === id);
+    const assigned = totalPercent(list, id, today);
+    const active = mine.filter((a) => a.startDate && a.endDate && a.startDate <= today && today <= a.endDate).length;
+    const out = { empty: mine.length === 0, stats: [
+      { label: "現在の割当", value: fteLabel(assigned) },
+      { label: "稼働中PJ", value: active + "件" },
+    ] };
+    if (assigned > DEFAULT_CAPACITY) out.attention = [{ label: "割当が1人分を超えています（" + fteLabel(assigned) + "）", severity: "warn" }];
+    return out;
+  }
+
   MK.logic = MK.logic || {};
-  MK.logic.resource = { DEFAULT_CAPACITY, alloc, demandsAll, members, targets, capacityOf, fteLabel, totalPercent, freeOn, monthsInHorizon, monthSample, targetDemandOn, targetSupplyOn, shortageMatrix, teamFreeOn, outsourcingByMonth, memberLoadByMonth, summary };
+  MK.logic.resource = { DEFAULT_CAPACITY, alloc, demandsAll, members, targets, capacityOf, fteLabel, totalPercent, freeOn, monthsInHorizon, monthSample, targetDemandOn, targetSupplyOn, shortageMatrix, teamFreeOn, outsourcingByMonth, memberLoadByMonth, summary, summaryFor };
 })();

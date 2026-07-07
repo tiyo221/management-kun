@@ -355,11 +355,29 @@
     ] };
   }
 
+  /**
+   * エンティティ単位の任意契約（spec §3.6.1）。人1人の 1on1 概況を返す。
+   * 対応するのは person のみ。その他のマスタ種別（project 等）は該当データ無し（empty）で応える
+   * （§3.6.1・"project" 決め打ち分岐をしない）。集約ビュー（#83）は MK.readEntitySummary 経由で読む。
+   * @param {string} entityType - マスタ種別（"person" のみ対応）
+   * @param {string} id - エンティティID（person なら memberId）
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   */
+  function summaryFor(entityType, id) {
+    if (entityType !== "person") return { empty: true, stats: [] };
+    const list = entriesOf(id);
+    return { empty: list.length === 0, stats: [
+      { label: "記録数", value: list.length },
+      { label: "最終実施", value: lastDateOf(id) || "-" },
+      { label: "未完アクション", value: openActionsOf(id).length },
+    ] };
+  }
+
   MK.logic = MK.logic || {};
   MK.logic.oneonone = {
     MOODS, load, save, entries, entriesOf, openActionsOf, openActionCount, lastDateOf,
     normalizeActions, addEntry, updateEntry, removeEntry, toggleAction,
     moodFromCSV, actionsToCell, parseActionsCell, buildCSVRows, applyCSV,
-    summary, exportData, importData, loadSample,
+    summary, summaryFor, exportData, importData, loadSample,
   };
 })();

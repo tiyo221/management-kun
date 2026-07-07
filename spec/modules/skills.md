@@ -12,6 +12,9 @@
 ## 共通マスタ関係
 **Member を People マスタから参照**（従来の自前 `members[]` を廃し `people.members` を使用）。Project は使わない。
 
+## エンティティ集約（`summaryFor`・[`spec.md`](../../spec.md) §3.6.1）
+人詳細の集約ビュー（#83）向けに `summaryFor("person", memberId)` を実装する。その人の**評価済みスキル数・平均レベル・コア充足（目標レベル以上のコアスキル数／コア総数）**を返す。評価が1件も無ければ `empty:true`。`person` 以外の種別は該当なし（`empty:true`）で応える（"project" 決め打ち分岐をしない）。集計は `MK.logic.skills.summaryFor`（純関数・`test/summary-for.test.js`）。
+
 ## 固有データ
 - `skills[]`（スキルマスタ）、`ratings`（キー `"<memberId>:<skillId>"`）。`mk:module:skills:v1`。
 - モジュール内部 ID は既存採番を踏襲（[`spec.md`](../../spec.md) §4.7）。
