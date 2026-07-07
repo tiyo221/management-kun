@@ -32,7 +32,7 @@
     L().STATUSES.filter((s) => s.key !== "resolved")
       .forEach((s) => tabsBar.appendChild(pill(s.label, s.key, c[s.key])));
     tabsBar.appendChild(pill("ナレッジ", "knowledge", c.knowledge));
-    const searchBox = ui.input({ placeholder: "検索…（タイトル・タグ・答え）", value: search });
+    const searchBox = ui.input({ placeholder: "検索…（タイトル・詳細・タグ・答え）", value: search });
     searchBox.style.maxWidth = "220px";
     searchBox.addEventListener("input", () => { search = searchBox.value; renderList(listHost); });
     tabsBar.appendChild(searchBox);
