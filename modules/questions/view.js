@@ -164,7 +164,7 @@
             L().updateItem(it.id, {
               title, detail: f.detail.value, status: f.status.value,
               tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
-              resolvedNote: f.resolvedNote.value,
+              resolvedNote: f.resolvedNote.value.trim(), // resolve() 経由と保存形を揃える
             });
             close(); render();
           } },
