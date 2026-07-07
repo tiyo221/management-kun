@@ -28,9 +28,8 @@
     const c = L().counts();
     const tabsBar = ui.toolbar([]);
     tabsBar.appendChild(pill("全て", "all", c.all));
-    // 未解決/調査中はバックログ。resolved は素の状態タブを出さず「ナレッジ」（答えあり）に集約する
-    L().STATUSES.filter((s) => s.key !== "resolved")
-      .forEach((s) => tabsBar.appendChild(pill(s.label, s.key, c[s.key])));
+    // 2軸: 未解決/調査中=バックログ、わかった=解決した全部（集約）、ナレッジ=そのうち答えありの部分集合
+    L().STATUSES.forEach((s) => tabsBar.appendChild(pill(s.label, s.key, c[s.key])));
     tabsBar.appendChild(pill("ナレッジ", "knowledge", c.knowledge));
     const searchBox = ui.input({ placeholder: "検索…（タイトル・詳細・タグ・答え）", value: search });
     searchBox.style.maxWidth = "220px";
@@ -60,14 +59,23 @@
     host.innerHTML = "";
     const list = filter === "knowledge" ? L().knowledge(search) : L().filtered(filter, search);
     if (!list.length) {
-      host.appendChild(ui.emptyState(filter === "knowledge"
-        ? "ナレッジはまだありません。解決した質問に答えを残すとここに貯まります"
-        : "わからないことはありません"));
+      host.appendChild(ui.emptyState(emptyMessage()));
       return;
+    }
+    // 「わかった」ビューは達成ログ。何件をナレッジ化できているかを一目で出す（2軸の可視化）
+    if (filter === "resolved") {
+      const c = L().counts();
+      host.appendChild(el("div", { class: "mk-know-progress sub", text: "ナレッジ化 " + c.knowledge + " / " + c.resolved }));
     }
     const ul = el("ul", { class: "mk-list" });
     list.forEach((it) => ul.appendChild(itemRow(it)));
     host.appendChild(ul);
+  }
+
+  function emptyMessage() {
+    if (filter === "knowledge") return "ナレッジはまだありません。解決した質問に答えを残すとここに貯まります";
+    if (filter === "resolved") return "まだ「わかった」はありません";
+    return "わからないことはありません";
   }
 
   function itemRow(it) {
@@ -99,23 +107,24 @@
     return card;
   }
 
-  // 「どう解決したか」を必ず残してナレッジ化し、ナレッジタブへ遷移する（答え必須）
+  // 解決＝「わかった」に移す。答えは任意。書けば即ナレッジ（→ナレッジタブ）、空ならキャプチャ待ちの
+  // わかった（→わかったタブ）。答え必須はナレッジ化の定義側（isKnowledge）で担保し、入口では強制しない。
   function openResolve(it) {
     const note = ui.textarea(it.resolvedNote || "");
     MK.ui.modal({
-      title: "どう解決した？（ナレッジにする）",
+      title: "解決する",
       body: ui.stack([
         el("div", { class: "sub", text: it.title }),
-        ui.field("答え（後で読んで分かるように書く）", note),
+        ui.field("答え（書くとナレッジになる。空でもOK・あとで書ける）", note),
       ]),
       actions: [
         { label: "キャンセル", variant: "btn-secondary", onClick: (close) => close() },
-        { label: "ナレッジにする", variant: "btn-primary", onClick: (close) => {
-            if (!note.value.trim()) { MK.ui.toast("どう解決したかを残してください", "error"); return; }
-            L().resolve(it.id, note.value);
-            filter = "knowledge";
+        { label: "解決にする", variant: "btn-primary", onClick: (close) => {
+            const v = note.value.trim();
+            L().resolve(it.id, v);
+            if (v) { filter = "knowledge"; MK.ui.toast("ナレッジに追加しました", "success"); }
+            else { filter = "resolved"; MK.ui.toast("「わかった」に移しました。あとで答えを書けます", "success"); }
             close(); render();
-            MK.ui.toast("ナレッジに追加しました", "success");
           } },
       ],
     });

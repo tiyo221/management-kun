@@ -263,6 +263,7 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-know-a { margin-top: var(--space-xxs); color: var(--color-slate); white-space: pre-wrap; }
 .mk-know-a::before { content: "A. "; color: var(--color-primary); font-weight: 600; }
 .mk-know-tags { margin-top: var(--space-xs); }
+.mk-know-progress { padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--color-hairline); font-weight: 600; }
 .mk-section-title { font-size: 22px; font-weight: 600; margin: 0 0 var(--space-lg); }
 .mk-toolbar { display: flex; gap: var(--space-xs); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-lg); }
 .mk-empty { color: var(--color-steel); padding: var(--space-xxl); text-align: center; }
