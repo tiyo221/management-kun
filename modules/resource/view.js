@@ -183,13 +183,15 @@
     const f = {
       member: ui.select(ms.map((m) => ({ value: m.id, label: m.name })), a ? a.memberId : (ms[0] && ms[0].id)),
       target: ui.select(opts.map((o) => ({ value: o.value, label: o.label })), a ? a.targetId : (opts[0] && opts[0].value)),
-      percent: ui.input({ type: "number", value: a ? a.percent : 50 }),
+      // 入力は人数（FTE）。保存は % のまま（×100）。既存レコードは percent/100 で初期表示（Issue #133）。
+      fte: ui.input({ type: "number", value: a ? a.percent / 100 : 0.5 }),
       start: ui.input({ type: "date", value: a ? a.startDate : "" }),
       end: ui.input({ type: "date", value: a ? a.endDate : "" }),
       note: ui.textarea(a ? a.note : ""),
     };
+    f.fte.step = "0.1"; f.fte.min = "0";
     MK.ui.modal({ title: a ? "アサインを編集" : "アサインを追加", body: ui.stack([
-      ui.field("メンバー", f.member), ui.field("プロジェクト", f.target), ui.field("割当（%・100=1人分）", f.percent),
+      ui.field("メンバー", f.member), ui.field("プロジェクト", f.target), ui.field("人数（0.5 / 1.0 …）", f.fte),
       ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
     ]), actions: [
       a ? { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("削除しますか？").then((ok) => { if (ok) { allocMaster().remove(a.id); c(); render(); } }) } : null,
@@ -198,7 +200,7 @@
           if (!f.target.value) { MK.ui.toast("プロジェクトを選択してください", "error"); return; }
           if (f.start.value && f.end.value && f.end.value < f.start.value) { MK.ui.toast("終了日は開始日以降にしてください", "error"); return; }
           const dimOf = (opts.find((o) => o.value === f.target.value) || {}).dim || "project";
-          const patch = { memberId: f.member.value, targetId: f.target.value, dim: dimOf, percent: Math.max(0, Number(f.percent.value) || 0), startDate: f.start.value || "", endDate: f.end.value || "", note: f.note.value };
+          const patch = { memberId: f.member.value, targetId: f.target.value, dim: dimOf, percent: Math.max(0, Math.round((Number(f.fte.value) || 0) * 100)), startDate: f.start.value || "", endDate: f.end.value || "", note: f.note.value };
           if (a) allocMaster().update(a.id, patch); else allocMaster().create(patch);
           c(); render();
         } },
@@ -224,13 +226,15 @@
     const opts = targetOptions();
     const f = {
       target: ui.select(opts.map((o) => ({ value: o.value, label: o.label })), d ? d.targetId : (opts[0] && opts[0].value)),
-      required: ui.input({ type: "number", value: d ? d.requiredPercent : 100 }),
+      // 入力は必要人数（FTE）。保存は % のまま（×100）。1人分超も可（Issue #133）。
+      fte: ui.input({ type: "number", value: d ? d.requiredPercent / 100 : 1 }),
       start: ui.input({ type: "date", value: d ? d.startDate : "" }),
       end: ui.input({ type: "date", value: d ? d.endDate : "" }),
       note: ui.textarea(d ? d.note : ""),
     };
+    f.fte.step = "0.1"; f.fte.min = "0";
     MK.ui.modal({ title: d ? "必要人数を編集" : "必要人数を追加", body: ui.stack([
-      ui.field("プロジェクト", f.target), ui.field("必要（%・100=1人分。100超可）", f.required),
+      ui.field("プロジェクト", f.target), ui.field("必要人数（0.5 / 1.0 …。1人分超可）", f.fte),
       ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
     ]), actions: [
       d ? { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("削除しますか？").then((ok) => { if (ok) { demandMaster().remove(d.id); c(); render(); } }) } : null,
@@ -239,7 +243,7 @@
           if (!f.target.value) { MK.ui.toast("プロジェクトを選択してください", "error"); return; }
           if (f.start.value && f.end.value && f.end.value < f.start.value) { MK.ui.toast("終了日は開始日以降にしてください", "error"); return; }
           const dimOf = (opts.find((o) => o.value === f.target.value) || {}).dim || "project";
-          const patch = { targetId: f.target.value, dim: dimOf, requiredPercent: Math.max(0, Number(f.required.value) || 0), startDate: f.start.value || "", endDate: f.end.value || "", note: f.note.value };
+          const patch = { targetId: f.target.value, dim: dimOf, requiredPercent: Math.max(0, Math.round((Number(f.fte.value) || 0) * 100)), startDate: f.start.value || "", endDate: f.end.value || "", note: f.note.value };
           if (d) demandMaster().update(d.id, patch); else demandMaster().create(patch);
           c(); render();
         } },
