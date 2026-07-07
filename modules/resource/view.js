@@ -44,8 +44,8 @@
 
   function toolbar() {
     const bar = ui.toolbar([]);
-    bar.appendChild(ui.button("＋ アロケーション", { variant: "btn-primary", onClick: () => editAllocation(null) }));
-    bar.appendChild(ui.button("＋ 需要", { variant: "btn-secondary", onClick: () => editDemand(null) }));
+    bar.appendChild(ui.button("＋ アサイン", { variant: "btn-primary", onClick: () => editAllocation(null) }));
+    bar.appendChild(ui.button("＋ 必要人数", { variant: "btn-secondary", onClick: () => editDemand(null) }));
     bar.appendChild(inlinePills(PERIODS, state.period, (k) => { state.period = k; render(); }));
     bar.appendChild(ui.button("◀", { variant: "btn-ghost", onClick: () => { state.offset--; render(); } }));
     bar.appendChild(ui.button("今月", { variant: "btn-ghost", onClick: () => { state.offset = 0; render(); } }));
@@ -57,7 +57,7 @@
   // ---- ① あと何人足りない？（PJ別・月別の不足人数）----
   function shortageCard(matrix, anyDemand, months) {
     const title = el("h3", { text: "① あと何人足りない？" });
-    if (!anyDemand) return ui.card([title, ui.emptyState("需要が未登録です。「＋ 需要」で各プロジェクトに何人必要かを登録すると、月ごとの不足人数が出ます。")]);
+    if (!anyDemand) return ui.card([title, ui.emptyState("必要人数が未登録です。「＋ 必要人数」で各プロジェクトに何人必要かを登録すると、月ごとの不足人数が出ます。")]);
     const firstShort = matrix.totals.find((t) => t.short);
     const lead = firstShort
       ? el("p", { class: "sub", text: "最初に足りなくなるのは " + monthLabel(firstShort.month) + "（チーム全体であと " + L().fteLabel(firstShort.shortage) + " 不足）。" })
@@ -93,7 +93,7 @@
   // ---- ② 外注が要る？（不足をチームの空き要員で吸収できるか）----
   function outsourceCard(rows, anyDemand) {
     const title = el("h3", { text: "② 外注が要る？" });
-    if (!anyDemand) return ui.card([title, ui.emptyState("需要が未登録のため判定できません。「＋ 需要」を追加してください。")]);
+    if (!anyDemand) return ui.card([title, ui.emptyState("必要人数が未登録のため判定できません。「＋ 必要人数」を追加してください。")]);
     const firstOut = rows.find((r) => r.needsOutsource);
     const anyShort = rows.some((r) => r.shortage > 0);
     const lead = firstOut
@@ -116,7 +116,7 @@
   // ---- ③ メンバーの負担は大丈夫？（割当が1人分を超えるメンバーを強調）----
   function loadCard(loads, list, months) {
     const title = el("h3", { text: "③ メンバーの負担は大丈夫？" });
-    if (!list.length) return ui.card([title, ui.emptyState("アロケーションがありません。「＋ アロケーション」で誰をどのプロジェクトに割り当てるかを登録してください。")]);
+    if (!list.length) return ui.card([title, ui.emptyState("アサインがありません。「＋ アサイン」で誰をどのプロジェクトに割り当てるかを登録してください。")]);
     const overs = loads.filter((x) => x.anyOver);
     const lead = overs.length
       ? el("p", { class: "sub", text: "1人分（100%）を超える月があるメンバー: " + overs.map((x) => x.member.name).join("、") + "。割当の見直しか増員を検討してください。" })
@@ -145,12 +145,12 @@
   function inputCard(list, demands) {
     const opts = targetOptions();
     const kids = [el("h3", { text: "計画の入力" }),
-      el("p", { class: "sub", text: "上の3つの判断のもとになるデータです。アロケーション＝誰をどこへ何%割り当てるか（供給）、需要＝各プロジェクトに何人分必要か。" })];
-    kids.push(el("h3", { text: "アロケーション（供給）" }));
-    if (!list.length) kids.push(ui.emptyState("アロケーションがありません。「＋ アロケーション」から追加してください。"));
+      el("p", { class: "sub", text: "上の3つの判断のもとになるデータです。アサイン＝誰をどこへ何%割り当てるか（供給）、必要人数＝各プロジェクトに何人分必要か。" })];
+    kids.push(el("h3", { text: "アサイン（供給）" }));
+    if (!list.length) kids.push(ui.emptyState("アサインがありません。「＋ アサイン」から追加してください。"));
     else { const ul = el("ul", { class: "mk-list" }); list.forEach((a) => ul.appendChild(allocRow(a, opts))); kids.push(ul); }
-    kids.push(el("h3", { text: "需要（必要人数）" }));
-    if (!demands.length) kids.push(ui.emptyState("需要がありません。「＋ 需要」から追加してください。"));
+    kids.push(el("h3", { text: "必要人数" }));
+    if (!demands.length) kids.push(ui.emptyState("必要人数がありません。「＋ 必要人数」から追加してください。"));
     else { const ul = el("ul", { class: "mk-list" }); demands.forEach((d) => ul.appendChild(demandRow(d, opts))); kids.push(ul); }
     return ui.card(kids);
   }
@@ -174,7 +174,7 @@
       el("div", { class: "sub", text: L().fteLabel(a.percent) + "（" + a.percent + "%） / " + period }),
     ]);
     info.addEventListener("click", () => editAllocation(a));
-    return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("このアロケーションを削除しますか？").then((ok) => { if (ok) { allocMaster().remove(a.id); render(); } }) })]);
+    return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("このアサインを削除しますか？").then((ok) => { if (ok) { allocMaster().remove(a.id); render(); } }) })]);
   }
 
   function editAllocation(a) {
@@ -188,7 +188,7 @@
       end: ui.input({ type: "date", value: a ? a.endDate : "" }),
       note: ui.textarea(a ? a.note : ""),
     };
-    MK.ui.modal({ title: a ? "アロケーションを編集" : "アロケーションを追加", body: ui.stack([
+    MK.ui.modal({ title: a ? "アサインを編集" : "アサインを追加", body: ui.stack([
       ui.field("メンバー", f.member), ui.field("プロジェクト", f.target), ui.field("割当（%・100=1人分）", f.percent),
       ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
     ]), actions: [
@@ -218,7 +218,7 @@
       el("div", { class: "sub", text: "必要 " + L().fteLabel(d.requiredPercent) + "（" + d.requiredPercent + "%） / " + period }),
     ]);
     info.addEventListener("click", () => editDemand(d));
-    return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("この需要を削除しますか？").then((ok) => { if (ok) { demandMaster().remove(d.id); render(); } }) })]);
+    return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("この必要人数を削除しますか？").then((ok) => { if (ok) { demandMaster().remove(d.id); render(); } }) })]);
   }
   function editDemand(d) {
     const opts = targetOptions();
@@ -229,7 +229,7 @@
       end: ui.input({ type: "date", value: d ? d.endDate : "" }),
       note: ui.textarea(d ? d.note : ""),
     };
-    MK.ui.modal({ title: d ? "需要を編集" : "需要を追加", body: ui.stack([
+    MK.ui.modal({ title: d ? "必要人数を編集" : "必要人数を追加", body: ui.stack([
       ui.field("プロジェクト", f.target), ui.field("必要（%・100=1人分。100超可）", f.required),
       ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
     ]), actions: [
