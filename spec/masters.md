@@ -137,9 +137,11 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 | `dim` | string | 次元キー（器の種類。`project` / `product`。§3.7.6 の config 由来。`"project"` 決め打ち禁止） |
 | `startDate` / `endDate` | string | 需要期間（YYYY-MM-DD、未設定は空文字） |
 | `requiredPercent` | number | 必要率(%)。100 超も許容（複数人分の需要） |
+| `role` | string | 役割・職種名（任意・自由文字列。`People.role` と同じ語彙。空＝役割を問わない需要＝**後方互換**。Issue #134） |
 | `note` | string | 備考（任意） |
 
 - アロケーション（供給）・WBS のタスクとは**別レコード**。片方から導出せず、片方を変えても他方に影響しない。**メンバー非依存**（誰が、ではなく、どれだけ要るか）。
+- `role` は**新マスタを作らない自由文字列**（`People.role` の語彙を流用。照合は正規化後の完全一致）。「器 × ロール」で不足を出し、役割ミスマッチ（例: デザイナーをバックエンド枠に）を不足として残す。供給側のロールは割当メンバーの `member.role` から導出し、**allocation にはロールを保存しない**（供給マスタを汚さない）。昇格トリガー（Role マスタへの切り出し）は [`modules/resource.md`](modules/resource.md) を正とする。
 - 集計純関数 `demandOn(list, targetId, date)`（器×期間内合算）・`totalDemandOn(list, date)`（全器合計）をマスタが提供し、resource の `gapByMonth`（需要−供給）が再利用する。
 - 将来 wbs 見積り等から自動生成する場合も、**生成器が本マスタへ書き込む**方式にしモジュール独立を維持する（resource が他モジュールの namespace を読まない）。
 - ※ `targetId` 参照で成立するため、共通契約の `name` 必須・`resolve`/CSV は当てはまらない。編集は resource UI と JSON 入出力を正とし、CSV 取込対象外。

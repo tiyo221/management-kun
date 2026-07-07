@@ -153,28 +153,116 @@
     (allocations || []).forEach((a) => { if (a.targetId !== targetId) return; if (a.startDate && a.endDate && a.startDate <= date && date <= a.endDate) s += Number(a.percent) || 0; });
     return s;
   }
+
+  // ---- ロール（役割）計画（Issue #134）----
+  // ロール = 自由文字列（People.role と同じ語彙。新マスタは作らない＝YAGNI）。需要に role（任意）を持たせ、
+  // 「器 × ロール」で不足を出す。供給（アサイン）はメンバー基準のまま、供給のロールは member.role から
+  // 導出する（allocation にロールは保存しない＝マスタを汚さない）。マッチングは正規化後の完全一致。
+
   /**
-   * PJ別×月別の不足（需要 − 確保済み供給）を一括算出する純関数（問い①の中核）。
-   * totals の不足合計は「不足している器の gap だけ」を足す（他 PJ の余剰で不足は相殺されない）。
+   * ロール名を照合用に正規化する純関数（前後空白除去＋小文字化）。自由文字列のため完全一致で照合する。
+   * People.role「エンジニア」と需要「バックエンドエンジニア」は正規化しても別物＝別ロール扱い（Issue #134）。
+   * @param {string} s - ロール名（未設定可）
+   * @returns {string} 正規化済みロールキー（空＝役割を問わない）
+   */
+  function normRole(s) { return String(s == null ? "" : s).trim().toLowerCase(); }
+  /**
+   * メンバーID → 正規化ロールの対応表を作る純関数（供給のロールを member.role から導出するため）。
+   * @param {Array<Object>} memberList - メンバー一覧
+   * @returns {Object} memberId をキー・正規化ロールを値とするマップ
+   */
+  function buildRoleMap(memberList) {
+    const map = {};
+    (memberList || []).forEach((m) => { map[m.id] = normRole(m.role); });
+    return map;
+  }
+  /**
+   * 指定の器の需要で使われているロールを重複排除して返す純関数（正規化キーで一意化・原文ラベルを保持）。
+   * 器×ロールの行を組み立てるための素材。ロール未設定（空）の需要は norm="" の1グループにまとまる。
+   * @param {Object[]} demands - 対象需要一覧
+   * @param {string} targetId - 器のID
+   * @returns {{norm: string, label: string}[]} ロール一覧（norm＝照合キー、label＝表示名。空ロールは {norm:"",label:""}）
+   */
+  function rolesForTarget(demands, targetId) {
+    const seen = {}, out = [];
+    (demands || []).forEach((d) => {
+      if (d.targetId !== targetId) return;
+      const norm = normRole(d.role);
+      if (Object.prototype.hasOwnProperty.call(seen, norm)) return;
+      seen[norm] = 1;
+      out.push({ norm, label: norm === "" ? "" : String(d.role).trim() });
+    });
+    return out;
+  }
+  /**
+   * 指定の器・指定ロール・指定日の需要率(%)を合算する純関数。
+   * @param {Object[]} demands - 対象需要一覧
+   * @param {string} targetId - 器のID
+   * @param {string} roleNorm - 正規化ロール（空＝役割を問わない需要）
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @returns {number} 必要率(%)
+   */
+  function targetDemandByRole(demands, targetId, roleNorm, date) {
+    let s = 0;
+    (demands || []).forEach((x) => {
+      if (x.targetId !== targetId || normRole(x.role) !== roleNorm) return;
+      if (x.startDate && x.endDate && x.startDate <= date && date <= x.endDate) s += Number(x.requiredPercent) || 0;
+    });
+    return s;
+  }
+  /**
+   * 指定の器・指定ロール・指定日の確保済み供給(%)を返す純関数。供給のロールは割り当てられたメンバーの
+   * role から導出する（roleOf マップ）。ロール空（役割を問わない需要）はメンバーのロールを問わず器全体の供給。
+   * @param {Object[]} allocations - 対象アロケーション一覧
+   * @param {string} targetId - 器のID
+   * @param {string} roleNorm - 正規化ロール（空＝器全体＝targetSupplyOn と等価）
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @param {Object} roleOf - memberId → 正規化ロールのマップ
+   * @returns {number} 確保済み供給(%)
+   */
+  function targetSupplyByRole(allocations, targetId, roleNorm, date, roleOf) {
+    if (roleNorm === "") return targetSupplyOn(allocations, targetId, date);
+    const map = roleOf || {};
+    let s = 0;
+    (allocations || []).forEach((a) => {
+      if (a.targetId !== targetId || map[a.memberId] !== roleNorm) return;
+      if (a.startDate && a.endDate && a.startDate <= date && date <= a.endDate) s += Number(a.percent) || 0;
+    });
+    return s;
+  }
+
+  /**
+   * 器×ロール別×月別の不足（需要 − 確保済み供給）を一括算出する純関数（問い①の中核。Issue #71 / ロール対応 #134）。
+   * 需要にロールがあれば「器 × ロール」の行に分割し、供給はそのロールに属するメンバー（member.role 由来）の
+   * 割当のみで賄う。役割ミスマッチ（例: デザイナーを backend 枠に）は不足として残る。ロール未使用（空）の需要は
+   * 器全体の供給で賄う従来挙動に縮退する（後方互換）。需要が1件も無い器も1行（demand=0）で表示する。
+   * totals の不足合計は「不足している行の gap だけ」を足す（余剰で不足は相殺されない）。
    * @param {Object[]} allocations - 対象アロケーション一覧（供給）
    * @param {Object[]} demands - 対象需要一覧
    * @param {Target[]} targetList - 器の一覧
    * @param {string[]} months - 対象月（月初日）の配列
+   * @param {Array<Object>} [memberList] - メンバー一覧（供給のロール導出用。省略時はロール空の需要のみ機能）
    * @returns {{
-   *   rows: {target: Target, cells: {month: string, demand: number, supply: number, gap: number, short: boolean}[], anyShort: boolean}[],
+   *   rows: {target: Target, role: string, roleNorm: string, cells: {month: string, demand: number, supply: number, gap: number, short: boolean}[], anyShort: boolean}[],
    *   totals: {month: string, shortage: number, short: boolean}[]
-   * }} 器ごとの月次セル（gap = 需要 − 供給、正なら不足）と、月ごとの不足合計
+   * }} 器×ロールごとの月次セル（gap = 需要 − 供給、正なら不足）と、月ごとの不足合計
    */
-  function shortageMatrix(allocations, demands, targetList, months) {
-    const rows = (targetList || []).map((t) => {
-      const cells = (months || []).map((mo) => {
-        const date = monthSample(mo);
-        const demand = targetDemandOn(demands, t.id, date);
-        const supply = targetSupplyOn(allocations, t.id, date);
-        const gap = demand - supply;
-        return { month: mo, demand, supply, gap, short: gap > 0 };
+  function shortageMatrix(allocations, demands, targetList, months, memberList) {
+    const roleOf = buildRoleMap(memberList);
+    const rows = [];
+    (targetList || []).forEach((t) => {
+      let roles = rolesForTarget(demands, t.id);
+      if (!roles.length) roles = [{ norm: "", label: "" }]; // 需要なしの器も器単位で1行表示（互換）
+      roles.forEach((role) => {
+        const cells = (months || []).map((mo) => {
+          const date = monthSample(mo);
+          const demand = targetDemandByRole(demands, t.id, role.norm, date);
+          const supply = targetSupplyByRole(allocations, t.id, role.norm, date, roleOf);
+          const gap = demand - supply;
+          return { month: mo, demand, supply, gap, short: gap > 0 };
+        });
+        rows.push({ target: t, role: role.label, roleNorm: role.norm, cells, anyShort: cells.some((c) => c.short) });
       });
-      return { target: t, cells, anyShort: cells.some((c) => c.short) };
     });
     const totals = (months || []).map((mo, i) => {
       const shortage = rows.reduce((s, r) => s + Math.max(0, r.cells[i].gap), 0);
@@ -201,8 +289,30 @@
     return s;
   }
   /**
-   * 月ごとの外注要否を判定する純関数（問い②の中核）。「不足（①の合計）をチームの空き要員で
-   * 吸収できるか」を月次で判定し、吸収しきれない分＝外注候補として返す。
+   * 指定ロールに属するメンバーだけの空き要員(%)合計を返す純関数（ロール別の外注判定の分母。Issue #134）。
+   * 該当ロールのメンバーが1人も居なければ 0（＝外注前提のロールは内部で吸収できず外注候補として残る）。
+   * @param {Object[]} allocations - 対象アロケーション一覧
+   * @param {Array<Object>} memberList - メンバー一覧
+   * @param {string} date - 対象日（YYYY-MM-DD）
+   * @param {string} roleNorm - 正規化ロール（空＝全メンバー＝teamFreeOn と等価）
+   * @param {number} [capacity] - メンバー1人あたり総キャパ(%)（既定 100）
+   * @param {Object} [roleOf] - memberId → 正規化ロールのマップ（省略時は memberList から生成）
+   * @returns {number} 該当ロールの空き(%)合計
+   */
+  function teamFreeByRole(allocations, memberList, date, roleNorm, capacity, roleOf) {
+    if (roleNorm === "") return teamFreeOn(allocations, memberList, date, capacity);
+    const cap = capacity == null ? DEFAULT_CAPACITY : capacity;
+    const map = roleOf || buildRoleMap(memberList);
+    let s = 0;
+    (memberList || []).forEach((m) => { if (map[m.id] === roleNorm) s += Math.max(0, cap - totalPercent(allocations, m.id, date)); });
+    return s;
+  }
+  /**
+   * 月ごとの外注要否を判定する純関数（問い②の中核。ロール対応 #134）。「不足（①の合計）をチームの空き要員で
+   * 吸収できるか」を月次で判定するが、吸収はロール別に行う＝そのロールの不足は同じロールのメンバーの空きでしか
+   * 吸収できない（役割ミスマッチは吸収されない）。ロール空（役割を問わない不足）は全メンバーの空きで吸収する。
+   * これにより外注前提のロール（内部に該当者なし）の不足は吸収されず外注候補として残る。
+   * `internalFree` は表示用の総空き（teamFreeOn）。`outsource` はロール別吸収の残差の合算。
    * @param {Object[]} allocations - 対象アロケーション一覧（供給）
    * @param {Object[]} demands - 対象需要一覧
    * @param {Target[]} targetList - 器の一覧
@@ -210,15 +320,26 @@
    * @param {string[]} months - 対象月（月初日）の配列
    * @param {number} [capacity] - メンバー1人あたり総キャパ(%)（既定 100）
    * @returns {{month: string, shortage: number, internalFree: number, absorbed: number, outsource: number, needsOutsource: boolean}[]}
-   *   月ごとの不足・チームの空き・内部吸収可能分・外注候補（%）・外注要否フラグ
+   *   月ごとの不足・チームの総空き・内部吸収分・外注候補（%）・外注要否フラグ
    */
   function outsourcingByMonth(allocations, demands, targetList, memberList, months, capacity) {
-    const totals = shortageMatrix(allocations, demands, targetList, months).totals;
-    return totals.map((t) => {
-      const internalFree = teamFreeOn(allocations, memberList, monthSample(t.month), capacity);
-      const absorbed = Math.min(t.shortage, internalFree);
-      const outsource = Math.max(0, t.shortage - internalFree);
-      return { month: t.month, shortage: t.shortage, internalFree, absorbed, outsource, needsOutsource: outsource > 0 };
+    const mx = shortageMatrix(allocations, demands, targetList, months, memberList);
+    const roleOf = buildRoleMap(memberList);
+    return (months || []).map((mo, i) => {
+      const date = monthSample(mo);
+      // 月内の不足をロール別に集約（不足している行の gap のみ）
+      const shortageByRole = {};
+      mx.rows.forEach((r) => { const gap = r.cells[i].gap; if (gap > 0) shortageByRole[r.roleNorm] = (shortageByRole[r.roleNorm] || 0) + gap; });
+      let shortage = 0, outsource = 0;
+      Object.keys(shortageByRole).forEach((norm) => {
+        const sh = shortageByRole[norm];
+        const free = teamFreeByRole(allocations, memberList, date, norm, capacity, roleOf);
+        shortage += sh;
+        outsource += Math.max(0, sh - free);
+      });
+      const internalFree = teamFreeOn(allocations, memberList, date, capacity);
+      const absorbed = shortage - outsource;
+      return { month: mo, shortage, internalFree, absorbed, outsource, needsOutsource: outsource > 0 };
     });
   }
 
@@ -286,6 +407,21 @@
     return out;
   }
 
+  /**
+   * ロール入力の候補語彙を返す純関数（datalist 用。Issue #134）。People.role の既出値 ∪ 既存の需要で
+   * 使われた role を、正規化キーで重複排除して原文で返す（People 由来を先、需要由来を後）。自由入力も残す前提。
+   * @param {Array<Object>} memberList - メンバー一覧（People）
+   * @param {Object[]} demands - 需要一覧
+   * @returns {string[]} ロール候補（原文・重複なし・空は含まない）
+   */
+  function roleVocabulary(memberList, demands) {
+    const seen = {}, out = [];
+    const add = (raw) => { const r = String(raw == null ? "" : raw).trim(); if (!r) return; const k = normRole(r); if (seen[k]) return; seen[k] = 1; out.push(r); };
+    (memberList || []).forEach((m) => add(m.role));
+    (demands || []).forEach((d) => add(d.role));
+    return out;
+  }
+
   MK.logic = MK.logic || {};
-  MK.logic.resource = { DEFAULT_CAPACITY, alloc, demandsAll, members, targets, capacityOf, fteLabel, totalPercent, freeOn, monthsInHorizon, monthSample, targetDemandOn, targetSupplyOn, shortageMatrix, teamFreeOn, outsourcingByMonth, memberLoadByMonth, summary, summaryFor };
+  MK.logic.resource = { DEFAULT_CAPACITY, alloc, demandsAll, members, targets, capacityOf, fteLabel, totalPercent, freeOn, monthsInHorizon, monthSample, targetDemandOn, targetSupplyOn, normRole, rolesForTarget, targetDemandByRole, targetSupplyByRole, shortageMatrix, teamFreeOn, teamFreeByRole, outsourcingByMonth, memberLoadByMonth, roleVocabulary, summary, summaryFor };
 })();
