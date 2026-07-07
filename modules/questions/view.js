@@ -24,12 +24,14 @@
       ui.button("CSV取込", { onClick: () => MK.io.pickCsvFile((rows) => { const n = L().applyCSV(rows); filter = "all"; render(); MK.ui.toast(n + " 件のわからないことを取り込みました", "success"); }) }),
     ]);
 
-    // ステータスタブ（件数バッジ）
+    // ステータスタブ（件数バッジ）。「ナレッジ」＝答えありの解決済み（Issue #81）
     const c = L().counts();
     const tabsBar = ui.toolbar([]);
     tabsBar.appendChild(pill("全て", "all", c.all));
-    L().STATUSES.forEach((s) => tabsBar.appendChild(pill(s.label, s.key, c[s.key])));
-    const searchBox = ui.input({ placeholder: "検索…", value: search });
+    tabsBar.appendChild(pill("未解決", "open", c.open));
+    tabsBar.appendChild(pill("調査中", "investigating", c.investigating));
+    tabsBar.appendChild(pill("ナレッジ", "knowledge", c.knowledge));
+    const searchBox = ui.input({ placeholder: "検索…（タイトル・タグ・答え）", value: search });
     searchBox.style.maxWidth = "220px";
     searchBox.addEventListener("input", () => { search = searchBox.value; renderList(listHost); });
     tabsBar.appendChild(searchBox);
@@ -55,24 +57,67 @@
 
   function renderList(host) {
     host.innerHTML = "";
-    const list = L().filtered(filter, search);
-    if (!list.length) { host.appendChild(ui.emptyState("わからないことはありません")); return; }
+    const list = filter === "knowledge" ? L().knowledge(search) : L().filtered(filter, search);
+    if (!list.length) {
+      host.appendChild(ui.emptyState(filter === "knowledge"
+        ? "ナレッジはまだありません。解決した質問に答えを残すとここに貯まります"
+        : "わからないことはありません"));
+      return;
+    }
     const ul = el("ul", { class: "mk-list" });
     list.forEach((it) => ul.appendChild(itemRow(it)));
     host.appendChild(ul);
   }
 
   function itemRow(it) {
+    // 答えありの解決済み＝ナレッジは Q→A カードで描く（取り消し線は使わない）
+    if (L().isKnowledge(it)) return knowledgeCard(it);
+
     const meta = [];
     meta.push(el("span", { class: "chip", text: labelOf(it.status) }));
     (it.tags || []).forEach((t) => meta.push(el("span", { class: "chip", text: "#" + t })));
-    if (it.status === "resolved" && it.resolvedNote) meta.push(el("span", { class: "sub", text: "💡 " + it.resolvedNote }));
 
-    const title = el("div", { class: it.status === "resolved" ? "mk-done" : "", text: it.title });
+    const title = el("div", { text: it.title });
     const grow = el("div", { class: "grow", style: "cursor:pointer;" }, [title, meta.length ? el("div", { class: "sub" }, meta) : null]);
     grow.addEventListener("click", () => openEditor(it));
 
-    return el("li", { class: "mk-row" }, [grow]);
+    const children = [grow];
+    // 未解決／調査中：解決＝ナレッジ化の導線。答えなしで閉じた resolved は「答えを書く」で昇格させる
+    const cta = it.status === "resolved" ? "答えを書く" : "解決";
+    children.push(ui.button(cta, { onClick: () => openResolve(it) }));
+    return el("li", { class: "mk-row" }, children);
+  }
+
+  // ナレッジ（Q→A）カード。質問を見出し、答えを主役に描く
+  function knowledgeCard(it) {
+    const q = el("div", { class: "mk-know-q", text: it.title });
+    const a = el("div", { class: "mk-know-a", text: it.resolvedNote });
+    const tags = (it.tags || []).map((t) => el("span", { class: "chip", text: "#" + t }));
+    const card = el("li", { class: "mk-know-card" }, [q, a, tags.length ? el("div", { class: "mk-know-tags" }, tags) : null]);
+    card.addEventListener("click", () => openEditor(it));
+    return card;
+  }
+
+  // 「どう解決したか」を必ず残してナレッジ化し、ナレッジタブへ遷移する（答え必須）
+  function openResolve(it) {
+    const note = ui.textarea(it.resolvedNote || "");
+    MK.ui.modal({
+      title: "どう解決した？（ナレッジにする）",
+      body: ui.stack([
+        el("div", { class: "sub", text: it.title }),
+        ui.field("答え（後で読んで分かるように書く）", note),
+      ]),
+      actions: [
+        { label: "キャンセル", variant: "btn-secondary", onClick: (close) => close() },
+        { label: "ナレッジにする", variant: "btn-primary", onClick: (close) => {
+            if (!note.value.trim()) { MK.ui.toast("どう解決したかを残してください", "error"); return; }
+            L().resolve(it.id, note.value);
+            filter = "knowledge";
+            close(); render();
+            MK.ui.toast("ナレッジに追加しました", "success");
+          } },
+      ],
+    });
   }
 
   function openEditor(it) {
@@ -83,7 +128,7 @@
     f.tags = ui.input({ value: (it.tags || []).join(", ") });
     f.resolvedNote = ui.textarea(it.resolvedNote);
 
-    const noteField = ui.field("わかった内容", f.resolvedNote);
+    const noteField = ui.field("答え（後で読んで分かるように書く）", f.resolvedNote);
     const syncNote = () => { noteField.style.display = f.status.value === "resolved" ? "" : "none"; };
     f.status.addEventListener("change", syncNote);
 

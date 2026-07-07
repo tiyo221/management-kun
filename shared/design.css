@@ -254,6 +254,15 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-row .grow { flex: 1; min-width: 0; }
 .mk-row .sub { font-size: 13px; color: var(--color-steel); }
 .mk-muted { color: var(--color-muted); }
+
+/* ---- ナレッジ（Q→A）カード（questions・Issue #81）---- */
+.mk-know-card { padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--color-hairline); background: var(--color-canvas); cursor: pointer; }
+.mk-know-card:hover { background: var(--color-surface-soft); }
+.mk-know-q { font-weight: 600; color: var(--color-ink); }
+.mk-know-q::before { content: "Q. "; color: var(--color-steel); }
+.mk-know-a { margin-top: var(--space-xxs); color: var(--color-slate); white-space: pre-wrap; }
+.mk-know-a::before { content: "A. "; color: var(--color-primary); font-weight: 600; }
+.mk-know-tags { margin-top: var(--space-xs); }
 .mk-section-title { font-size: 22px; font-weight: 600; margin: 0 0 var(--space-lg); }
 .mk-toolbar { display: flex; gap: var(--space-xs); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-lg); }
 .mk-empty { color: var(--color-steel); padding: var(--space-xxl); text-align: center; }
