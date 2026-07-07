@@ -132,6 +132,7 @@ management-kun/
 └── spec/
     ├── masters.md          … 共通マスタ（§4.4）: 共通契約＋People/Project/Allocation/Product。マスタ追加・修正時に参照。
     ├── import-migration.md … 取り込み・移行・名寄せ（§4.6 CSV / §7 移行 / §8 名寄せ）。取込・移行作業時のみ参照。
+    ├── consolidation.md    … モジュール統廃合（module→module）の移行テンプレート（§9.6）。統廃合を実施する時のみ参照。
     └── modules/            … モジュール個別仕様（統合上の位置づけ・固有データ・CSV列・旧データ移行）
         └── <id>.md          … §5 の各モジュールに 1:1 対応（体裁は CONVENTIONS.md §5）
 ```
@@ -626,6 +627,8 @@ Phase 2 の完了は次の2点で判定する。両方を満たしたら Phase 3
 | （まだ記録なし） | | | |
 
 **廃止時の作法**: 廃止するモジュールは、まずモジュール単位で JSON エクスポート（`scope:"module"`）→ その後 `mk:module:<id>` キーを削除する。専用の廃止機構は作らない（手順として運用する）。
+
+**統廃合の実務テンプレート**: モジュール統合（`mk:module:a` → `mk:module:b`）を実施する際の手順書＋one-off スクリプト骨格＋テストパターン＋後始末の作法は [`spec/consolidation.md`](spec/consolidation.md) を正とする（汎用エンジンは作らず、毎回そこからコピーして作る）。旧ツール→本アプリの移行（[`spec/import-migration.md`](spec/import-migration.md) §7）とは別物。
 
 ---
 
