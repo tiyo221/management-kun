@@ -79,7 +79,7 @@
   function allocationCard(rows) {
     const kids = [el("h3", { text: "アサイン状況" })];
     if (!rows.length) {
-      kids.push(ui.emptyState("このプロジェクトへのアロケーションがありません。"));
+      kids.push(ui.emptyState("このプロジェクトへのアサインがありません。"));
     } else {
       const ul = el("ul", { class: "mk-list" });
       rows.forEach((r) => {
