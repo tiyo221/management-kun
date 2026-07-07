@@ -304,15 +304,17 @@
 
   /**
    * グローバル検索（コマンドパレット）用のレコードを返す（任意契約 def.searchItems・spec §3.5）。
-   * 解決済み（resolved）は除き、未解決・調査中の質問だけを候補にする。label＝タイトル、
-   * sub＝ステータス、keywords に詳細・タグを含めて本文検索できるようにする。
+   * 候補はバックログ（未解決・調査中）＋ナレッジ（答えありの解決済み）。#81 の狙いが再利用導線
+   * であるため、ナレッジはグローバル検索から引けるようにする。答え未記入の「わかった」は再利用
+   * 対象がないので除外する。label＝タイトル、sub＝ナレッジ or ステータス、keywords に詳細・答え・
+   * タグを含めて本文検索できるようにする。
    * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
    */
   function searchItems() {
     const label = (key) => { const s = STATUSES.find((x) => x.key === key); return s ? s.label : key; };
-    return items().filter((it) => it.status !== "resolved").map((it) => ({
-      id: it.id, label: it.title, sub: label(it.status),
-      keywords: [it.detail].concat(it.tags || []).filter(Boolean),
+    return items().filter((it) => it.status !== "resolved" || isKnowledge(it)).map((it) => ({
+      id: it.id, label: it.title, sub: isKnowledge(it) ? "ナレッジ" : label(it.status),
+      keywords: [it.detail, it.resolvedNote].concat(it.tags || []).filter(Boolean),
     }));
   }
 

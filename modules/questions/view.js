@@ -62,8 +62,9 @@
       host.appendChild(ui.emptyState(emptyMessage()));
       return;
     }
-    // 「わかった」ビューは達成ログ。何件をナレッジ化できているかを一目で出す（2軸の可視化）
-    if (filter === "resolved") {
+    // 「わかった」ビューは達成ログ。何件をナレッジ化できているかを一目で出す（2軸の可視化）。
+    // 検索中は絞り込み結果と全体件数がズレて紛らわしいので出さない。
+    if (filter === "resolved" && !search) {
       const c = L().counts();
       host.appendChild(el("div", { class: "mk-know-progress sub", text: "ナレッジ化 " + c.knowledge + " / " + c.resolved }));
     }
@@ -122,6 +123,7 @@
         { label: "解決にする", variant: "btn-primary", onClick: (close) => {
             const v = note.value.trim();
             L().resolve(it.id, v);
+            search = ""; // 遷移先で新しい項目が絞り込みに埋もれないようリセット
             if (v) { filter = "knowledge"; MK.ui.toast("ナレッジに追加しました", "success"); }
             else { filter = "resolved"; MK.ui.toast("「わかった」に移しました。あとで答えを書けます", "success"); }
             close(); render();
