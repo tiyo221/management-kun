@@ -20,6 +20,7 @@
    * @property {string} startDate - 需要開始日（YYYY-MM-DD、未設定なら空文字）
    * @property {string} endDate - 需要終了日（YYYY-MM-DD、未設定なら空文字）
    * @property {number} requiredPercent - 必要率(%)。100超可（複数人分の需要）
+   * @property {string} role - 役割・職種名（任意・自由文字列。People.role と同じ語彙。空＝役割を問わない需要＝後方互換。Issue #134）
    * @property {string} note - 備考
    */
 
@@ -42,7 +43,7 @@
     create(attrs) {
       const d = data();
       const x = Object.assign(
-        { id: MK.util.uid("d"), targetId: null, dim: "project", startDate: "", endDate: "", requiredPercent: 100, note: "" },
+        { id: MK.util.uid("d"), targetId: null, dim: "project", startDate: "", endDate: "", requiredPercent: 100, role: "", note: "" },
         attrs || {}
       );
       if (!x.id) x.id = MK.util.uid("d");

@@ -30,7 +30,7 @@
     const list = L().alloc();
     const demands = L().demandsAll();
     const months = L().monthsInHorizon(state.period, state.offset);
-    const matrix = L().shortageMatrix(list, demands, tg, months);
+    const matrix = L().shortageMatrix(list, demands, tg, months, ms);
     const anyDemand = matrix.rows.some((r) => r.cells.some((c) => c.demand > 0));
 
     root.appendChild(ui.stack([
@@ -63,16 +63,19 @@
       ? el("p", { class: "sub", text: "最初に足りなくなるのは " + monthLabel(firstShort.month) + "（チーム全体であと " + L().fteLabel(firstShort.shortage) + " 不足）。" })
       : el("p", { class: "sub", text: "全月で必要人数を確保できています。" });
 
+    const anyRole = matrix.rows.some((r) => r.roleNorm);
     const table = el("table", { class: "mk-matrix" });
     const hr = el("tr");
-    hr.appendChild(el("th", { class: "rowhead", text: "プロジェクト＼月" }));
+    hr.appendChild(el("th", { class: "rowhead", text: (anyRole ? "プロジェクト・ロール" : "プロジェクト") + "＼月" }));
     months.forEach((mo) => hr.appendChild(el("th", { text: monthLabel(mo) })));
     table.appendChild(el("thead", {}, [hr]));
 
     const tbody = el("tbody");
     matrix.rows.forEach((r) => {
       const tr = el("tr");
-      tr.appendChild(el("td", { class: "rowhead", text: r.target.name, title: r.target.name }));
+      // ロール別の行はプロジェクト名＋ロール名で見出しにする（役割ミスマッチの不足を読み取れるように）
+      const head = r.roleNorm ? (r.target.name + "／" + r.role) : r.target.name;
+      tr.appendChild(el("td", { class: "rowhead", text: head, title: head }));
       r.cells.forEach((c) => {
         const detail = "必要 " + L().fteLabel(c.demand) + " / 確保 " + L().fteLabel(c.supply);
         const text = c.short ? (L().fteLabel(c.gap) + "不足") : (c.demand > 0 ? "OK" : "—"); // — ＝ 需要なし（不足合計行と揃える）
@@ -108,7 +111,10 @@
         el("span", { class: "wl-badge " + cls, text: label }),
         el("span", { class: "wl-peak" + (r.needsOutsource ? " hot" : ""), text: "不足 " + L().fteLabel(r.shortage) + " / チームの空き " + L().fteLabel(r.internalFree) }),
       ]);
-      list.appendChild(el("div", { class: "mk-month-row" }, [head]));
+      const kids = [head];
+      // 総空き ≥ 不足なのに外注が要る＝役割不一致で空きを充当できないケース。誤読（空きがあるのに外注？）を補足する。
+      if (r.needsOutsource && r.internalFree >= r.shortage) kids.push(el("div", { class: "sub", text: "空きはありますが役割が一致せず充当できません（①の不足ロールを確認）。" }));
+      list.appendChild(el("div", { class: "mk-month-row" }, kids));
     });
     return ui.card([title, lead, list]);
   }
@@ -180,9 +186,46 @@
   function editAllocation(a) {
     const ms = L().members();
     const opts = targetOptions();
+    const demands = L().demandsAll();
+    const norm = L().normRole;
+    // メンバー名（ロール付き）でオプション表示。ロールを可視化して充当ミスを減らす。
+    const memberLabel = (m) => m.name + ((m.role || "").trim() ? "（" + m.role.trim() + "）" : "");
+    const memberOption = (m) => ({ value: m.id, label: memberLabel(m) });
+    const target = ui.select(opts.map((o) => ({ value: o.value, label: o.label })), a ? a.targetId : (opts[0] && opts[0].value));
+    const member = ui.select(ms.map(memberOption), a ? a.memberId : (ms[0] && ms[0].id));
+    // ロール絞り込み。選んだロールに属するメンバーだけを候補にする（「そのロールのメンバー」を選びやすく）。
+    const roleFilter = ui.select([], "");
+    // 需要のあるロールを先頭に寄せて表示する（編集中の器に必要人数のあるロールを優先）
+    function demandRoleNorms(targetId) { const s = {}; demands.forEach((d) => { if (d.targetId === targetId) { const r = norm(d.role); if (r) s[r] = 1; } }); return s; }
+    function distinctMemberRoles() { const seen = {}, out = []; ms.forEach((m) => { const r = (m.role || "").trim(); const k = norm(r); if (r && !seen[k]) { seen[k] = 1; out.push(r); } }); return out; }
+    // 既存編集時はそのメンバーのロールで初期絞り込み（新規は「すべて」）。option 構築後に適用する必要がある
+    // ため初回だけ initRole を採用する（ui.select は option 0 件なので value を先に入れても効かない）。
+    const curMember = a ? ms.find((m) => m.id === a.memberId) : null;
+    const initRole = curMember && (curMember.role || "").trim() ? curMember.role.trim() : "";
+    let firstBuild = true;
+    function rebuildRoleFilter() {
+      const prev = firstBuild ? initRole : roleFilter.value;
+      firstBuild = false;
+      const dr = demandRoleNorms(target.value);
+      const roles = distinctMemberRoles().slice().sort((x, y) => (dr[norm(y)] ? 1 : 0) - (dr[norm(x)] ? 1 : 0));
+      roleFilter.innerHTML = "";
+      roleFilter.appendChild(el("option", { value: "", text: "すべてのロール" }));
+      roles.forEach((r) => roleFilter.appendChild(el("option", { value: r, text: r + (dr[norm(r)] ? "（必要人数あり）" : "") })));
+      roleFilter.value = prev || "";
+      rebuildMembers();
+    }
+    function rebuildMembers() {
+      const rf = norm(roleFilter.value), prev = member.value;
+      const list = ms.filter((m) => rf === "" || norm(m.role) === rf);
+      member.innerHTML = "";
+      list.forEach((m) => member.appendChild(el("option", { value: m.id, text: memberLabel(m) })));
+      if (!list.length) member.appendChild(el("option", { value: "", text: "（このロールのメンバーはいません）" }));
+      if (list.some((m) => m.id === prev)) member.value = prev;
+    }
+    roleFilter.addEventListener("change", rebuildMembers);
+    target.addEventListener("change", rebuildRoleFilter);
     const f = {
-      member: ui.select(ms.map((m) => ({ value: m.id, label: m.name })), a ? a.memberId : (ms[0] && ms[0].id)),
-      target: ui.select(opts.map((o) => ({ value: o.value, label: o.label })), a ? a.targetId : (opts[0] && opts[0].value)),
+      member, target,
       // 入力は人数（FTE）。保存は % のまま（×100）。既存レコードは percent/100 で初期表示（Issue #133）。
       fte: ui.input({ type: "number", value: a ? a.percent / 100 : 0.5 }),
       start: ui.input({ type: "date", value: a ? a.startDate : "" }),
@@ -190,13 +233,16 @@
       note: ui.textarea(a ? a.note : ""),
     };
     f.fte.step = "0.1"; f.fte.min = "0";
+    rebuildRoleFilter(); // roleFilter を初期構築し、member を絞り込む
+    if (a) f.member.value = a.memberId; // 既存メンバーを選択状態に戻す（絞り込み後）
     MK.ui.modal({ title: a ? "アサインを編集" : "アサインを追加", body: ui.stack([
-      ui.field("メンバー", f.member), ui.field("プロジェクト", f.target), ui.field("人数（0.5 / 1.0 …）", f.fte),
+      ui.field("ロールで絞り込み", roleFilter), ui.field("メンバー", f.member), ui.field("プロジェクト", f.target), ui.field("人数（0.5 / 1.0 …）", f.fte),
       ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
     ]), actions: [
       a ? { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("削除しますか？").then((ok) => { if (ok) { allocMaster().remove(a.id); c(); render(); } }) } : null,
       { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
       { label: "保存", variant: "btn-primary", onClick: (c) => {
+          if (!f.member.value) { MK.ui.toast("メンバーを選択してください（絞り込みを「すべてのロール」に戻すと選べます）", "error"); return; }
           if (!f.target.value) { MK.ui.toast("プロジェクトを選択してください", "error"); return; }
           if (f.start.value && f.end.value && f.end.value < f.start.value) { MK.ui.toast("終了日は開始日以降にしてください", "error"); return; }
           const dimOf = (opts.find((o) => o.value === f.target.value) || {}).dim || "project";
@@ -215,8 +261,9 @@
 
   function demandRow(d, opts) {
     const period = (d.startDate || "?") + " 〜 " + (d.endDate || "?");
+    const roleText = (d.role || "").trim();
     const info = el("div", { class: "grow", style: "cursor:pointer;" }, [
-      el("div", { text: targetLabel(opts, d.targetId) }),
+      el("div", { text: targetLabel(opts, d.targetId) + (roleText ? "（" + roleText + "）" : "") }),
       el("div", { class: "sub", text: "必要 " + L().fteLabel(d.requiredPercent) + "（" + d.requiredPercent + "%） / " + period }),
     ]);
     info.addEventListener("click", () => editDemand(d));
@@ -224,8 +271,10 @@
   }
   function editDemand(d) {
     const opts = targetOptions();
+    const role = roleInput(d ? d.role : "");
     const f = {
       target: ui.select(opts.map((o) => ({ value: o.value, label: o.label })), d ? d.targetId : (opts[0] && opts[0].value)),
+      role: role.input,
       // 入力は必要人数（FTE）。保存は % のまま（×100）。1人分超も可（Issue #133）。
       fte: ui.input({ type: "number", value: d ? d.requiredPercent / 100 : 1 }),
       start: ui.input({ type: "date", value: d ? d.startDate : "" }),
@@ -234,7 +283,8 @@
     };
     f.fte.step = "0.1"; f.fte.min = "0";
     MK.ui.modal({ title: d ? "必要人数を編集" : "必要人数を追加", body: ui.stack([
-      ui.field("プロジェクト", f.target), ui.field("必要人数（0.5 / 1.0 …。1人分超可）", f.fte),
+      ui.field("プロジェクト", f.target), ui.field("ロール（役割・任意。空なら役割を問わない）", role.node),
+      ui.field("必要人数（0.5 / 1.0 …。1人分超可）", f.fte),
       ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
     ]), actions: [
       d ? { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("削除しますか？").then((ok) => { if (ok) { demandMaster().remove(d.id); c(); render(); } }) } : null,
@@ -242,12 +292,29 @@
       { label: "保存", variant: "btn-primary", onClick: (c) => {
           if (!f.target.value) { MK.ui.toast("プロジェクトを選択してください", "error"); return; }
           if (f.start.value && f.end.value && f.end.value < f.start.value) { MK.ui.toast("終了日は開始日以降にしてください", "error"); return; }
+          const roleVal = (f.role.value || "").trim();
+          // 同一器でロール空（役割を問わない）とロール指定の需要を混在させると、logic の器×ロール集計で供給が
+          // 二重計上される（器はロール別 or 役割を問わない、のどちらかで計画する前提）。入力段階で混在を防ぐ（Issue #134）。
+          const others = L().demandsAll().filter((x) => x.targetId === f.target.value && (!d || x.id !== d.id));
+          if (roleVal && others.some((x) => !(x.role || "").trim())) { MK.ui.toast("この器には「役割を問わない必要人数」があります。ロール別に計画するなら、そちらにもロールを設定してください（混在は不可）", "error"); return; }
+          if (!roleVal && others.some((x) => (x.role || "").trim())) { MK.ui.toast("この器はロール別に計画されています。ロール（役割）を指定してください（混在は不可）", "error"); return; }
           const dimOf = (opts.find((o) => o.value === f.target.value) || {}).dim || "project";
-          const patch = { targetId: f.target.value, dim: dimOf, requiredPercent: Math.max(0, Math.round((Number(f.fte.value) || 0) * 100)), startDate: f.start.value || "", endDate: f.end.value || "", note: f.note.value };
+          const patch = { targetId: f.target.value, dim: dimOf, role: roleVal, requiredPercent: Math.max(0, Math.round((Number(f.fte.value) || 0) * 100)), startDate: f.start.value || "", endDate: f.end.value || "", note: f.note.value };
           if (d) demandMaster().update(d.id, patch); else demandMaster().create(patch);
           c(); render();
         } },
     ].filter(Boolean) });
+  }
+
+  // ロール入力（datalist 付きテキスト）。候補＝People.role ∪ 既存需要 role（共有語彙）。自由入力も残す（Issue #134）。
+  // datalist は id で input と結ぶ必要があるためユニーク id を採番し、input と datalist をまとめて返す。
+  function roleInput(value) {
+    const listId = "mk-roles-" + MK.util.uid("dl");
+    const input = ui.input({ value: value || "", placeholder: "（任意）例: バックエンドエンジニア" });
+    input.setAttribute("list", listId);
+    const dl = el("datalist", { id: listId });
+    L().roleVocabulary(L().members(), L().demandsAll()).forEach((r) => dl.appendChild(el("option", { value: r })));
+    return { input, node: el("span", { class: "grow" }, [input, dl]) };
   }
 
   function monthLabel(monthFirst) { if (!monthFirst) return ""; const y = monthFirst.slice(0, 4), m = Number(monthFirst.slice(5, 7)); return y + "年" + m + "月"; }
@@ -256,19 +323,26 @@
   // 前提で名寄せ（resolveOrCreate）が既存に一致する（shared/sample.js）。旧 staffing から移設（Issue #52）。
   function loadSample() {
     const today = MK.util.todayISO();
-    const sato = MK.people.resolveOrCreate("佐藤 花子"), suzuki = MK.people.resolveOrCreate("鈴木 一郎"), tanaka = MK.people.resolveOrCreate("田中 美咲");
+    // ロール名は People のサンプル（佐藤=PM / 鈴木=エンジニア / 田中=デザイナー / 高橋=エンジニア）と揃える（Issue #134）。
+    const sato = MK.people.resolveOrCreate("佐藤 花子"), suzuki = MK.people.resolveOrCreate("鈴木 一郎"), tanaka = MK.people.resolveOrCreate("田中 美咲"), takahashi = MK.people.resolveOrCreate("高橋 健");
     const alpha = MK.projects.resolveOrCreate("新製品ローンチ"), beta = MK.projects.resolveOrCreate("サイトリニューアル");
     const end = MK.util.addDays(today, 84);
     MK.allocations.replaceAll([
+      // alpha のエンジニア供給＝60+80=140%（需要200% に対し 0.6人 不足）。佐藤(PM)はロール不一致で エンジニア枠を埋めない。
       { id: MK.util.uid("a"), memberId: suzuki, targetId: alpha, dim: "project", startDate: today, endDate: end, percent: 60, note: "" },
-      { id: MK.util.uid("a"), memberId: suzuki, targetId: beta, dim: "project", startDate: today, endDate: end, percent: 30, note: "" },
+      { id: MK.util.uid("a"), memberId: takahashi, targetId: alpha, dim: "project", startDate: today, endDate: end, percent: 80, note: "" },
       { id: MK.util.uid("a"), memberId: sato, targetId: alpha, dim: "project", startDate: today, endDate: end, percent: 50, note: "" },
-      { id: MK.util.uid("a"), memberId: tanaka, targetId: beta, dim: "project", startDate: today, endDate: end, percent: 80, note: "" },
+      // alpha のデザイナー供給＝50%（需要100% に対し 0.5人 不足）
+      { id: MK.util.uid("a"), memberId: tanaka, targetId: alpha, dim: "project", startDate: today, endDate: end, percent: 50, note: "" },
+      // beta は役割を問わない需要（後方互換）。佐藤 30% で 0.7人 不足
+      { id: MK.util.uid("a"), memberId: sato, targetId: beta, dim: "project", startDate: today, endDate: end, percent: 30, note: "" },
     ]);
-    // 需要（供給と対）。alpha は確保1.1人に対し2.0人必要＝不足0.9人を可視化する（Issue #68 / #71）。
+    // 需要（供給と対）。alpha はロール別に計画。データサイエンティストは内部に該当者なし＝外注候補として残る（Issue #134）。
     if (MK.demands) MK.demands.replaceAll([
-      { id: MK.util.uid("d"), targetId: alpha, dim: "project", startDate: today, endDate: end, requiredPercent: 200, note: "2名体制が必要" },
-      { id: MK.util.uid("d"), targetId: beta, dim: "project", startDate: today, endDate: end, requiredPercent: 100, note: "" },
+      { id: MK.util.uid("d"), targetId: alpha, dim: "project", startDate: today, endDate: end, requiredPercent: 200, role: "エンジニア", note: "2名体制が必要" },
+      { id: MK.util.uid("d"), targetId: alpha, dim: "project", startDate: today, endDate: end, requiredPercent: 100, role: "デザイナー", note: "" },
+      { id: MK.util.uid("d"), targetId: alpha, dim: "project", startDate: today, endDate: end, requiredPercent: 100, role: "データサイエンティスト", note: "外注前提（社内に該当者なし）" },
+      { id: MK.util.uid("d"), targetId: beta, dim: "project", startDate: today, endDate: end, requiredPercent: 100, role: "", note: "" },
     ]);
   }
 
