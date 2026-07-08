@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   const MK = window.MK;
-  const store = MK.store.scope("module:techstack");
+  const col = MK.store.collection("module:techstack", { key: "items", stamp: true });
 
   /**
    * 採用状況（Tech Radar のリング）定義。key＝内部値、label＝表示名。表示順もこの配列順に従う。
@@ -45,22 +45,9 @@
   /** 見直し期限が「接近」とみなされる残日数の閾値（この日数以内で soon）。 */
   const DEADLINE_SOON_DAYS = 90;
 
-  /**
-   * ストアから techstack データを読み込む。未保存・不正形式なら空の初期データを返す。
-   * @returns {TechstackData} 読み込んだデータ（常に items 配列を持つ）
-   */
-  function load() {
-    const d = store.get();
-    if (!d || !Array.isArray(d.items)) return { version: 1, items: [] };
-    return d;
-  }
-  /**
-   * techstack データをストアへ保存する。exportedAt を現在時刻で更新する。
-   * @param {TechstackData} d - 保存するデータ
-   * @returns {void}
-   * ※ store（localStorage）へ書き込む副作用あり。
-   */
-  function save(d) { d.exportedAt = MK.util.nowISO(); store.set(d); }
+  // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→items 配列検証→既定返却、
+  // save＝exportedAt 付与→store.set（返り値は保存成否）。仕様は MK.store.collection を参照。
+  const { load, save } = col;
   /**
    * 全アイテムの配列を返す。
    * @returns {TechItem[]} 技術スタック一覧

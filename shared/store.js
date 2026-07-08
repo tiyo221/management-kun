@@ -130,6 +130,36 @@
         set(value) { return self.write(ns, value); },
       };
     },
+
+    // 「配列キー1本を持つモジュールデータ」の load/save 定型を集約する（Issue #139）。
+    // 各モジュールが再実装していた「store 読取→配列検証→既定返却」「exportedAt 付与→set」
+    // を1か所へ寄せる。複数キーや fixup が要るモジュール（skills/workload/wbs 等）は対象外。
+    //   key     … データ本体を格納する配列プロパティ名（例 "tasks"）。
+    //   version … 既定データの schema バージョン（既定 1）。
+    //   stamp   … true のとき save 時に exportedAt を現在時刻で付与する（既定 false）。
+    // 返り値 { load, save }:
+    //   load()  … store から読み、data[key] が配列でなければ { version, [key]: [] } を返す。
+    //   save(d) … stamp 指定時のみ exportedAt を付け、store.set の戻り値（保存成否）を返す。
+    collection(ns, opts) {
+      opts = opts || {};
+      const key = opts.key;
+      const version = opts.version == null ? 1 : opts.version;
+      const stamp = opts.stamp === true;
+      const scoped = this.scope(ns);
+      return {
+        load() {
+          const d = scoped.get();
+          if (d && Array.isArray(d[key])) return d;
+          const init = { version };
+          init[key] = [];
+          return init;
+        },
+        save(d) {
+          if (stamp) d.exportedAt = MK.util.nowISO();
+          return scoped.set(d);
+        },
+      };
+    },
   };
 
   MK.store = store;

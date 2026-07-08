@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   const MK = window.MK;
-  const store = MK.store.scope("module:goals");
+  const col = MK.store.collection("module:goals", { key: "goals" });
 
   /**
    * 目標達成に向けたステップ1件。
@@ -34,18 +34,9 @@
    * @property {Goal[]} goals - 目標一覧
    */
 
-  /**
-   * ストアから目標データを読み込む。未保存・不正形式なら空の初期データを返す。
-   * @returns {GoalsData} 読み込んだデータ（常に goals 配列を持つ）
-   */
-  function load() { const d = store.get(); if (!d || !Array.isArray(d.goals)) return { version: 1, goals: [] }; return d; }
-  /**
-   * 目標データをストアへ保存する。
-   * @param {GoalsData} d - 保存するデータ
-   * @returns {void}
-   * ※ store（localStorage）へ書き込む副作用あり。
-   */
-  function save(d) { store.set(d); }
+  // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→goals 配列検証→既定返却、
+  // save＝store.set（goals は exportedAt を付与しない・返り値は保存成否）。仕様は MK.store.collection を参照。
+  const { load, save } = col;
   /**
    * 全目標の配列を返す。
    * @returns {Goal[]} 目標一覧

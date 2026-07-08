@@ -54,6 +54,38 @@ test("store: QuotaExceededError を握りつぶさず記録し、戻り値 false
   }
 });
 
+test("store: collection() load は未保存・不正形式で既定 { version, [key]: [] } を返す", (MK) => {
+  // 観点: 配列キー1本の load 定型（Issue #139）。未保存＝null、key が配列でない＝不正形式
+  const c = MK.store.collection("module:todo", { key: "tasks", stamp: true });
+  eq(c.load(), { version: 1, tasks: [] }); // 未保存
+  MK.store.write("module:todo", { version: 1, tasks: "not-array" });
+  eq(c.load(), { version: 1, tasks: [] }); // 不正形式
+  // 既定は毎回別インスタンス（共有参照の破壊を防ぐ）
+  assert(c.load() !== c.load(), "既定オブジェクトは毎回新規");
+});
+
+test("store: collection() load は保存済みデータをそのまま返す", (MK) => {
+  const c = MK.store.collection("module:todo", { key: "tasks" });
+  const saved = { version: 1, tasks: [{ id: "t1" }], exportedAt: "2020-01-01T00:00:00.000Z" };
+  MK.store.write("module:todo", saved);
+  eq(c.load(), saved);
+});
+
+test("store: collection() save は stamp:true で exportedAt を付与し、保存成否を返す", (MK) => {
+  // 観点: stamp 有無で exportedAt 付与を切り替え（既存の各モジュール保存仕様を維持）
+  const stamped = MK.store.collection("module:todo", { key: "tasks", stamp: true });
+  const d = { version: 1, tasks: [] };
+  const ok = stamped.save(d);
+  eq(ok, true);
+  assert(typeof d.exportedAt === "string" && d.exportedAt, "exportedAt が付与される");
+  eq(MK.store.read("module:todo").exportedAt, d.exportedAt);
+
+  const plain = MK.store.collection("module:goals", { key: "goals" });
+  const g = { version: 1, goals: [] };
+  plain.save(g);
+  assert(!("exportedAt" in g), "stamp 未指定なら exportedAt を付与しない");
+});
+
 test("store: onWriteError フックが呼ばれる（案内導線の差し込み点）", (MK) => {
   const orig = global.localStorage;
   const q = makeQuotaLS();
