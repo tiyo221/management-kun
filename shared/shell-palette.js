@@ -9,7 +9,9 @@
   const el = MK.util.el;
   const S = window.MK.shell;
   const { META, ALLOWED, ZONES } = S;
-  const { route, isHiddenModule, moduleDescription } = S;
+  const { route, isHiddenModule } = S;
+  // moduleDescription は home（先行ファイル）が S に載せる横断関数。読込順への暗黙依存を避けるため
+  // 分割代入せず、利用箇所で S.moduleDescription(...) と実行時解決する（他の横断関数と統一）。
 
   // 候補の種別ラベル（右端に添える）。
   const KIND_LABELS = { module: "モジュール", person: "人", project: "プロジェクト", product: "プロダクト", record: "" };
@@ -20,7 +22,7 @@
     ZONES.forEach((zone) => (zone.modules || []).forEach((id) => {
       if (!META[id] || isHiddenModule(id) || !ALLOWED[id]) return;
       items.push({ kind: "module", icon: META[id].icon || "🧩", label: META[id].title,
-        sub: moduleDescription(id) || "モジュールを開く", view: id, keywords: [id] });
+        sub: S.moduleDescription(id) || "モジュールを開く", view: id, keywords: [id] });
     }));
     // 人マスタ
     if (ALLOWED["master-people"] && MK.people) {
