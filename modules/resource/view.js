@@ -111,7 +111,10 @@
         el("span", { class: "wl-badge " + cls, text: label }),
         el("span", { class: "wl-peak" + (r.needsOutsource ? " hot" : ""), text: "不足 " + L().fteLabel(r.shortage) + " / チームの空き " + L().fteLabel(r.internalFree) }),
       ]);
-      list.appendChild(el("div", { class: "mk-month-row" }, [head]));
+      const kids = [head];
+      // 総空き ≥ 不足なのに外注が要る＝役割不一致で空きを充当できないケース。誤読（空きがあるのに外注？）を補足する。
+      if (r.needsOutsource && r.internalFree >= r.shortage) kids.push(el("div", { class: "sub", text: "空きはありますが役割が一致せず充当できません（①の不足ロールを確認）。" }));
+      list.appendChild(el("div", { class: "mk-month-row" }, kids));
     });
     return ui.card([title, lead, list]);
   }
