@@ -78,11 +78,18 @@
   extra.forEach((id) => { wanted[id] = true; });
   const moduleIds = Object.keys(CATALOG).filter((id) => wanted[id]);
 
-  // 読込順: 共有資産 → 各モジュール（logic→view）→ shell.js。
+  // シェルはビュー単位に分割してある（Issue #140）。読込順は core が最初（S＝window.MK.shell を生成）、
+  // shell.js が最後（起動配線＝ブート。全描画関数が S に載った後に走る）。間の順序は palette が
+  // home の moduleDescription を借りるため home→palette とする以外は独立。
+  const SHELL = [
+    "shell-core", "shell-nav", "shell-home", "shell-palette", "shell-masters", "shell-settings", "shell",
+  ];
+
+  // 読込順: 共有資産 → 各モジュール（logic→view）→ シェル各ファイル。
   const srcs = [];
   SHARED.forEach((s) => srcs.push("shared/" + s + ".js"));
   moduleIds.forEach((id) => { srcs.push("modules/" + id + "/logic.js"); srcs.push("modules/" + id + "/view.js"); });
-  srcs.push("shared/shell.js");
+  SHELL.forEach((s) => srcs.push("shared/" + s + ".js"));
 
   // async=false で動的挿入したスクリプトは「挿入順」に実行される（logic→view→shell の順序保証）。
   // document.write を使わず、file:// でも順序どおり読み込める。
