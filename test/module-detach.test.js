@@ -7,10 +7,10 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
-const { setup } = require("./harness");
+const { setup, ZONE_MODULE_IDS } = require("./harness");
 
-// index.html の MK_CONFIG.zones に載る全モジュール id（横断表示が総なめする対象の一覧）。
-const ZONE_MODULE_IDS = ["todo", "goals", "questions", "skills", "resource", "oneonone", "dashboard", "wbs", "releases", "techstack"];
+// ゾーンに載る全モジュール id（横断表示が総なめする対象の一覧）は構成マニフェスト（Issue #137）
+// から導出する（ハードコードせず単一ソースに追随）。
 // このテストで「搭載する」サブセット。残りは「外した」構成として検証する。
 const RESIDING = ["todo", "goals"];
 const DETACHED = ZONE_MODULE_IDS.filter((id) => RESIDING.indexOf(id) === -1);

@@ -46,26 +46,9 @@ window.MK_CONFIG = {
 };
 </script>
 
-<!-- 共有資産（classic script・window.MK 名前空間。spec §3.3） -->
-<script src="shared/core.js"></script>
-<script src="shared/store.js"></script>
-<script src="shared/scope.js"></script>
-<script src="shared/io.js"></script>
-<script src="shared/people.js"></script>
-<script src="shared/projects.js"></script>
-<script src="shared/search.js"></script>
-<script src="shared/allocations.js"></script>
-<script src="shared/ui.js"></script>
-<script src="shared/sample.js"></script>
-<!-- モジュール（個人ゾーンのみ。logic → view の順。CONVENTIONS §1） -->
-<script src="modules/todo/logic.js"></script>
-<script src="modules/todo/view.js"></script>
-<script src="modules/goals/logic.js"></script>
-<script src="modules/goals/view.js"></script>
-<script src="modules/questions/logic.js"></script>
-<script src="modules/questions/view.js"></script>
-
-<!-- シェル（ブートストラップ・ルーター。プロファイル非依存） -->
-<script src="shared/shell.js"></script>
+<!-- 構成マニフェスト（単一ソース）。MK_CONFIG.zones（自分ゾーンのみ）を読み、共有資産＋そのゾーンの
+     モジュール（logic→view）＋シェルだけを読み込む（Issue #137）。zones に無いチーム系モジュール
+     （skills/workload/wbs 等）の <script> は読み込まれず、コードもデータも物理的に存在しない（spec §1.5）。 -->
+<script src="shared/manifest.js"></script>
 </body>
 </html>

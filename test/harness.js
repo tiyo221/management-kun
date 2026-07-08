@@ -47,29 +47,35 @@ function makeDocument() {
   };
 }
 
-// 共有資産（全構成で常にロードする土台）。
-const SHARED_SCRIPTS = [
-  "shared/core.js", "shared/store.js", "shared/scope.js", "shared/io.js",
-  "shared/people.js", "shared/projects.js", "shared/products.js", "shared/search.js", "shared/allocations.js", "shared/demands.js", "shared/ui.js", "shared/sample.js",
-];
+// 構成マニフェスト（shared/manifest.js の window.MK_MANIFEST）を単一ソースとして、共有資産の一覧と
+// モジュール id をここで導出する（Issue #137）。manifest.js は DOM が無ければスクリプト注入をスキップ
+// するため、Node 上で安全にデータだけ取り出せる。
+function loadManifest() {
+  const prevWindow = global.window, prevDoc = global.document;
+  global.window = {};
+  global.document = undefined; // 注入ガード（typeof document === "undefined"）に確実に掛ける
+  try {
+    const code = fs.readFileSync(path.join(__dirname, "..", "shared/manifest.js"), "utf8");
+    vm.runInThisContext(code, { filename: "shared/manifest.js" });
+    return global.window.MK_MANIFEST;
+  } finally {
+    global.window = prevWindow; global.document = prevDoc;
+  }
+}
+const MANIFEST = loadManifest();
+
+// 共有資産（全構成で常にロードする土台）。読込順＝依存順はマニフェストの shared 配列に従う。
+const SHARED_SCRIPTS = MANIFEST.shared.map((s) => "shared/" + s + ".js");
 
 // モジュール id → logic.js。着脱テスト（Issue #123・spec §9.5 柱1）でサブセット構成を
-// 作れるよう一覧化する。既定（setup() 引数なし）では全モジュールを従来と同じ順序でロードし、
-// 既存テスト・挙動は不変とする。view.js は DOM を触るためここには含めない（logic＋core 層まで）。
-const MODULE_LOGIC = {
-  todo: "modules/todo/logic.js",
-  goals: "modules/goals/logic.js",
-  questions: "modules/questions/logic.js",
-  wbs: "modules/wbs/logic.js",
-  dashboard: "modules/dashboard/logic.js",
-  skills: "modules/skills/logic.js",
-  workload: "modules/workload/logic.js",
-  resource: "modules/resource/logic.js",
-  oneonone: "modules/oneonone/logic.js",
-  techstack: "modules/techstack/logic.js",
-  releases: "modules/releases/logic.js",
-};
+// 作れるよう一覧化する。既定（setup() 引数なし）ではカタログ全モジュールをロードする。
+// view.js は DOM を触るためここには含めない（logic＋core 層まで）。
+const MODULE_LOGIC = {};
+Object.keys(MANIFEST.catalog).forEach((id) => { MODULE_LOGIC[id] = "modules/" + id + "/logic.js"; });
 const ALL_MODULE_IDS = Object.keys(MODULE_LOGIC);
+// ゾーンに載るモジュール id（カタログ順）。ゾーン外の workload 等を除く。着脱テストが総なめ対象に使う。
+const ZONE_MODULE_IDS = ALL_MODULE_IDS.filter((id) =>
+  (MANIFEST.zones || []).some((z) => (z.modules || []).indexOf(id) >= 0));
 
 // opts.modules: ロードするモジュール id の配列（未指定＝全モジュール＝従来挙動）。
 // サブセットを渡すと「そのモジュールだけ搭載した構成」で起動を再現できる。
@@ -98,4 +104,4 @@ function reset(MK) {
   MK.store._cache = {};
 }
 
-module.exports = { setup, reset, ALL_MODULE_IDS };
+module.exports = { setup, reset, ALL_MODULE_IDS, ZONE_MODULE_IDS };
