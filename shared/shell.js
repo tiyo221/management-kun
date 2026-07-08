@@ -14,31 +14,14 @@
     return (b / (1024 * 1024)).toFixed(2) + " MB";
   }
 
-  // モジュールのメタ（未実装は「準備中」表示）spec §5。全モジュールの表示情報を持つ
-  // カタログ。エントリが積まないモジュールの分は単に参照されないだけで無害。
-  const META = {
-    todo: { title: "ToDo", icon: "✅" },
-    goals: { title: "目標", icon: "🎯" },
-    questions: { title: "わからないこと", icon: "❓" },
-    skills: { title: "スキル", icon: "📊" },
-    workload: { title: "負荷", icon: "📈" },
-    resource: { title: "リソース", icon: "🧑‍🤝‍🧑" },
-    oneonone: { title: "1on1", icon: "🗣" },
-    dashboard: { title: "ダッシュボード", icon: "🧭" },
-    wbs: { title: "WBS", icon: "🗂" },
-    techstack: { title: "技術スタック", icon: "🧰" },
-    releases: { title: "リリース", icon: "🚀" },
-  };
+  // モジュールのメタ（title/icon。未実装は「準備中」表示）spec §5。カタログは構成マニフェスト
+  // （shared/manifest.js の window.MK_MANIFEST）を単一ソースとする（Issue #137）。エントリが積まない
+  // モジュールの分は単に参照されないだけで無害。
+  const MANIFEST = window.MK_MANIFEST || {};
+  const META = MANIFEST.catalog || {};
   // ゾーン構成は配布プロファイル（window.MK_CONFIG.zones）から受け取る。未指定なら
-  // マネージャ用の全部入りにフォールバックする（spec §1.4 / §1.5 / §6.4）。
-  // 分類は EM が見る領域で切る（自分＋4領域）。
-  const DEFAULT_ZONES = [
-    { label: "自分", modules: ["todo", "goals", "questions"] },
-    { label: "ピープル", modules: ["skills", "resource", "oneonone"] },
-    { label: "デリバリー", modules: ["wbs"] },
-    { label: "プロダクト", modules: ["releases"] },
-    { label: "テクノロジー", modules: ["techstack"] },
-  ];
+  // マニフェストの既定（マネージャ用の全部入り）にフォールバックする（spec §1.4 / §1.5 / §6.4）。
+  const DEFAULT_ZONES = MANIFEST.zones || [];
   // マスタは特定ゾーンの持ち物ではなく、settings と同列の「シェルレベル管理グループ」
   // として独立させる（spec §3.6 / Issue #46）。プロジェクトは wbs（デリバリー）だけで
   // なく workload（ピープル）からも参照される横断的存在（scope: "global"・§4.6）であり、

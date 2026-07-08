@@ -23,7 +23,7 @@ modules/
     logic.js   … MK.logic["<id>"] を定義（データ・計算・CRUD）
     view.js    … MK.registerModule("<id>", {...}) を定義（描画・イベント）
 ```
-`index.html` では **`logic.js → view.js` の順**に classic `<script src>` で読み込む（ES Modules / `fetch` は使わない）。
+読み込みは [`shared/manifest.js`](shared/manifest.js) が **`logic.js → view.js` の順**に classic `<script>`（`async=false`）で動的注入する（ES Modules / `fetch` は使わない・Issue #137）。エントリ HTML へ個別に `<script src>` を足さない。
 
 ### 1.3 責務の分担（厳守）
 **logic.js（DOM に触れない）**
@@ -110,14 +110,14 @@ modules/
 
 1. `modules/<id>/logic.js` を作成。`const store = MK.store.scope("module:<id>");` で始め、`load/save`・計算・CRUD・`exportData/importData/loadSample` を定義し、`MK.logic["<id>"] = {...}` で公開（DOM に触れない）。
 2. `modules/<id>/view.js` を作成。`const L = () => MK.logic["<id>"];`、`render()` を `MK.ui` ヘルパで組み、`MK.registerModule("<id>", { title, icon, description, mount, unmount, exportData:()=>L().exportData(), importData:(d,m)=>L().importData(d,m), loadSample:()=>L().loadSample() })`。`description` は「何ができるか」の1行説明（HOME が見取り図として描画・spec §3.6 / Issue #40）。
-3. [`index.html`](index.html): `<script src="modules/<id>/logic.js">` → `<script src="modules/<id>/view.js">` の順で追加し、`MK_CONFIG.zones`（自分／ピープル／デリバリー…＝§1.4 の領域）の該当グループに `<id>` を登録。ゾーンが未定義なら新しいゾーンを追加する。
-4. [`shared/shell.js`](shared/shell.js): カタログ `META` にタイトル/アイコンを登録（**META に無いモジュールはナビ・HOME に出ない**）。マネージャ全部入りのフォールバック `DEFAULT_ZONES` にも同様に `<id>` を追加する。1行説明 `description` は **META に足さず def 側に持たせる**（HOME が def から読む単一ソース。重複ハードコード禁止・§3.6 / Issue #40）。
-5. 旧ツール移行が必要なら `shared/shell.js` の `migrateLegacy()` に分岐と `LEGACY_KEYS` を追加。
-6. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、**[`spec.md`](spec.md) §5 のモジュール一覧表に行を追加する（モジュール id の列挙・CSV 対応の ✓ はここだけ・単一ソース）**。CSV に対応させたら §5 表の CSV 列を ✓ にする（`build…CSVRows` を実装したのに ✓ を付け忘れる／逆に外し忘れると [`test/spec-consistency.test.js`](test/spec-consistency.test.js) が失敗する）。マスタ利用の有無に増減があれば [`spec/masters.md`](spec/masters.md) §4.4 の利用関係表も同期する。§3.2 / §4.1 / §4.2 / §4.6 / §6.4・README・CLAUDE.md は規則＋参照になっているため個別列挙の追記は不要（もし id や「CSV 対応＝○○」の列挙を見つけたら §5 への参照へ直す）。
-7. `test/<id>.test.js` を追加し、[`test/harness.js`](test/harness.js) の `SCRIPTS` に `modules/<id>/logic.js` を登録する（[`TESTING.md`](TESTING.md) §5）。`test/` の一覧は [`TESTING.md`](TESTING.md) §7 を正とする。
-8. §6 のチェックリストで点検。
+3. [`shared/manifest.js`](shared/manifest.js): **モジュールの登録は原則ここ1か所**（Issue #137）。カタログ `CATALOG` に `<id>: { title, icon }` を追加し（**カタログに無いモジュールはナビ・HOME に出ず、スクリプトも読み込まれない**）、既定（マネージャ全部入り）の `ZONES` の該当グループ（自分／ピープル／デリバリー…＝§1.4 の領域）に `<id>` を登録する。ゾーンが未定義なら新しいゾーンを追加する。ゾーンに出さないが実体だけ読みたい（旧データ移行専用の workload 等）場合は `LOAD` に追加する。これだけで index.html・member.html の `<script>` 追記もゾーンの二重定義も不要（manifest が `logic→view→shell` を順序どおり動的読込し、shell.js の `META`／`DEFAULT_ZONES` も manifest を参照する）。1行説明 `description` は **カタログに足さず def 側に持たせる**（HOME が def から読む単一ソース。重複ハードコード禁止・§3.6 / Issue #40）。
+   - 配布プロファイル（[`member.html`](member.html) 等）に載せたい場合のみ、そのエントリの `MK_CONFIG.zones` にも `<id>` を足す（載せなければ配布物にコードもデータも含まれない・spec §1.5）。マネージャ（[`index.html`](index.html)）は `zones` を宣言せず manifest 既定を使うため追記不要。
+4. 旧ツール移行が必要なら [`shared/shell.js`](shared/shell.js) の `migrateLegacy()` に分岐と `LEGACY_KEYS` を追加。
+5. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、**[`spec.md`](spec.md) §5 のモジュール一覧表に行を追加する（モジュール id の列挙・CSV 対応の ✓ はここだけ・単一ソース）**。CSV に対応させたら §5 表の CSV 列を ✓ にする（`build…CSVRows` を実装したのに ✓ を付け忘れる／逆に外し忘れると [`test/spec-consistency.test.js`](test/spec-consistency.test.js) が失敗する。id 一覧は manifest カタログと突き合わせる）。マスタ利用の有無に増減があれば [`spec/masters.md`](spec/masters.md) §4.4 の利用関係表も同期する。§3.2 / §4.1 / §4.2 / §4.6 / §6.4・README・CLAUDE.md は規則＋参照になっているため個別列挙の追記は不要（もし id や「CSV 対応＝○○」の列挙を見つけたら §5 への参照へ直す）。
+6. `test/<id>.test.js` を追加する（[`TESTING.md`](TESTING.md) §5）。ロード対象（[`test/harness.js`](test/harness.js) の `SHARED_SCRIPTS`／`MODULE_LOGIC`）は manifest から自動導出されるため、**モジュールのハーネス登録は不要**（カタログに足せば載る）。`test/` の一覧は [`TESTING.md`](TESTING.md) §7 を正とする。
+7. §6 のチェックリストで点検。
 
-> **モジュールを 1 つ追加するときに直すドキュメントはこの手順（§5）が唯一の道しるべ**。id の一覧は spec.md §5 に一元化してあるため、他のドキュメント（§3.2 / §4.1 / §4.2 / §6.4 / README）へ id を再列挙しない。
+> **モジュールを 1 つ追加するときの登録は [`shared/manifest.js`](shared/manifest.js) 1か所**（Issue #137）。id の一覧は spec.md §5（ドキュメント正）と manifest カタログ（実装正）に一元化してあるため、他のドキュメント（§3.2 / §4.1 / §4.2 / §6.4 / README）や index.html/member.html へ id を再列挙しない。
 
 ---
 

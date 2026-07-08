@@ -33,9 +33,11 @@
   </div>
 </div>
 
-<!-- 配布プロファイル（マネージャ用・全部入り）。どのゾーン/モジュールを積むかを宣言する。
-     シェル（shared/shell.js）は window.MK_CONFIG を読んで描画するため、エントリを足しても
-     シェル本体の改修は不要（spec §1.5）。 -->
+<!-- 配布プロファイル（マネージャ用・全部入り）。プロファイル固有の宣言（次元・マスタ）だけを持つ。
+     ゾーン割当とモジュールのスクリプト読込は shared/manifest.js に単一ソース化した（Issue #137）。
+     zones を宣言しないので manifest の既定（マネージャ全部入り）が使われる。
+     シェル（shared/shell.js）は window.MK_CONFIG を読んで描画するため、エントリを足してもシェル本体の
+     改修は不要（spec §1.5）。 -->
 <script>
 window.MK_CONFIG = {
   profile: "manager",
@@ -46,13 +48,6 @@ window.MK_CONFIG = {
     // Product 次元（Issue #54）。master は既存の products マスタ（shared/products.js）に
     // 汎用解決される。scoped モジュールは追加時に実体化する（YAGNI・§3.7.6）。
     { dim: "product", label: "プロダクト", master: "products" },
-  ],
-  zones: [
-    { label: "自分", modules: ["todo", "goals", "questions"] },
-    { label: "ピープル", modules: ["skills", "resource", "oneonone"] },
-    { label: "デリバリー", modules: ["dashboard", "wbs"] },
-    { label: "プロダクト", modules: ["releases"] },
-    { label: "テクノロジー", modules: ["techstack"] },
   ],
   // マスタ（人・プロジェクト）はゾーン配下ではなく、settings と同列の「シェルレベル管理
   // グループ」として独立させる（spec §3.6 / Issue #46）。プロジェクトは wbs だけでなく
@@ -65,44 +60,8 @@ window.MK_CONFIG = {
 };
 </script>
 
-<!-- 共有資産（classic script・window.MK 名前空間。spec §3.3） -->
-<script src="shared/core.js"></script>
-<script src="shared/store.js"></script>
-<script src="shared/scope.js"></script>
-<script src="shared/io.js"></script>
-<script src="shared/people.js"></script>
-<script src="shared/projects.js"></script>
-<script src="shared/products.js"></script>
-<script src="shared/search.js"></script>
-<script src="shared/allocations.js"></script>
-<script src="shared/demands.js"></script>
-<script src="shared/ui.js"></script>
-<script src="shared/sample.js"></script>
-<!-- モジュール（logic → view の順で読み込む。CONVENTIONS §1） -->
-<script src="modules/todo/logic.js"></script>
-<script src="modules/todo/view.js"></script>
-<script src="modules/goals/logic.js"></script>
-<script src="modules/goals/view.js"></script>
-<script src="modules/questions/logic.js"></script>
-<script src="modules/questions/view.js"></script>
-<script src="modules/dashboard/logic.js"></script>
-<script src="modules/dashboard/view.js"></script>
-<script src="modules/wbs/logic.js"></script>
-<script src="modules/wbs/view.js"></script>
-<script src="modules/skills/logic.js"></script>
-<script src="modules/skills/view.js"></script>
-<script src="modules/workload/logic.js"></script>
-<script src="modules/workload/view.js"></script>
-<script src="modules/resource/logic.js"></script>
-<script src="modules/resource/view.js"></script>
-<script src="modules/oneonone/logic.js"></script>
-<script src="modules/oneonone/view.js"></script>
-<script src="modules/techstack/logic.js"></script>
-<script src="modules/techstack/view.js"></script>
-<script src="modules/releases/logic.js"></script>
-<script src="modules/releases/view.js"></script>
-
-<!-- シェル（ブートストラップ・ルーター。プロファイル非依存） -->
-<script src="shared/shell.js"></script>
+<!-- 構成マニフェスト（単一ソース）。MK_CONFIG を読み、共有資産＋モジュール（logic→view）＋シェルを
+     読込順を保って動的に読み込む（Issue #137）。モジュール追加時にここへ <script> を足さない。 -->
+<script src="shared/manifest.js"></script>
 </body>
 </html>

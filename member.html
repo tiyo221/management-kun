@@ -32,7 +32,7 @@
   </div>
 </div>
 
-<!-- 配布プロファイル（メンバー配布用・個人ツールのみ）。自分ゾーン（todo/goals）だけを積む。
+<!-- 配布プロファイル（メンバー配布用・個人ツールのみ）。自分ゾーン（todo/goals/questions）だけを積む。
      チーム系モジュール（skills/workload/wbs）とマスタ管理は zones に載せないためナビにも
      現れず、画面から到達できない。かつ当該 <script> も読み込まないので、コードもデータ
      （localStorage）も物理的に存在しない ＝ 見た目・実データの両面で分離される（spec §1.5）。 -->
@@ -46,26 +46,10 @@ window.MK_CONFIG = {
 };
 </script>
 
-<!-- 共有資産（classic script・window.MK 名前空間。spec §3.3） -->
-<script src="shared/core.js"></script>
-<script src="shared/store.js"></script>
-<script src="shared/scope.js"></script>
-<script src="shared/io.js"></script>
-<script src="shared/people.js"></script>
-<script src="shared/projects.js"></script>
-<script src="shared/search.js"></script>
-<script src="shared/allocations.js"></script>
-<script src="shared/ui.js"></script>
-<script src="shared/sample.js"></script>
-<!-- モジュール（個人ゾーンのみ。logic → view の順。CONVENTIONS §1） -->
-<script src="modules/todo/logic.js"></script>
-<script src="modules/todo/view.js"></script>
-<script src="modules/goals/logic.js"></script>
-<script src="modules/goals/view.js"></script>
-<script src="modules/questions/logic.js"></script>
-<script src="modules/questions/view.js"></script>
-
-<!-- シェル（ブートストラップ・ルーター。プロファイル非依存） -->
-<script src="shared/shell.js"></script>
+<!-- 構成マニフェスト（単一ソース）。共有資産（土台）は全プロファイル共通で読み込み、モジュールは
+     MK_CONFIG.zones（自分ゾーンのみ）に載る分だけ logic→view を読み込む（Issue #137）。zones に無い
+     チーム系モジュール（skills/workload/wbs 等）の <script> は読み込まれず、コードもデータも物理的に
+     存在しない（spec §1.5）。 -->
+<script src="shared/manifest.js"></script>
 </body>
 </html>
