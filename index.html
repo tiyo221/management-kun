@@ -36,8 +36,8 @@
 <!-- 配布プロファイル（マネージャ用・全部入り）。プロファイル固有の宣言（次元・マスタ）だけを持つ。
      ゾーン割当とモジュールのスクリプト読込は shared/manifest.js に単一ソース化した（Issue #137）。
      zones を宣言しないので manifest の既定（マネージャ全部入り）が使われる。
-     シェル（shared/shell.js）は window.MK_CONFIG を読んで描画するため、エントリを足してもシェル本体の
-     改修は不要（spec §1.5）。 -->
+     シェル（shared/shell-*.js。責務別に分割・Issue #140）は window.MK_CONFIG を読んで描画するため、
+     エントリを足してもシェル本体の改修は不要（spec §1.5）。 -->
 <script>
 window.MK_CONFIG = {
   profile: "manager",
