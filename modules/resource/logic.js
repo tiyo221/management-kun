@@ -330,14 +330,22 @@
       // 月内の不足をロール別に集約（不足している行の gap のみ）
       const shortageByRole = {};
       mx.rows.forEach((r) => { const gap = r.cells[i].gap; if (gap > 0) shortageByRole[r.roleNorm] = (shortageByRole[r.roleNorm] || 0) + gap; });
-      let shortage = 0, outsource = 0;
-      Object.keys(shortageByRole).forEach((norm) => {
-        const sh = shortageByRole[norm];
-        const free = teamFreeByRole(allocations, memberList, date, norm, capacity, roleOf);
-        shortage += sh;
-        outsource += Math.max(0, sh - free);
-      });
       const internalFree = teamFreeOn(allocations, memberList, date, capacity);
+      // 吸収は単一の空きプールから消費する（同じメンバーの空きを複数バケットで二重計上しない。#134 レビュー）。
+      // ロール指定の不足はそのロールのメンバーの空きでしか賄えない＝制約が強いので先に自ロールの空きから消費し、
+      // 役割を問わない不足（ロール空）は「総空き − ロール指定で消費済み」の残余（＝誰でも良い枠）から吸収する。
+      let shortage = 0, outsource = 0, roleConsumed = 0;
+      Object.keys(shortageByRole).forEach((norm) => {
+        if (norm === "") return;
+        const sh = shortageByRole[norm];
+        const absorbed = Math.min(sh, teamFreeByRole(allocations, memberList, date, norm, capacity, roleOf));
+        shortage += sh; roleConsumed += absorbed; outsource += sh - absorbed;
+      });
+      if (Object.prototype.hasOwnProperty.call(shortageByRole, "")) {
+        const sh = shortageByRole[""];
+        const remaining = Math.max(0, internalFree - roleConsumed); // ロール指定で使い切った残りの空き（誰でも良い枠）
+        shortage += sh; outsource += Math.max(0, sh - remaining);
+      }
       const absorbed = shortage - outsource;
       return { month: mo, shortage, internalFree, absorbed, outsource, needsOutsource: outsource > 0 };
     });

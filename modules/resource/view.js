@@ -195,8 +195,15 @@
     // 需要のあるロールを先頭に寄せて表示する（編集中の器に必要人数のあるロールを優先）
     function demandRoleNorms(targetId) { const s = {}; demands.forEach((d) => { if (d.targetId === targetId) { const r = norm(d.role); if (r) s[r] = 1; } }); return s; }
     function distinctMemberRoles() { const seen = {}, out = []; ms.forEach((m) => { const r = (m.role || "").trim(); const k = norm(r); if (r && !seen[k]) { seen[k] = 1; out.push(r); } }); return out; }
+    // 既存編集時はそのメンバーのロールで初期絞り込み（新規は「すべて」）。option 構築後に適用する必要がある
+    // ため初回だけ initRole を採用する（ui.select は option 0 件なので value を先に入れても効かない）。
+    const curMember = a ? ms.find((m) => m.id === a.memberId) : null;
+    const initRole = curMember && (curMember.role || "").trim() ? curMember.role.trim() : "";
+    let firstBuild = true;
     function rebuildRoleFilter() {
-      const prev = roleFilter.value, dr = demandRoleNorms(target.value);
+      const prev = firstBuild ? initRole : roleFilter.value;
+      firstBuild = false;
+      const dr = demandRoleNorms(target.value);
       const roles = distinctMemberRoles().slice().sort((x, y) => (dr[norm(y)] ? 1 : 0) - (dr[norm(x)] ? 1 : 0));
       roleFilter.innerHTML = "";
       roleFilter.appendChild(el("option", { value: "", text: "すべてのロール" }));
@@ -214,8 +221,6 @@
     }
     roleFilter.addEventListener("change", rebuildMembers);
     target.addEventListener("change", rebuildRoleFilter);
-    // 既存編集時はそのメンバーのロールで初期絞り込み（新規は「すべて」）
-    if (a) { const cur = ms.find((m) => m.id === a.memberId); if (cur && (cur.role || "").trim()) roleFilter.value = cur.role.trim(); }
     const f = {
       member, target,
       // 入力は人数（FTE）。保存は % のまま（×100）。既存レコードは percent/100 で初期表示（Issue #133）。
@@ -326,7 +331,7 @@
       { id: MK.util.uid("a"), memberId: sato, targetId: alpha, dim: "project", startDate: today, endDate: end, percent: 50, note: "" },
       // alpha のデザイナー供給＝50%（需要100% に対し 0.5人 不足）
       { id: MK.util.uid("a"), memberId: tanaka, targetId: alpha, dim: "project", startDate: today, endDate: end, percent: 50, note: "" },
-      // beta は役割を問わない需要（後方互換）。佐藤 70% で 0.3人 不足
+      // beta は役割を問わない需要（後方互換）。佐藤 30% で 0.7人 不足
       { id: MK.util.uid("a"), memberId: sato, targetId: beta, dim: "project", startDate: today, endDate: end, percent: 30, note: "" },
     ]);
     // 需要（供給と対）。alpha はロール別に計画。データサイエンティストは内部に該当者なし＝外注候補として残る（Issue #134）。
