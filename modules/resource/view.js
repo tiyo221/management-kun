@@ -284,8 +284,14 @@
       { label: "保存", variant: "btn-primary", onClick: (c) => {
           if (!f.target.value) { MK.ui.toast("プロジェクトを選択してください", "error"); return; }
           if (f.start.value && f.end.value && f.end.value < f.start.value) { MK.ui.toast("終了日は開始日以降にしてください", "error"); return; }
+          const roleVal = (f.role.value || "").trim();
+          // 同一器でロール空（役割を問わない）とロール指定の需要を混在させると、logic の器×ロール集計で供給が
+          // 二重計上される（器はロール別 or 役割を問わない、のどちらかで計画する前提）。入力段階で混在を防ぐ（Issue #134）。
+          const others = L().demandsAll().filter((x) => x.targetId === f.target.value && (!d || x.id !== d.id));
+          if (roleVal && others.some((x) => !(x.role || "").trim())) { MK.ui.toast("この器には「役割を問わない必要人数」があります。ロール別に計画するなら、そちらにもロールを設定してください（混在は不可）", "error"); return; }
+          if (!roleVal && others.some((x) => (x.role || "").trim())) { MK.ui.toast("この器はロール別に計画されています。ロール（役割）を指定してください（混在は不可）", "error"); return; }
           const dimOf = (opts.find((o) => o.value === f.target.value) || {}).dim || "project";
-          const patch = { targetId: f.target.value, dim: dimOf, role: (f.role.value || "").trim(), requiredPercent: Math.max(0, Math.round((Number(f.fte.value) || 0) * 100)), startDate: f.start.value || "", endDate: f.end.value || "", note: f.note.value };
+          const patch = { targetId: f.target.value, dim: dimOf, role: roleVal, requiredPercent: Math.max(0, Math.round((Number(f.fte.value) || 0) * 100)), startDate: f.start.value || "", endDate: f.end.value || "", note: f.note.value };
           if (d) demandMaster().update(d.id, patch); else demandMaster().create(patch);
           c(); render();
         } },
