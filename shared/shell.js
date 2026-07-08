@@ -716,27 +716,10 @@
     if (meta.length) kids.push(el("div", { class: "sub" }, meta));
     if (person.note) kids.push(el("p", { class: "sub", text: person.note }));
     const edit = el("button", { class: "btn btn-secondary", text: "編集" });
-    edit.addEventListener("click", () => editMemberThenRefresh(person));
+    // 一覧からの編集と同じモーダル。保存後は masters:changed で詳細/一覧が再描画される（editMember に統合・Issue #138）。
+    edit.addEventListener("click", () => editMember(person));
     kids.push(edit);
     return el("div", { class: "card" }, [el("div", { class: "mk-stack" }, kids)]);
-  }
-  // 詳細から編集する。保存後は masters:changed で詳細が再描画されるため、専用の再描画は不要。
-  function editMemberThenRefresh(person) {
-    const f = {};
-    const body = el("div", {}, [
-      fld("氏名", (f.name = inp(person.name))),
-      fld("役割", (f.role = inp(person.role))),
-      fld("表示色", (f.color = inp(person.color, "color"))),
-      fld("備考", (f.note = inp(person.note))),
-    ]);
-    MK.ui.modal({ title: "メンバーを編集", body, actions: [
-      { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
-      { label: "保存", variant: "btn-primary", onClick: (c) => {
-          if (!f.name.value.trim()) { MK.ui.toast("氏名を入力してください", "error"); return; }
-          MK.people.update(person.id, { name: f.name.value.trim(), role: f.role.value, color: f.color.value, note: f.note.value });
-          c();
-        } },
-    ] });
   }
 
   // 1モジュール分の集約カード（summary() と同型の { empty, stats, attention? } を描画）。
@@ -787,135 +770,153 @@
     return el("div", { class: "card" }, [el("div", { class: "mk-stack" }, kids)]);
   }
 
-  // ---- 人の管理 ----
-  function renderPeople(container) {
+  // ---- マスタ CRUD の共通骨格（人／プロジェクト／プロダクト。Issue #138）----
+  // 追加バー＋CSV 入出力＋一覧の同型部分を1本に寄せ、マスタ固有部分（API・ラベル・行描画・
+  // 編集モーダル・絞り込みタブ）だけ cfg で差し込む。再描画は各マスタ操作が発火する
+  // masters:changed（下の bus ハンドラ）に一任し、手動の再描画コールバックは持たない。
+  //   cfg.api          … マスタ本体（create/all/remove/buildCSVRows/applyCSV を持つ）
+  //   cfg.list()       … 一覧に出す配列（絞り込み後。省略時は api.all()）
+  //   cfg.addPlaceholder / cfg.addMaxWidth … 追加入力欄の文言・幅
+  //   cfg.csvBase / cfg.exportToast / cfg.importToast(n) … CSV ファイル名接頭辞・トースト
+  //   cfg.emptyText    … 0件時の文言
+  //   cfg.renderInfo(item) … 行の左側（.grow）を作る（編集・削除ボタンは共通で付与）
+  //   cfg.confirmText(item) / cfg.openEdit(item) … 削除確認文言・編集モーダル起動
+  //   cfg.beforeList(container) … 一覧の前に差し込む任意 UI（例: 絞り込みタブ）
+  //   cfg.onImport()   … CSV 取込後の副作用（例: 絞り込みを全件へ戻す）
+  function renderMaster(container, cfg) {
     const bar = el("div", { class: "mk-toolbar" });
-    const nameInput = el("input", { class: "text-input", placeholder: "氏名を入力して追加", style: "max-width:260px;" });
+    const nameInput = el("input", { class: "text-input", placeholder: cfg.addPlaceholder, style: "max-width:" + cfg.addMaxWidth + ";" });
     const addBtn = el("button", { class: "btn btn-primary", text: "追加" });
-    const add = () => { const n = nameInput.value.trim(); if (n) { MK.people.create({ name: n }); nameInput.value = ""; renderPeopleList(host); } };
+    // create は masters:changed を発火し、下の bus ハンドラがビュー全体を再描画する（手動再描画は不要）。
+    const add = () => { const n = nameInput.value.trim(); if (n) { cfg.api.create({ name: n }); nameInput.value = ""; } };
     addBtn.addEventListener("click", add);
     nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
     bar.appendChild(nameInput); bar.appendChild(addBtn);
     const expBtn = el("button", { class: "btn btn-secondary", text: "CSV出力" });
     expBtn.addEventListener("click", () => {
-      MK.io.downloadText("people-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(MK.people.buildCSVRows()), "text/csv");
-      MK.ui.toast("人マスタCSVを書き出しました", "success");
+      MK.io.downloadText(cfg.csvBase + "-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(cfg.api.buildCSVRows()), "text/csv");
+      MK.ui.toast(cfg.exportToast, "success");
     });
     const impBtn = el("button", { class: "btn btn-secondary", text: "CSV取込" });
     // applyCSV は masters:changed を発火し、下の bus ハンドラがビュー全体を再描画する。
     impBtn.addEventListener("click", () => MK.io.pickCsvFile((rows) => {
-      const n = MK.people.applyCSV(rows);
-      MK.ui.toast(n + " 件のメンバーを取り込みました", "success");
+      const n = cfg.api.applyCSV(rows);
+      if (cfg.onImport) cfg.onImport();
+      MK.ui.toast(cfg.importToast(n), "success");
     }));
     bar.appendChild(expBtn); bar.appendChild(impBtn);
     container.appendChild(bar);
+    if (cfg.beforeList) cfg.beforeList(container);
     const host = el("div", { class: "card", style: "padding:0;overflow:hidden;" });
     container.appendChild(host);
-    renderPeopleList(host);
+    renderMasterList(host, cfg);
   }
-  function renderPeopleList(host) {
+  function renderMasterList(host, cfg) {
     host.innerHTML = "";
-    const members = MK.people.all();
-    if (!members.length) { host.appendChild(el("div", { class: "mk-empty", text: "メンバーがいません" })); return; }
+    const items = cfg.list ? cfg.list() : cfg.api.all();
+    if (!items.length) { host.appendChild(el("div", { class: "mk-empty", text: cfg.emptyText })); return; }
     const ul = el("ul", { class: "mk-list" });
-    members.forEach((m) => {
-      // 氏名クリックで関連情報の集約ビュー（詳細）へ（Issue #83）。
-      const nameLink = el("button", { class: "mk-linklike", text: m.name });
-      nameLink.addEventListener("click", () => { peopleDetailId = m.id; route("master-people"); });
-      const info = el("div", { class: "grow" }, [
-        nameLink,
-        el("div", { class: "sub", text: [m.role, m.note].filter(Boolean).join(" / ") }),
-      ]);
+    items.forEach((item) => {
+      const info = cfg.renderInfo(item);
       const edit = el("button", { class: "btn btn-ghost", text: "編集" });
-      edit.addEventListener("click", () => editMember(m, host));
+      edit.addEventListener("click", () => cfg.openEdit(item));
       const del = el("button", { class: "btn btn-ghost", text: "削除" });
-      del.addEventListener("click", () => MK.ui.confirm(m.name + " を削除しますか？").then((ok) => { if (ok) { MK.people.remove(m.id); renderPeopleList(host); } }));
+      // 削除も masters:changed 経由で再描画される（手動再描画は不要）。
+      del.addEventListener("click", () => MK.ui.confirm(cfg.confirmText(item)).then((ok) => { if (ok) cfg.api.remove(item.id); }));
       ul.appendChild(el("li", { class: "mk-row" }, [info, edit, del]));
     });
     host.appendChild(ul);
   }
-  function editMember(m, host) {
+  // マスタ編集モーダルの共通骨格。fields=[{ label, build(f) }]（build は control を返しつつ f に参照を格納）、
+  // onSave(f, close) が保存処理、extraActions(f) は「削除」等の先頭アクション（省略可）。
+  function masterEditModal(spec) {
     const f = {};
-    const body = el("div", {}, [
-      fld("氏名", (f.name = inp(m.name))),
-      fld("役割", (f.role = inp(m.role))),
-      fld("表示色", (f.color = inp(m.color, "color"))),
-      fld("備考", (f.note = inp(m.note))),
-    ]);
-    MK.ui.modal({ title: "メンバーを編集", body, actions: [
+    const body = el("div", {}, spec.fields.map((fd) => fld(fd.label, fd.build(f))));
+    const actions = (spec.extraActions ? spec.extraActions(f) : []).concat([
       { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
-      { label: "保存", variant: "btn-primary", onClick: (c) => {
-          if (!f.name.value.trim()) { MK.ui.toast("氏名を入力してください", "error"); return; }
-          MK.people.update(m.id, { name: f.name.value.trim(), role: f.role.value, color: f.color.value, note: f.note.value });
-          renderPeopleList(host); c();
-        } },
-    ] });
+      { label: "保存", variant: "btn-primary", onClick: (c) => spec.onSave(f, c) },
+    ]);
+    MK.ui.modal({ title: spec.title, body, actions });
+  }
+
+  // ---- 人の管理 ----
+  function renderPeople(container) {
+    renderMaster(container, {
+      api: MK.people,
+      addPlaceholder: "氏名を入力して追加",
+      addMaxWidth: "260px",
+      csvBase: "people",
+      exportToast: "人マスタCSVを書き出しました",
+      importToast: (n) => n + " 件のメンバーを取り込みました",
+      emptyText: "メンバーがいません",
+      confirmText: (m) => m.name + " を削除しますか？",
+      openEdit: (m) => editMember(m),
+      renderInfo: (m) => {
+        // 氏名クリックで関連情報の集約ビュー（詳細）へ（Issue #83）。
+        const nameLink = el("button", { class: "mk-linklike", text: m.name });
+        nameLink.addEventListener("click", () => { peopleDetailId = m.id; route("master-people"); });
+        return el("div", { class: "grow" }, [
+          nameLink,
+          el("div", { class: "sub", text: [m.role, m.note].filter(Boolean).join(" / ") }),
+        ]);
+      },
+    });
+  }
+  // 一覧・詳細の両方から使う。保存後は masters:changed でビューが再描画されるため専用の再描画は不要（Issue #138）。
+  function editMember(m) {
+    masterEditModal({
+      title: "メンバーを編集",
+      fields: [
+        { label: "氏名", build: (f) => (f.name = inp(m.name)) },
+        { label: "役割", build: (f) => (f.role = inp(m.role)) },
+        { label: "表示色", build: (f) => (f.color = inp(m.color, "color")) },
+        { label: "備考", build: (f) => (f.note = inp(m.note)) },
+      ],
+      onSave: (f, c) => {
+        if (!f.name.value.trim()) { MK.ui.toast("氏名を入力してください", "error"); return; }
+        MK.people.update(m.id, { name: f.name.value.trim(), role: f.role.value, color: f.color.value, note: f.note.value });
+        c();
+      },
+    });
   }
 
   // ---- プロジェクト管理 ----
-  function renderProjects(container) {
-    const bar = el("div", { class: "mk-toolbar" });
-    const nameInput = el("input", { class: "text-input", placeholder: "プロジェクト名を入力して追加", style: "max-width:300px;" });
-    const addBtn = el("button", { class: "btn btn-primary", text: "追加" });
-    const add = () => { const n = nameInput.value.trim(); if (n) { MK.projects.create({ name: n }); nameInput.value = ""; renderProjectList(host); } };
-    addBtn.addEventListener("click", add);
-    nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
-    bar.appendChild(nameInput); bar.appendChild(addBtn);
-    const expBtn = el("button", { class: "btn btn-secondary", text: "CSV出力" });
-    expBtn.addEventListener("click", () => {
-      MK.io.downloadText("projects-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(MK.projects.buildCSVRows()), "text/csv");
-      MK.ui.toast("プロジェクトCSVを書き出しました", "success");
-    });
-    const impBtn = el("button", { class: "btn btn-secondary", text: "CSV取込" });
-    // applyCSV は masters:changed を発火し、下の bus ハンドラがビュー全体を再描画する。
-    impBtn.addEventListener("click", () => MK.io.pickCsvFile((rows) => {
-      const n = MK.projects.applyCSV(rows);
-      MK.ui.toast(n + " 件のプロジェクトを取り込みました", "success");
-    }));
-    bar.appendChild(expBtn); bar.appendChild(impBtn);
-    container.appendChild(bar);
-    const host = el("div", { class: "card", style: "padding:0;overflow:hidden;" });
-    container.appendChild(host);
-    renderProjectList(host);
-  }
   const PROJECT_STATUSES = MK.projects.STATUSES;
   function projectStatusLabel(key) {
     return MK.projects.statusLabel(key);
   }
-  function renderProjectList(host) {
-    host.innerHTML = "";
-    const list = MK.projects.all();
-    if (!list.length) { host.appendChild(el("div", { class: "mk-empty", text: "プロジェクトがありません" })); return; }
-    const ul = el("ul", { class: "mk-list" });
-    list.forEach((p) => {
-      const info = el("div", { class: "grow" }, [
+  function renderProjects(container) {
+    renderMaster(container, {
+      api: MK.projects,
+      addPlaceholder: "プロジェクト名を入力して追加",
+      addMaxWidth: "300px",
+      csvBase: "projects",
+      exportToast: "プロジェクトCSVを書き出しました",
+      importToast: (n) => n + " 件のプロジェクトを取り込みました",
+      emptyText: "プロジェクトがありません",
+      confirmText: (p) => p.name + " を削除しますか？",
+      openEdit: (p) => editProject(p),
+      renderInfo: (p) => el("div", { class: "grow" }, [
         el("div", { text: p.name }),
         el("div", { class: "sub", text: projectStatusLabel(p.status) }),
-      ]);
-      const edit = el("button", { class: "btn btn-ghost", text: "編集" });
-      edit.addEventListener("click", () => editProject(p, host));
-      const del = el("button", { class: "btn btn-ghost", text: "削除" });
-      del.addEventListener("click", () => MK.ui.confirm(p.name + " を削除しますか？").then((ok) => { if (ok) { MK.projects.remove(p.id); renderProjectList(host); } }));
-      ul.appendChild(el("li", { class: "mk-row" }, [info, edit, del]));
+      ]),
     });
-    host.appendChild(ul);
   }
-  function editProject(p, host) {
-    const f = {};
-    const body = el("div", {}, [
-      fld("プロジェクト名", (f.name = inp(p.name))),
-      fld("ステータス", (f.status = MK.ui.select(PROJECT_STATUSES.map((s) => ({ value: s.key, label: s.label })), p.status))),
-      fld("表示色", (f.color = inp(p.color, "color"))),
-      fld("備考", (f.note = inp(p.note))),
-    ]);
-    MK.ui.modal({ title: "プロジェクトを編集", body, actions: [
-      { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
-      { label: "保存", variant: "btn-primary", onClick: (c) => {
-          if (!f.name.value.trim()) { MK.ui.toast("プロジェクト名を入力してください", "error"); return; }
-          MK.projects.update(p.id, { name: f.name.value.trim(), status: f.status.value, color: f.color.value, note: f.note.value });
-          renderProjectList(host); c();
-        } },
-    ] });
+  function editProject(p) {
+    masterEditModal({
+      title: "プロジェクトを編集",
+      fields: [
+        { label: "プロジェクト名", build: (f) => (f.name = inp(p.name)) },
+        { label: "ステータス", build: (f) => (f.status = MK.ui.select(PROJECT_STATUSES.map((s) => ({ value: s.key, label: s.label })), p.status)) },
+        { label: "表示色", build: (f) => (f.color = inp(p.color, "color")) },
+        { label: "備考", build: (f) => (f.note = inp(p.note)) },
+      ],
+      onSave: (f, c) => {
+        if (!f.name.value.trim()) { MK.ui.toast("プロジェクト名を入力してください", "error"); return; }
+        MK.projects.update(p.id, { name: f.name.value.trim(), status: f.status.value, color: f.color.value, note: f.note.value });
+        c();
+      },
+    });
   }
 
   // ---- プロダクト管理（Product マスタ・§6.4）----
@@ -928,37 +929,45 @@
     renderProducts(body);
   }
   function renderProducts(container) {
-    const bar = el("div", { class: "mk-toolbar" });
-    const nameInput = el("input", { class: "text-input", placeholder: "プロダクト名を入力して追加", style: "max-width:300px;" });
-    const addBtn = el("button", { class: "btn btn-primary", text: "追加" });
-    // create は masters:changed を発火し、下の bus ハンドラがビュー全体を再描画する（手動再描画は不要）。
-    const add = () => { const n = nameInput.value.trim(); if (n) { MK.products.create({ name: n }); nameInput.value = ""; } };
-    addBtn.addEventListener("click", add);
-    nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
-    bar.appendChild(nameInput); bar.appendChild(addBtn);
-    const expBtn = el("button", { class: "btn btn-secondary", text: "CSV出力" });
-    expBtn.addEventListener("click", () => {
-      MK.io.downloadText("products-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(MK.products.buildCSVRows()), "text/csv");
-      MK.ui.toast("プロダクトCSVを書き出しました", "success");
+    renderMaster(container, {
+      api: MK.products,
+      addPlaceholder: "プロダクト名を入力して追加",
+      addMaxWidth: "300px",
+      csvBase: "products",
+      exportToast: "プロダクトCSVを書き出しました",
+      importToast: (n) => n + " 件のプロダクトを取り込みました",
+      onImport: () => { productFilter = "all"; },
+      emptyText: "プロダクトがありません",
+      // ステータス絞り込み後の一覧（productFilter はビュー再描画をまたいで保持。§6.4）。
+      list: () => {
+        let list = MK.products.all();
+        if (productFilter !== "all") list = list.filter((p) => p.status === productFilter);
+        return list;
+      },
+      confirmText: (p) => p.name + " を削除しますか？",
+      openEdit: (p) => editProduct(p),
+      // ステータス絞り込みタブ（件数バッジ）を一覧の前に差し込む。
+      beforeList: (container) => {
+        const c = MK.products.counts();
+        const tabs = el("div", { class: "mk-toolbar" });
+        tabs.appendChild(productPill("全て", "all", c.all));
+        MK.products.STATUSES.forEach((s) => tabs.appendChild(productPill(s.label, s.key, c[s.key])));
+        container.appendChild(tabs);
+      },
+      renderInfo: (p) => {
+        const meta = [el("span", { class: "chip", text: productStatusLabel(p.status) })];
+        const owner = MK.products.ownerPerson(p);
+        if (owner) meta.push(el("span", { class: "chip" }, [
+          el("span", { style: "display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:" + (owner.color || "var(--color-steel)") + ";" }),
+          "責任者: " + owner.name,
+        ]));
+        if (p.repo) meta.push(el("span", { class: "sub", text: p.repo }));
+        (p.tags || []).forEach((t) => meta.push(el("span", { class: "chip", text: "#" + t })));
+        MK.products.relatedProjects(p).forEach((proj) => meta.push(el("span", { class: "chip", text: "📁 " + proj.name })));
+        if (p.summary) meta.push(el("span", { class: "sub", text: p.summary }));
+        return el("div", { class: "grow" }, [el("div", { text: p.name }), el("div", { class: "sub" }, meta)]);
+      },
     });
-    const impBtn = el("button", { class: "btn btn-secondary", text: "CSV取込" });
-    impBtn.addEventListener("click", () => MK.io.pickCsvFile((rows) => {
-      const n = MK.products.applyCSV(rows); productFilter = "all";
-      MK.ui.toast(n + " 件のプロダクトを取り込みました", "success");
-    }));
-    bar.appendChild(expBtn); bar.appendChild(impBtn);
-    container.appendChild(bar);
-
-    // ステータス絞り込みタブ（件数バッジ）
-    const c = MK.products.counts();
-    const tabs = el("div", { class: "mk-toolbar" });
-    tabs.appendChild(productPill("全て", "all", c.all));
-    MK.products.STATUSES.forEach((s) => tabs.appendChild(productPill(s.label, s.key, c[s.key])));
-    container.appendChild(tabs);
-
-    const host = el("div", { class: "card", style: "padding:0;overflow:hidden;" });
-    container.appendChild(host);
-    renderProductList(host);
   }
   function productPill(label, key, count) {
     const b = el("button", { class: "pill-tab" + (productFilter === key ? " active" : "") }, [
@@ -970,32 +979,6 @@
   function productStatusLabel(key) {
     const s = MK.products.STATUSES.find((x) => x.key === key);
     return s ? s.label : key;
-  }
-  function renderProductList(host) {
-    host.innerHTML = "";
-    let list = MK.products.all();
-    if (productFilter !== "all") list = list.filter((p) => p.status === productFilter);
-    if (!list.length) { host.appendChild(el("div", { class: "mk-empty", text: "プロダクトがありません" })); return; }
-    const ul = el("ul", { class: "mk-list" });
-    list.forEach((p) => {
-      const meta = [el("span", { class: "chip", text: productStatusLabel(p.status) })];
-      const owner = MK.products.ownerPerson(p);
-      if (owner) meta.push(el("span", { class: "chip" }, [
-        el("span", { style: "display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:" + (owner.color || "var(--color-steel)") + ";" }),
-        "責任者: " + owner.name,
-      ]));
-      if (p.repo) meta.push(el("span", { class: "sub", text: p.repo }));
-      (p.tags || []).forEach((t) => meta.push(el("span", { class: "chip", text: "#" + t })));
-      MK.products.relatedProjects(p).forEach((proj) => meta.push(el("span", { class: "chip", text: "📁 " + proj.name })));
-      if (p.summary) meta.push(el("span", { class: "sub", text: p.summary }));
-      const info = el("div", { class: "grow" }, [el("div", { text: p.name }), el("div", { class: "sub" }, meta)]);
-      const edit = el("button", { class: "btn btn-ghost", text: "編集" });
-      edit.addEventListener("click", () => editProduct(p));
-      const del = el("button", { class: "btn btn-ghost", text: "削除" });
-      del.addEventListener("click", () => MK.ui.confirm(p.name + " を削除しますか？").then((ok) => { if (ok) MK.products.remove(p.id); }));
-      ul.appendChild(el("li", { class: "mk-row" }, [info, edit, del]));
-    });
-    host.appendChild(ul);
   }
   // プロジェクトのチェックボックス一覧を作る（Product⇄Project の緩い紐付け・Issue #55）。
   function projectCheckboxList(selectedIds) {
@@ -1012,32 +995,33 @@
     return wrap;
   }
   function editProduct(p) {
-    const f = {};
-    const projectsField = projectCheckboxList(p.projectIds);
     const ownerOptions = [{ value: "", label: "未設定" }].concat(MK.people.all().map((m) => ({ value: m.id, label: m.name })));
-    const body = el("div", {}, [
-      fld("プロダクト名", (f.name = inp(p.name))),
-      fld("ステータス", (f.status = MK.ui.select(MK.products.STATUSES.map((s) => ({ value: s.key, label: s.label })), p.status))),
-      fld("責任者", (f.owner = MK.ui.select(ownerOptions, p.ownerId || ""))),
-      fld("概要（提供価値）", (f.summary = inp(p.summary))),
-      fld("リポジトリ / リンク", (f.repo = inp(p.repo))),
-      fld("タグ（カンマ区切り）", (f.tags = inp((p.tags || []).join(", ")))),
-      fld("関連プロジェクト", projectsField),
-    ]);
-    MK.ui.modal({ title: "プロダクトを編集", body, actions: [
-      { label: "削除", variant: "btn-danger", onClick: (close) => MK.ui.confirm("このプロダクトを削除しますか？").then((ok) => { if (ok) { MK.products.remove(p.id); close(); } }) },
-      { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
-      { label: "保存", variant: "btn-primary", onClick: (c) => {
-          if (!f.name.value.trim()) { MK.ui.toast("プロダクト名を入力してください", "error"); return; }
-          MK.products.update(p.id, {
-            name: f.name.value.trim(), status: f.status.value, ownerId: f.owner.value || null,
-            summary: f.summary.value, repo: f.repo.value.trim(),
-            tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
-            projectIds: projectsField.getSelected ? projectsField.getSelected() : [],
-          });
-          c();
-        } },
-    ] });
+    masterEditModal({
+      title: "プロダクトを編集",
+      fields: [
+        { label: "プロダクト名", build: (f) => (f.name = inp(p.name)) },
+        { label: "ステータス", build: (f) => (f.status = MK.ui.select(MK.products.STATUSES.map((s) => ({ value: s.key, label: s.label })), p.status)) },
+        { label: "責任者", build: (f) => (f.owner = MK.ui.select(ownerOptions, p.ownerId || "")) },
+        { label: "概要（提供価値）", build: (f) => (f.summary = inp(p.summary)) },
+        { label: "リポジトリ / リンク", build: (f) => (f.repo = inp(p.repo)) },
+        { label: "タグ（カンマ区切り）", build: (f) => (f.tags = inp((p.tags || []).join(", "))) },
+        { label: "関連プロジェクト", build: (f) => (f.projects = projectCheckboxList(p.projectIds)) },
+      ],
+      // 削除アクションは保存/キャンセルの前に置く（従来の並び）。
+      extraActions: () => [
+        { label: "削除", variant: "btn-danger", onClick: (close) => MK.ui.confirm("このプロダクトを削除しますか？").then((ok) => { if (ok) { MK.products.remove(p.id); close(); } }) },
+      ],
+      onSave: (f, c) => {
+        if (!f.name.value.trim()) { MK.ui.toast("プロダクト名を入力してください", "error"); return; }
+        MK.products.update(p.id, {
+          name: f.name.value.trim(), status: f.status.value, ownerId: f.owner.value || null,
+          summary: f.summary.value, repo: f.repo.value.trim(),
+          tags: f.tags.value.split(",").map((s) => s.trim()).filter(Boolean),
+          projectIds: f.projects.getSelected ? f.projects.getSelected() : [],
+        });
+        c();
+      },
+    });
   }
   // CSV ファイル選択の共通ヘルパは MK.io.pickCsvFile（shared/io.js §4.6.2）へ集約した。
 
