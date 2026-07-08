@@ -48,6 +48,10 @@
   const LOAD = ["workload"];
 
   // 共有資産（全プロファイルで読み込む土台。読込順＝依存順。spec §3.3）。
+  // プロファイル別の絞り込みはしない（people/projects/allocations と同格の共有マスタは基盤扱い）。
+  // 分離の単位は「モジュール」＝ゾーンに載せないモジュールの logic/view を読み込まないことで担保する
+  // （spec §1.5）。共有マスタ（products/demands 等）は UI（masters 設定・該当モジュール）が無ければ
+  // 作成経路が無く、配布物で参照されないだけで無害。土台を絞る仕組みは必要になるまで作らない（YAGNI）。
   const SHARED = [
     "core", "store", "scope", "io",
     "people", "projects", "products", "search", "allocations", "demands",
@@ -61,11 +65,12 @@
   if (typeof document === "undefined" || !document.head) return;
 
   const cfg = window.MK_CONFIG || {};
-  // プロファイルが zones を宣言していればそれを、無ければ既定（マネージャ全部入り）を使う。
-  // 追加ロード（load）も同じ出所に揃える: プロファイル宣言時は cfg.modules、既定時は LOAD。
+  // プロファイルが zones を宣言していればそれ（配布サブセット）を、無ければ既定（マネージャ全部入り）を使う。
+  // ゾーン外の追加ロード（LOAD＝workload）は既定プロファイルにだけ効かせる。配布プロファイルは自分の
+  // zones だけを載せるのが目的なので、旧データ移行専用モジュールまで引き込まない。
   const hasZones = Array.isArray(cfg.zones);
   const zones = hasZones ? cfg.zones : ZONES;
-  const extra = hasZones ? (Array.isArray(cfg.modules) ? cfg.modules : []) : LOAD;
+  const extra = hasZones ? [] : LOAD;
 
   // 読み込むモジュール id 集合を作り、カタログ順に整列する（moduleOrder をカタログ順に固定）。
   const wanted = {};

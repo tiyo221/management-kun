@@ -46,9 +46,10 @@ window.MK_CONFIG = {
 };
 </script>
 
-<!-- 構成マニフェスト（単一ソース）。MK_CONFIG.zones（自分ゾーンのみ）を読み、共有資産＋そのゾーンの
-     モジュール（logic→view）＋シェルだけを読み込む（Issue #137）。zones に無いチーム系モジュール
-     （skills/workload/wbs 等）の <script> は読み込まれず、コードもデータも物理的に存在しない（spec §1.5）。 -->
+<!-- 構成マニフェスト（単一ソース）。共有資産（土台）は全プロファイル共通で読み込み、モジュールは
+     MK_CONFIG.zones（自分ゾーンのみ）に載る分だけ logic→view を読み込む（Issue #137）。zones に無い
+     チーム系モジュール（skills/workload/wbs 等）の <script> は読み込まれず、コードもデータも物理的に
+     存在しない（spec §1.5）。 -->
 <script src="shared/manifest.js"></script>
 </body>
 </html>
