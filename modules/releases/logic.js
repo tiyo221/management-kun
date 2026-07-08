@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   const MK = window.MK;
-  const store = MK.store.scope("module:releases");
+  const col = MK.store.collection("module:releases", { key: "releases", stamp: true });
 
   /**
    * リリースの状態（ステータス）定義。key＝内部値、label＝表示名。表示順もこの配列順に従う。
@@ -42,22 +42,9 @@
   ];
   const STATUS_KEYS = STATUSES.map((s) => s.key);
 
-  /**
-   * ストアから releases データを読み込む。未保存・不正形式なら空の初期データを返す。
-   * @returns {ReleasesData} 読み込んだデータ（常に releases 配列を持つ）
-   */
-  function load() {
-    const d = store.get();
-    if (!d || !Array.isArray(d.releases)) return { version: 1, releases: [] };
-    return d;
-  }
-  /**
-   * releases データをストアへ保存する。exportedAt を現在時刻で更新する。
-   * @param {ReleasesData} d - 保存するデータ
-   * @returns {void}
-   * ※ store（localStorage）へ書き込む副作用あり。
-   */
-  function save(d) { d.exportedAt = MK.util.nowISO(); store.set(d); }
+  // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→releases 配列検証→既定返却、
+  // save＝exportedAt 付与→store.set（返り値は保存成否）。仕様は MK.store.collection を参照。
+  const { load, save } = col;
   /**
    * 全リリースの配列を返す。
    * @returns {Release[]} リリース一覧

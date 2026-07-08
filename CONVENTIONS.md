@@ -95,6 +95,7 @@ modules/
 
 ### データ層（logic から使う）
 - `MK.store.scope("module:<id>")` → `{ get(), set(v) }`。破損時も個別 try/parse で他へ波及させない。
+- `MK.store.collection("module:<id>", { key, version, stamp })` → `{ load(), save(d) }`（Issue #139）。**配列キー1本を持つモジュール**の load（store 読取→`key` 配列検証→既定 `{ version, [key]: [] }` 返却）と save（`stamp:true` なら `exportedAt` 付与→`set`）の定型を集約する。複数キーや読込時の fixup が要るモジュール（skills / workload / wbs 等）は `scope()` 直叩きで各自 load/save を書く。
 - **マスタ**（共通契約は [`spec/masters.md`](spec/masters.md) §4.4.1 B）:
   - `MK.people` / `MK.projects` / `MK.products`: `all() / get(id) / create(attrs) / update(id,patch) / remove(id) / resolve(name) / resolveOrCreate(name) / replaceAll(list) / buildCSVRows() / applyCSV(rows)`。status を持つマスタ（projects / products）は加えて `STATUSES / normalize<Enum>() / counts()`。
   - `MK.allocations`（アロケーション共有マスタ・人×器×期間×%）: `all() / get(id) / of(memberId) / forTarget(targetId) / create / update / remove / replaceAll / percentOn(list, memberId, date)`。
@@ -108,7 +109,7 @@ modules/
 
 ## 5. 新規モジュールの追加手順
 
-1. `modules/<id>/logic.js` を作成。`const store = MK.store.scope("module:<id>");` で始め、`load/save`・計算・CRUD・`exportData/importData/loadSample` を定義し、`MK.logic["<id>"] = {...}` で公開（DOM に触れない）。
+1. `modules/<id>/logic.js` を作成。配列キー1本なら `const { load, save } = MK.store.collection("module:<id>", { key, stamp });`（複数キー・fixup が要るなら `const store = MK.store.scope("module:<id>");` で始め load/save を自前で書く）。計算・CRUD・`exportData/importData/loadSample` を定義し、`MK.logic["<id>"] = {...}` で公開（DOM に触れない）。
 2. `modules/<id>/view.js` を作成。`const L = () => MK.logic["<id>"];`、`render()` を `MK.ui` ヘルパで組み、`MK.registerModule("<id>", { title, icon, description, mount, unmount, exportData:()=>L().exportData(), importData:(d,m)=>L().importData(d,m), loadSample:()=>L().loadSample() })`。`description` は「何ができるか」の1行説明（HOME が見取り図として描画・spec §3.6 / Issue #40）。
 3. [`shared/manifest.js`](shared/manifest.js): **モジュールの登録は原則ここ1か所**（Issue #137）。カタログ `CATALOG` に `<id>: { title, icon }` を追加し（**カタログに無いモジュールはナビ・HOME に出ず、スクリプトも読み込まれない**）、既定（マネージャ全部入り）の `ZONES` の該当グループ（自分／ピープル／デリバリー…＝§1.4 の領域）に `<id>` を登録する。ゾーンが未定義なら新しいゾーンを追加する。ゾーンに出さないが実体だけ読みたい（旧データ移行専用の workload 等）場合は `LOAD` に追加する。これだけで index.html・member.html の `<script>` 追記もゾーンの二重定義も不要（manifest が `logic→view→shell` を順序どおり動的読込し、shell.js の `META`／`DEFAULT_ZONES` も manifest を参照する）。1行説明 `description` は **カタログに足さず def 側に持たせる**（HOME が def から読む単一ソース。重複ハードコード禁止・§3.6 / Issue #40）。
    - 配布プロファイル（[`member.html`](member.html) 等）に載せたい場合のみ、そのエントリの `MK_CONFIG.zones` にも `<id>` を足す（載せなければ配布物にコードもデータも含まれない・spec §1.5）。マネージャ（[`index.html`](index.html)）は `zones` を宣言せず manifest 既定を使うため追記不要。

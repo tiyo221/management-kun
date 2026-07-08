@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   const MK = window.MK;
-  const store = MK.store.scope("module:oneonone");
+  const col = MK.store.collection("module:oneonone", { key: "entries", stamp: true });
 
   /**
    * ネクストアクション1件。
@@ -42,21 +42,9 @@
     { key: "bad", label: "😟 bad" },
   ];
 
-  /**
-   * ストアから oneonone データを読み込む。未保存・不正形式なら空の初期データを返す。
-   * @returns {OneOnOneData} 読み込んだデータ（常に entries 配列を持つ）
-   */
-  function load() {
-    const d = store.get();
-    if (!d || !Array.isArray(d.entries)) return { version: 1, entries: [] };
-    return d;
-  }
-  /**
-   * oneonone データをストアへ保存する。exportedAt を現在時刻で更新する。
-   * @param {OneOnOneData} d - 保存するデータ
-   * @returns {void} ※ store（localStorage）へ書き込む副作用あり。
-   */
-  function save(d) { d.exportedAt = MK.util.nowISO(); store.set(d); }
+  // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→entries 配列検証→既定返却、
+  // save＝exportedAt 付与→store.set（返り値は保存成否）。仕様は MK.store.collection を参照。
+  const { load, save } = col;
   /**
    * 全エントリの配列を返す（保存順のまま）。
    * @returns {OneOnOneEntry[]} エントリ一覧
