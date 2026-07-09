@@ -50,7 +50,10 @@
       appendNavGroup("マスタ", MASTERS.map((a) => navItem(a.label, a.view)),
         MASTERS.some((a) => a.view === S.current));
     }
-    nav.appendChild(navItem("⚙ 設定", "settings"));
+    // 設定は「シェルの持ち物」なのでナビ末尾ではなく .mk-actions（テーマ切替の隣）に常設する
+    // （Issue #148）。ここではその設定ボタンのアクティブ強調だけを現在ビューに同期する。
+    const settingsBtn = document.getElementById("btn-settings");
+    if (settingsBtn) settingsBtn.classList.toggle("active", S.current === "settings");
   }
 
   // ナビの折りたたみグループ（ゾーン／マスタ共通）。現在ビューを含むグループは畳んでいても

@@ -26,6 +26,9 @@
   document.getElementById("btn-export").addEventListener("click", exportAll);
   document.getElementById("btn-import").addEventListener("click", importAll);
   document.getElementById("btn-theme").addEventListener("click", toggleTheme);
+  // 設定はナビ末尾から .mk-actions へ移設（Issue #148）。挙動は従来どおり view=settings へ遷移。
+  const settingsBtn = document.getElementById("btn-settings");
+  if (settingsBtn) settingsBtn.addEventListener("click", () => { route("settings"); closeSidebar(); });
   const menuBtn = document.getElementById("btn-menu");
   if (menuBtn) menuBtn.addEventListener("click", toggleSidebar);
   // グローバル検索（Ctrl+K / Cmd+K）。どの画面からでも開ける（Issue #82 / spec §10.2）。
