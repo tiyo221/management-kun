@@ -86,7 +86,7 @@
   function loadColor(v, high) {
     if (v <= 0) return "var(--color-surface)";
     if (v > high) return "var(--color-error)";
-    return "rgba(86,69,212," + Math.min(0.9, 0.15 + (v / high) * 0.7).toFixed(2) + ")";
+    return "rgba(var(--color-primary-rgb)," + Math.min(0.9, 0.15 + (v / high) * 0.7).toFixed(2) + ")";
   }
 
   function renderIndividual() {

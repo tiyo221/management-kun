@@ -485,6 +485,6 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-month-row { padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-hairline); }
 .mk-month-row:last-child { border-bottom: none; }
 .mk-month-bar { position: relative; height: 10px; margin-top: 6px; border-radius: var(--rounded-full); background: var(--color-surface); overflow: hidden; }
-.mk-month-fill { height: 100%; background: rgba(86, 69, 212, 0.55); border-radius: var(--rounded-full); }
+.mk-month-fill { height: 100%; background: rgba(var(--color-primary-rgb), 0.55); border-radius: var(--rounded-full); }
 .mk-month-fill.tight { background: var(--color-warning); }
 .mk-month-fill.over { background: var(--color-error); }
