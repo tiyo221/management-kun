@@ -34,5 +34,11 @@ GTD ベースの軽量タスク管理。
 
 移行フロー全体は [`import-migration.md`](../import-migration.md) §7、名寄せは §8 を参照。
 
+## 一覧表示（並び替え・初期タブ）
+`filtered(filter, search, sort?)` はステータス絞り込み＋検索に加え、`sort` で並び替える（Issue #155）。
+
+- `sort`: `created`（追加日順＝挿入順。既定）／`due`（締め切り昇順・未設定は末尾）／`project`（プロジェクト名でグルーピング・未割当は末尾）／`context`（先頭コンテキストでグルーピング・未設定は末尾）。安定ソートで同グループ内は追加順を保つ。
+- 初期タブは **Next**（done/someday を初期表示に混ぜない）。「全て」タブは残し従来通り全件を見られる。
+
 ## サマリー（HOME 表示）
 `summary(today?)` は `未完 N` / `全タスク M` を返す純関数（[`spec.md`](../../spec.md) §3.6）。`attention` として期限切れ（error）／今日期限（warn）の件数を申告する（HOME の要対応帯・Issue #102。完了と期限未設定は対象外＝`dueCounts(today?)`）。

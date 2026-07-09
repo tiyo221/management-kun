@@ -16,6 +16,33 @@ test("todo: 追加は inbox・件数・完了・フィルタ", (MK) => {
   eq(T.filtered("all", "買い").length, 1);
 });
 
+test("todo: filtered の並び替え（締め切り/プロジェクト/コンテキスト/既定）", (MK) => {
+  // 観点: sort 引数で締め切り順(未設定は末尾)・プロジェクト別・コンテキスト別に並び、
+  //       既定(created)は追加日順（挿入順＝新しい順）のまま
+  const T = MK.logic.todo;
+  // applyCSV で決め打ちのタスクを投入（unshift ではなく行順で入る）
+  T.applyCSV([
+    ["タイトル", "ステータス", "プロジェクト", "コンテキスト", "期限", "メモ"],
+    ["A", "next", "Alpha", "@pc", "2026-07-20", ""],
+    ["B", "next", "Beta", "@mail", "", ""],        // 期限なし → due 並びで末尾へ
+    ["C", "next", "Alpha", "@home", "2026-07-05", ""],
+  ]);
+  const titles = (arr) => arr.map((t) => t.title);
+
+  // 締め切り順: 昇順、未設定(B)は末尾
+  eq(titles(T.filtered("all", "", "due")), ["C", "A", "B"]);
+
+  // プロジェクト別: Alpha(A,C) が Beta(B) より先。同グループ内は挿入順を維持
+  eq(titles(T.filtered("all", "", "project")), ["A", "C", "B"]);
+
+  // コンテキスト別: @home(C) < @mail(B) < @pc(A)
+  eq(titles(T.filtered("all", "", "context")), ["C", "B", "A"]);
+
+  // 既定(created 相当)は絞り込み結果の順序（＝挿入順）をそのまま返す
+  eq(titles(T.filtered("all", "", "created")), ["A", "B", "C"]);
+  eq(titles(T.filtered("all", "")), ["A", "B", "C"]);
+});
+
 test("todo: CSV ラウンドトリップ（ステータス/プロジェクト名寄せ・全置換）", (MK) => {
   // 観点: buildCSVRows→applyCSV で往復でき、プロジェクトは名前で参照、ステータスは key/ラベル両対応
   const T = MK.logic.todo;

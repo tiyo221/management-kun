@@ -63,17 +63,52 @@
   }
 
   /**
-   * ステータスと検索語でタスクを絞り込む。
+   * 空文字を末尾に寄せる文字列比較。両方空は同順、片方空はそれを後ろへ、
+   * それ以外はコードポイント順（プロジェクト名・コンテキストのグルーピング用）。
+   * @param {string} x
+   * @param {string} y
+   * @returns {number} 負=x が先、正=y が先、0=同順
+   */
+  function cmpEmptyLast(x, y) {
+    if (!x && !y) return 0;
+    if (!x) return 1;
+    if (!y) return -1;
+    return x < y ? -1 : x > y ? 1 : 0;
+  }
+
+  /**
+   * タスク配列を並び替えた新しい配列を返す（安定ソート。元配列は変更しない）。
+   * @param {TodoTask[]} items - 並び替え対象
+   * @param {"created"|"due"|"project"|"context"} [sort] - 並び順（既定 "created"＝追加日順＝挿入順のまま）
+   * @returns {TodoTask[]} 並び替え後の配列
+   */
+  function sortTasks(items, sort) {
+    if (!sort || sort === "created") return items; // 追加日順＝挿入順（unshift で新しい順）をそのまま
+    const arr = items.slice();
+    if (sort === "due") {
+      // 締め切り昇順・未設定は末尾（ISO 日付は辞書順＝時系列順）
+      arr.sort((a, b) => cmpEmptyLast(a.due || "", b.due || ""));
+    } else if (sort === "project") {
+      arr.sort((a, b) => cmpEmptyLast(projectNameOf(a.projectId), projectNameOf(b.projectId)));
+    } else if (sort === "context") {
+      arr.sort((a, b) => cmpEmptyLast((a.contexts || [])[0] || "", (b.contexts || [])[0] || ""));
+    }
+    return arr;
+  }
+
+  /**
+   * ステータスと検索語でタスクを絞り込み、指定順に並べ替える。
    * @param {string} filter - 絞り込むステータスキー（"all" または未指定で全件）
    * @param {string} search - タイトル・メモを対象とする検索語（名寄せキーで部分一致）
-   * @returns {TodoTask[]} 条件に合致したタスク一覧
+   * @param {"created"|"due"|"project"|"context"} [sort] - 並び順（既定 "created"＝追加日順）
+   * @returns {TodoTask[]} 条件に合致し並び替えられたタスク一覧
    */
-  function filtered(filter, search) {
+  function filtered(filter, search, sort) {
     const q = MK.util.normalizeKey(search || "");
     let items = tasks();
     if (filter && filter !== "all") items = items.filter((t) => t.status === filter);
     if (q) items = items.filter((t) => MK.util.normalizeKey(t.title).includes(q) || MK.util.normalizeKey(t.notes).includes(q));
-    return items;
+    return sortTasks(items, sort);
   }
 
   /**
