@@ -102,3 +102,68 @@ test("questions.searchItems: 未解決とナレッジを返し、答えなしの
   eq(k.sub, "ナレッジ");
   assert(k.keywords.some((w) => w.includes("何度呼んでも")), "keywords に答え本文を含む");
 });
+
+test("goals.searchItems: 未達成の目標のみを label/sub/keywords 付きで返す", (MK) => {
+  // 観点: 進行中の目標だけを候補にし、達成済み（全ステップ done）は除外。sub に進捗/期限、keywords に説明・現在ステップ
+  const G = MK.logic.goals;
+  G.addGoal("英語を話せるようになる");
+  const g = G.goals()[0];
+  G.updateGoal(g.id, { description: "TOEIC 800 目標", deadline: "2026-12-31" });
+  G.addStep(g.id, "単語帳を1周");
+  G.addGoal("達成済み目標");
+  const done = G.goals().find((x) => x.title === "達成済み目標");
+  G.addStep(done.id, "唯一のステップ");
+  G.toggleStep(done.id, G.getGoal(done.id).steps[0].id, true); // 全ステップ done → 達成
+  const rows = G.searchItems();
+  assert(rows.some((r) => r.label === "英語を話せるようになる"), "未達成を含む");
+  assert(!rows.some((r) => r.label === "達成済み目標"), "達成済みは除外");
+  const r = rows.find((r) => r.label === "英語を話せるようになる");
+  assert(r.keywords.indexOf("TOEIC 800 目標") >= 0, "説明を keywords に含む");
+  assert(r.keywords.indexOf("単語帳を1周") >= 0, "現在ステップ名を keywords に含む");
+  assert(/期限 2026-12-31/.test(r.sub), "sub に期限を含む");
+});
+
+test("releases.searchItems: 中止以外を返し、sub にプロダクト名・ステータス", (MK) => {
+  // 観点: 予定・完了を候補にし、中止（cancelled）は除外。sub にプロダクト名＋ステータス、keywords に日付・メモ
+  const R = MK.logic.releases;
+  const prod = MK.products.create({ name: "商品A" });
+  R.addRelease({ productId: prod.id, version: "v1.0.0", plannedDate: "2026-08-01", status: "planned", note: "大型更新" });
+  R.addRelease({ productId: prod.id, version: "中止版", status: "cancelled" });
+  const rows = R.searchItems();
+  assert(rows.some((r) => r.label === "v1.0.0"), "予定を含む");
+  assert(!rows.some((r) => r.label === "中止版"), "中止は除外");
+  const r = rows.find((r) => r.label === "v1.0.0");
+  assert(/商品A/.test(r.sub), "sub にプロダクト名");
+  assert(r.keywords.indexOf("大型更新") >= 0, "メモを keywords に含む");
+});
+
+test("techstack.searchItems: 全アイテムを name/sub/keywords 付きで返す", (MK) => {
+  // 観点: 技術台帳は全アイテムを候補にする。sub に採用状況＋カテゴリ、keywords にバージョン・メモ・タグ
+  const T = MK.logic.techstack;
+  T.addItem("PostgreSQL");
+  T.updateItem(T.items()[0].id, { category: "DB", version: "16", ring: "adopt", note: "主DB", tags: ["RDB"] });
+  const rows = T.searchItems();
+  const r = rows.find((x) => x.label === "PostgreSQL");
+  assert(r, "アイテムを含む");
+  assert(/DB/.test(r.sub), "sub にカテゴリ");
+  assert(r.keywords.indexOf("16") >= 0 && r.keywords.indexOf("RDB") >= 0, "バージョン・タグを keywords に含む");
+});
+
+test("wbs.searchItems: 全PJ横断で未完の葉タスクを返し、親・完了は除外", (MK) => {
+  // 観点: scoped な wbs を全 PJ 横断で走査し、集計行の親・完了タスクを除いた実作業を候補にする
+  const W = MK.logic.wbs;
+  const sato = MK.people.resolveOrCreate("佐藤");
+  const a = MK.projects.create({ name: "受注PJ" });
+  W.importData({ version: 1, uid: 10, tasks: [
+    { id: 1, level: 0, name: "親フェーズ", status: "notstarted", deps: [] },
+    { id: 2, level: 1, name: "画面設計", assigneeId: sato, status: "inprogress", note: "Figma", deps: [] },
+    { id: 3, level: 1, name: "完了作業", status: "done", deps: [] },
+  ] }, "replace", a.id);
+  const rows = W.searchItems();
+  assert(rows.some((r) => r.label === "画面設計"), "未完の葉を含む");
+  assert(!rows.some((r) => r.label === "親フェーズ"), "親（集計行）は除外");
+  assert(!rows.some((r) => r.label === "完了作業"), "完了は除外");
+  const r = rows.find((r) => r.label === "画面設計");
+  assert(/受注PJ/.test(r.sub), "sub に PJ 名");
+  assert(r.keywords.indexOf("佐藤") >= 0, "担当者名を keywords に含む");
+});

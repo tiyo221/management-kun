@@ -340,6 +340,65 @@
     ] };
   }
 
+  /**
+   * 全プロジェクト（対象別 store）のタスクを横断して返す（横断集計の土台・§3.7.4）。
+   * wbs は Project 次元の scoped モジュールで、データは PJ ごとの store に分かれて入るため、
+   * 検索・人単位サマリーは表示中 PJ だけでなく全 PJ を走査する。PJ が1つも無い（＝従来の
+   * 単一 namespace／テスト）場合は表示中の store をそのまま1件として返す。
+   * @returns {{id: (string|null), name: string, tasks: WbsTask[]}[]}
+   */
+  function eachProjectTasks() {
+    const projects = (MK.projects && typeof MK.projects.all === "function") ? MK.projects.all() : [];
+    if (!projects.length) return [{ id: null, name: "", tasks: load(store).tasks }];
+    return projects.map((p) => ({ id: p.id, name: p.name, tasks: load(storeFor(p.id)).tasks }));
+  }
+
+  /**
+   * グローバル検索（コマンドパレット）用のレコードを返す（任意契約 def.searchItems・spec §3.5）。
+   * 全 PJ を横断し、集計行の親タスクと完了タスクは除いて実作業（葉）を候補にする。
+   * label＝タスク名、sub＝PJ 名＋ステータス、keywords に担当者名・備考を含めて本文検索できるようにする。
+   * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
+   */
+  function searchItems() {
+    const label = (key) => { const s = STATUS.find((x) => x.key === key); return s ? s.label : key; };
+    const out = [];
+    eachProjectTasks().forEach((pj) => {
+      pj.tasks.forEach((t, i) => {
+        if (isParent(pj.tasks, i) || t.status === "done" || !t.name) return;
+        const assignee = t.assigneeId && MK.people.get(t.assigneeId) ? MK.people.get(t.assigneeId).name : "";
+        out.push({ id: pj.id + ":" + t.id, label: t.name,
+          sub: [pj.name, label(t.status)].filter(Boolean).join(" · "),
+          keywords: [assignee, t.note].filter(Boolean) });
+      });
+    });
+    return out;
+  }
+
+  /**
+   * エンティティ単位の任意契約（spec §3.6.1）。人詳細の集約ビュー（#83）へ、その人が担当する
+   * WBS タスクの概況を全 PJ 横断で返す。集計行の親は除き、葉タスクだけを担当として数える。
+   * @param {string} entityType - マスタ種別（"person" のみ対応。他は該当なし empty）
+   * @param {string} id - 対象 person の entityId
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   */
+  function summaryFor(entityType, id) {
+    if (entityType !== "person") return { empty: true, stats: [] };
+    let total = 0, inprogress = 0, done = 0;
+    eachProjectTasks().forEach((pj) => {
+      pj.tasks.forEach((t, i) => {
+        if (isParent(pj.tasks, i) || t.assigneeId !== id) return;
+        total++;
+        if (t.status === "inprogress") inprogress++;
+        else if (t.status === "done") done++;
+      });
+    });
+    return { empty: total === 0, stats: [
+      { label: "担当タスク", value: total },
+      { label: "進行中", value: inprogress },
+      { label: "完了", value: done },
+    ] };
+  }
+
   MK.logic = MK.logic || {};
-  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, wbsNumbers, summaryOf, hiddenFlags, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, buildCSVRows, exportData, importData, loadSample };
+  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, wbsNumbers, summaryOf, hiddenFlags, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, searchItems, summaryFor, eachProjectTasks, buildCSVRows, exportData, importData, loadSample };
 })();

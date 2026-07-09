@@ -298,6 +298,23 @@
     ] };
   }
 
+  /**
+   * グローバル検索（コマンドパレット）用のレコードを返す（任意契約 def.searchItems・spec §3.5）。
+   * 達成済み（全ステップ done）は追わなくてよいので除き、進行中の目標だけを候補にする。
+   * label＝目標名、sub＝進捗率＋期限、keywords に説明と現在ステップ名を含めて本文検索できるようにする。
+   * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
+   */
+  function searchItems() {
+    return goals().filter((g) => !isAchieved(g)).map((g) => {
+      const p = progress(g);
+      const stepId = currentStepId(g);
+      const step = stepId ? g.steps.find((s) => s.id === stepId) : null;
+      return { id: g.id, label: g.title,
+        sub: [p.pct + "%", g.deadline ? "期限 " + g.deadline : ""].filter(Boolean).join(" · "),
+        keywords: [g.description, step ? step.title : ""].filter(Boolean) };
+    });
+  }
+
   MK.logic = MK.logic || {};
-  MK.logic.goals = { load, save, goals, getGoal, progress, isAchieved, currentStepId, addGoal, updateGoal, removeGoal, addStep, updateStep, toggleStep, removeStep, moveStep, dashboardData, summary, buildCSVRows, applyCSV, exportData, importData, loadSample };
+  MK.logic.goals = { load, save, goals, getGoal, progress, isAchieved, currentStepId, addGoal, updateGoal, removeGoal, addStep, updateStep, toggleStep, removeStep, moveStep, dashboardData, summary, searchItems, buildCSVRows, applyCSV, exportData, importData, loadSample };
 })();
