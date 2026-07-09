@@ -67,7 +67,7 @@
       ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("このスキルを削除しますか？").then((ok) => { if (ok) { L().removeSkill(s.id); render(); } }) }),
     ]);
   }
-  function labeled(label, ctrl) { return el("label", { class: "sub", style: "display:flex;align-items:center;gap:4px;" }, [ctrl, label]); }
+  function labeled(label, ctrl) { return el("label", { class: "sub", style: "display:flex;align-items:center;gap:var(--space-xxs);" }, [ctrl, label]); }
 
   function editSkill(s) {
     const f = {
@@ -178,7 +178,7 @@
     if (v === "-") return "background:var(--color-surface);color:var(--color-muted);";
     if (!v) return "";
     const a = { 1: 0.16, 2: 0.33, 3: 0.5, 4: 0.7, 5: 0.9 }[Number(v)] || 0;
-    return "background:rgba(var(--color-primary-rgb)," + a + ");color:" + (Number(v) >= 3 ? "#fff" : "var(--color-ink)") + ";";
+    return "background:rgba(var(--color-primary-rgb)," + a + ");color:" + (Number(v) >= 3 ? "var(--color-on-primary)" : "var(--color-ink)") + ";";
   }
 
   MK.registerModule("skills", {

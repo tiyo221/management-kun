@@ -215,10 +215,11 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 
 /* ---- トースト ---- */
 .mk-toasts { position: fixed; right: var(--space-xl); bottom: var(--space-xl); z-index: 1000; display: flex; flex-direction: column; gap: var(--space-xs); }
-.mk-toast { background: var(--color-ink); color: #fff; padding: 10px 16px; border-radius: var(--rounded-md); font-size: 14px; opacity: 0; transform: translateY(8px); transition: all .25s; box-shadow: rgba(15,15,15,.16) 0 8px 24px -6px; }
+.mk-toast { background: var(--color-ink); color: var(--color-canvas); padding: 10px 16px; border-radius: var(--rounded-md); font-size: 14px; opacity: 0; transform: translateY(8px); transition: all .25s; box-shadow: rgba(15,15,15,.16) 0 8px 24px -6px; }
 .mk-toast.show { opacity: 1; transform: translateY(0); }
-.mk-toast.error { background: var(--color-error); }
-.mk-toast.success { background: var(--color-success); }
+.mk-toast .btn { color: inherit; }
+.mk-toast.error { background: var(--color-error); color: var(--color-on-primary); }
+.mk-toast.success { background: var(--color-success); color: var(--color-on-primary); }
 
 /* ---- モーダル ---- */
 .mk-modal-overlay { position: fixed; inset: 0; background: rgba(15,15,15,.35); display: flex; align-items: center; justify-content: center; z-index: 500; padding: var(--space-md); }

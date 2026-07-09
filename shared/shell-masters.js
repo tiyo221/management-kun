@@ -308,7 +308,7 @@
         const meta = [el("span", { class: "chip", text: productStatusLabel(p.status) })];
         const owner = MK.products.ownerPerson(p);
         if (owner) meta.push(el("span", { class: "chip" }, [
-          el("span", { style: "display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:" + (owner.color || "var(--color-steel)") + ";" }),
+          el("span", { style: "display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:var(--space-xxs);background:" + (owner.color || "var(--color-steel)") + ";" }),
           "責任者: " + owner.name,
         ]));
         if (p.repo) meta.push(el("span", { class: "sub", text: p.repo }));
@@ -338,7 +338,7 @@
     const boxes = list.map((proj) => {
       const cb = MK.ui.checkbox((selectedIds || []).indexOf(proj.id) >= 0);
       cb.dataset.projectId = proj.id;
-      wrap.appendChild(el("label", { style: "display:flex;gap:8px;align-items:center;cursor:pointer;" }, [cb, el("span", { text: proj.name })]));
+      wrap.appendChild(el("label", { style: "display:flex;gap:var(--space-xs);align-items:center;cursor:pointer;" }, [cb, el("span", { text: proj.name })]));
       return cb;
     });
     wrap.getSelected = () => boxes.filter((b) => b.checked).map((b) => b.dataset.projectId);

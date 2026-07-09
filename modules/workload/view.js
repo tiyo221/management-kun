@@ -48,7 +48,7 @@
   }
   // 単一グループの pill 群（active を強調）。ui.pillTabs は文字列 key 前提なので数値 period 用にこちらを使用
   function inlinePills(items, active, onChange) {
-    const wrap = el("span", { style: "display:inline-flex;gap:4px;" });
+    const wrap = el("span", { style: "display:inline-flex;gap:var(--space-xxs);" });
     items.forEach((it) => { const b = el("button", { class: "pill-tab" + (it.key === active ? " active" : ""), text: it.label }); b.addEventListener("click", () => onChange(it.key)); wrap.appendChild(b); });
     return wrap;
   }
