@@ -63,7 +63,7 @@
   };
   MK.store.load();
   migrateScopedData(); // scoped 化前の単一キーを対象別へ移す（§3.7.4）。route より前に実行する。
-  if (MK.allocations) MK.allocations.migrateFromWorkload(); // 旧 workload 内部のアロケーションを共有マスタへ昇格（Issue #45）。
+  if (MK.allocations) MK.allocations.migrateFromWorkload(); // 退役した workload 名前空間を吸い上げ、内部アロケーションを共有マスタへ昇格しキーを破棄（Issue #45 / #167）。
   if (MK.products) MK.products.migrateOwnerToPeople(); // 旧・自由文字列 owner を People マスタへ名寄せ移行（Issue #56）。
   applyTheme(getTheme());
   // 起動先: 既定は HOME。設定 startView === "last" のときだけ前回モジュールを復元する（spec §3.6）。

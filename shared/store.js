@@ -107,6 +107,14 @@
       }
     },
 
+    // 名前空間を localStorage キーごと削除し、キャッシュからも落とす（退役モジュールの
+    // 名前空間破棄など。§4.1）。localStorage が例外を投げる環境でも起動シーケンスを
+    // 止めないよう握りつぶす（read() が getItem を素で呼ぶのと同じ堅牢性方針）。
+    remove(ns) {
+      try { localStorage.removeItem(keyOf(ns)); } catch (e) { /* 削除不可な環境では無視 */ }
+      delete this._cache[ns];
+    },
+
     // mk: プレフィックスキーの合計使用量（概算）。UTF-16 前提で 1 文字 2 バイトとして
     // キー名＋値の長さから概算する。ratio は QUOTA_BYTES（約5MB）比。
     usage() {
@@ -133,7 +141,7 @@
 
     // 「配列キー1本を持つモジュールデータ」の load/save 定型を集約する（Issue #139）。
     // 各モジュールが再実装していた「store 読取→配列検証→既定返却」「exportedAt 付与→set」
-    // を1か所へ寄せる。複数キーや fixup が要るモジュール（skills/workload/wbs 等）は対象外。
+    // を1か所へ寄せる。複数キーや fixup が要るモジュール（skills/wbs 等）は対象外。
     //   key     … データ本体を格納する配列プロパティ名（例 "tasks"）。
     //   version … 既定データの schema バージョン（既定 1）。
     //   stamp   … true のとき save 時に exportedAt を現在時刻で付与する（既定 false）。

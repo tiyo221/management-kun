@@ -38,7 +38,7 @@
   const DEFAULT_ZONES = MANIFEST.zones || [];
   // マスタは特定ゾーンの持ち物ではなく、settings と同列の「シェルレベル管理グループ」
   // として独立させる（spec §3.6 / Issue #46）。プロジェクトは wbs（デリバリー）だけで
-  // なく workload（ピープル）からも参照される横断的存在（scope: "global"・§4.6）であり、
+  // なく resource（ピープル）からも参照される横断的存在（scope: "global"・§4.6）であり、
   // ゾーン配下に置くと横断性が過小表現になるため、ゾーンから切り離してナビ描画する。
   const DEFAULT_MASTERS = [
     { view: "master-people", label: "👤 人" },
@@ -71,7 +71,6 @@
   const LEGACY_KEYS = {
     "mokuhyo-mieru-kun:v1": "goals",
     "skill-tool-data-v1": "skills",
-    "task-tool-data-v1": "workload",
     "todo-kun.data.v1": "todo",
     "wbs-tool-data-v1": "wbs",
   };
