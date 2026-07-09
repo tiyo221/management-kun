@@ -4,7 +4,8 @@
 
    役割は2つ:
    1. データ宣言: window.MK_MANIFEST に catalog / zones / shared を載せる。shell.js はここを参照して
-      META（表示メタ）と DEFAULT_ZONES（マネージャ全部入りのフォールバック）を得る。テストハーネス
+      モジュール id の集合・並び順と DEFAULT_ZONES（マネージャ全部入りのフォールバック）を得る。
+      表示メタ（title/icon/description）は各モジュールの def が単一ソース（Issue #142）。テストハーネス
       （test/harness.js）も同じデータから共有資産・モジュール一覧を導出する。
    2. スクリプト注入: ブラウザでは、エントリの window.MK_CONFIG（プロファイル）に応じて共有資産＋必要な
       モジュール（logic→view）＋ shell.js を **読込順を保って** 動的に読み込む。エントリ側は
@@ -14,22 +15,26 @@
 (function () {
   "use strict";
 
-  // モジュールのカタログ（表示メタ）。ここが title / icon の単一ソース（shell.js の META はここを読む）。
+  // モジュールのカタログ。キー＝全モジュール id の登録（＝どのモジュールがあるか）と並び順
+  // （moduleOrder。人詳細の集約ビュー #83 が走査する順。ゾーン順に整える）を担う。
+  // 表示メタ（title / icon / description）の単一ソースは各モジュールの def（MK.registerModule）側に置き、
+  // ここには持たせない（Issue #142。以前は title/icon をここと def の二重管理だった）。
+  // 値は原則空 {}。例外として、まだ def を持たない「準備中」モジュールは、HOME 等で名前を出すため
+  // フォールバックの { title, icon } をここに書ける（def を実装したら空へ戻す。shell が def を優先して読む）。
   // カタログにあるが既定ゾーンに載らないモジュール（例: workload＝旧「負荷」。resource に統合済みだが
   // 旧データ移行のため実体は残す）は、下の load で明示的に読み込む。
-  // 並び順 = 既定の moduleOrder（人詳細の集約ビュー #83 が走査する順）。ゾーン順に整える。
   const CATALOG = {
-    todo:      { title: "ToDo", icon: "✅" },
-    goals:     { title: "目標", icon: "🎯" },
-    questions: { title: "わからないこと", icon: "❓" },
-    skills:    { title: "スキル", icon: "📊" },
-    workload:  { title: "負荷", icon: "📈" },
-    resource:  { title: "リソース", icon: "🧑‍🤝‍🧑" },
-    oneonone:  { title: "1on1", icon: "🗣" },
-    dashboard: { title: "ダッシュボード", icon: "🧭" },
-    wbs:       { title: "WBS", icon: "🗂" },
-    techstack: { title: "技術スタック", icon: "🧰" },
-    releases:  { title: "リリース", icon: "🚀" },
+    todo:      {},
+    goals:     {},
+    questions: {},
+    skills:    {},
+    workload:  {},
+    resource:  {},
+    oneonone:  {},
+    dashboard: {},
+    wbs:       {},
+    techstack: {},
+    releases:  {},
   };
 
   // 既定（マネージャ全部入り）のゾーン割当。index.html は zones を宣言せずこれを使う（＝ここが正）。
