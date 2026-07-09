@@ -210,15 +210,16 @@ textarea.text-input { min-height: 80px; resize: vertical; }
   display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: var(--rounded-sm);
   background: var(--tint-lavender); color: var(--color-charcoal); margin-right: 4px;
 }
-.chip-warn { background: var(--color-warning); color: #fff; }
-.chip-danger { background: var(--color-error); color: #fff; }
+.chip-warn { background: var(--color-warning); color: var(--color-on-primary); }
+.chip-danger { background: var(--color-error); color: var(--color-on-primary); }
 
 /* ---- トースト ---- */
 .mk-toasts { position: fixed; right: var(--space-xl); bottom: var(--space-xl); z-index: 1000; display: flex; flex-direction: column; gap: var(--space-xs); }
-.mk-toast { background: var(--color-ink); color: #fff; padding: 10px 16px; border-radius: var(--rounded-md); font-size: 14px; opacity: 0; transform: translateY(8px); transition: all .25s; box-shadow: rgba(15,15,15,.16) 0 8px 24px -6px; }
+.mk-toast { background: var(--color-ink); color: var(--color-canvas); padding: 10px 16px; border-radius: var(--rounded-md); font-size: 14px; opacity: 0; transform: translateY(8px); transition: all .25s; box-shadow: rgba(15,15,15,.16) 0 8px 24px -6px; }
 .mk-toast.show { opacity: 1; transform: translateY(0); }
-.mk-toast.error { background: var(--color-error); }
-.mk-toast.success { background: var(--color-success); }
+.mk-toast .btn { color: inherit; }
+.mk-toast.error { background: var(--color-error); color: var(--color-on-primary); }
+.mk-toast.success { background: var(--color-success); color: var(--color-on-primary); }
 
 /* ---- モーダル ---- */
 .mk-modal-overlay { position: fixed; inset: 0; background: rgba(15,15,15,.35); display: flex; align-items: center; justify-content: center; z-index: 500; padding: var(--space-md); }
@@ -307,8 +308,8 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 }
 .mk-home-attn:hover { opacity: .85; }
 .mk-home-attn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-.mk-home-attn.error { background: var(--color-error); color: #fff; }
-.mk-home-attn.warn { background: var(--color-warning); color: #fff; }
+.mk-home-attn.error { background: var(--color-error); color: var(--color-on-primary); }
+.mk-home-attn.warn { background: var(--color-warning); color: var(--color-on-primary); }
 .mk-home-attn.info { background: var(--color-surface); color: var(--color-slate); }
 .mk-home-attn-icon { font-size: 14px; }
 
@@ -473,9 +474,9 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .wl-week { flex: 0 0 16px; height: 22px; border-radius: 2px; background: var(--color-surface); }
 .wl-week.today { outline: 2px solid var(--color-primary); outline-offset: -1px; }
 .wl-badge { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: var(--rounded-full); }
-.wl-over { background: var(--color-error); color: #fff; }
-.wl-under { background: var(--color-warning); color: #fff; }
-.wl-ok { background: var(--color-success); color: #fff; }
+.wl-over { background: var(--color-error); color: var(--color-on-primary); }
+.wl-under { background: var(--color-warning); color: var(--color-on-primary); }
+.wl-ok { background: var(--color-success); color: var(--color-on-primary); }
 .wl-peak { font-size: 12px; color: var(--color-steel); }
 .wl-peak.hot { color: var(--color-error); font-weight: 600; }
 .wl-name.today { text-decoration: underline; text-decoration-color: var(--color-primary); text-underline-offset: 3px; }

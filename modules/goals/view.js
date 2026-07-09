@@ -56,7 +56,7 @@
   function renderGoalDetail(host, g) {
     const pr = L().progress(g);
     const head = ui.card([
-      el("div", { class: "mk-row", style: "border:none;padding:0 0 8px;" }, [
+      el("div", { class: "mk-row", style: "border:none;padding:0 0 var(--space-xs);" }, [
         el("div", { class: "grow" }, [
           el("h3", { text: g.title || "(無題)" }),
           el("div", { class: "sub", text: (g.deadline ? "期限 " + g.deadline + " / " : "") + "作成 " + g.createdAt + (g.achievedAt ? " / 達成 " + g.achievedAt : "") }),
@@ -66,7 +66,7 @@
       ]),
       g.description ? el("p", { class: "sub", text: g.description }) : null,
       L().isAchieved(g) ? el("div", { class: "mk-goal-done-banner", text: "🎉 ゴール到達！全ステップ完了" }) : null,
-      el("div", { class: "progress", style: "margin:8px 0;" }, [el("i", { style: "width:" + pr.pct + "%;" })]),
+      el("div", { class: "progress", style: "margin:var(--space-xs) 0;" }, [el("i", { style: "width:" + pr.pct + "%;" })]),
       el("div", { class: "sub", text: "進捗 " + pr.pct + "%（" + pr.done + "/" + pr.total + "）" }),
     ]);
 

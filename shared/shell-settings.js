@@ -50,7 +50,7 @@
     const startCb = el("input", { type: "checkbox" });
     startCb.checked = getSettings().startView === "last";
     startCb.addEventListener("change", () => setSettings({ startView: startCb.checked ? "last" : "home" }));
-    const startLabel = el("label", { class: "mk-toolbar", style: "gap:8px;cursor:pointer;" }, [startCb, el("span", { text: "起動時に前回のモジュールを開く" })]);
+    const startLabel = el("label", { class: "mk-toolbar", style: "gap:var(--space-xs);cursor:pointer;" }, [startCb, el("span", { text: "起動時に前回のモジュールを開く" })]);
     card.appendChild(startLabel);
 
     // 旧ツール移行（検出されたら表示。spec §7.5）
@@ -67,7 +67,7 @@
     main.appendChild(renderModuleVisibility());
 
     if (MK.store.errors.length) {
-      const warn = el("div", { class: "card", style: "margin-top:16px;border-color:var(--color-error);" });
+      const warn = el("div", { class: "card", style: "margin-top:var(--space-md);border-color:var(--color-error);" });
       warn.appendChild(el("h3", { text: "⚠ 破損データ" }));
       MK.store.errors.forEach((e) => warn.appendChild(el("div", { class: "sub", text: e.key + ": " + e.message })));
       main.appendChild(warn);
@@ -80,17 +80,17 @@
     const u = MK.store.usage();
     const pct = Math.round(u.ratio * 100);
     const warn = u.ratio >= USAGE_WARN_RATIO;
-    const card = el("div", { class: "card", style: "margin-top:16px;" + (warn ? "border-color:var(--color-error);" : "") });
+    const card = el("div", { class: "card", style: "margin-top:var(--space-md);" + (warn ? "border-color:var(--color-error);" : "") });
     card.appendChild(el("h3", { text: "ストレージ使用量" }));
     card.appendChild(el("p", { class: "sub", text: "ブラウザの保存領域（localStorage・約 5MB）の使用量です。上限に近づいたら不要データの整理と JSON バックアップを検討してください。" }));
     card.appendChild(el("div", { style: "font-weight:600;", text: formatBytes(u.bytes) + " / 約 " + formatBytes(u.quota) + "（" + pct + "%・" + u.count + " キー）" }));
     // 使用量バー
-    const track = el("div", { style: "margin-top:8px;height:8px;border-radius:4px;background:var(--color-hairline);overflow:hidden;" });
+    const track = el("div", { style: "margin-top:var(--space-xs);height:8px;border-radius:4px;background:var(--color-hairline);overflow:hidden;" });
     const fill = el("div", { style: "height:100%;width:" + Math.min(100, pct) + "%;background:" + (warn ? "var(--color-error)" : "var(--color-primary)") + ";" });
     track.appendChild(fill);
     card.appendChild(track);
     if (warn) {
-      card.appendChild(el("p", { class: "sub", style: "margin-top:8px;color:var(--color-error);", text: "⚠ 使用量が上限の " + Math.round(USAGE_WARN_RATIO * 100) + "% を超えています。全体バックアップ（JSON）を取得し、不要なデータを整理してください。" }));
+      card.appendChild(el("p", { class: "sub", style: "margin-top:var(--space-xs);color:var(--color-error);", text: "⚠ 使用量が上限の " + Math.round(USAGE_WARN_RATIO * 100) + "% を超えています。全体バックアップ（JSON）を取得し、不要なデータを整理してください。" }));
     }
     return card;
   }
@@ -98,7 +98,7 @@
   // モジュールの表示・非表示トグル（ゾーンでグルーピング。Issue #35）。
   // 変更は即ナビ・HOME へ反映する。非表示にしてもデータ・マスタ連携は保持される。
   function renderModuleVisibility() {
-    const card = el("div", { class: "card", style: "margin-top:16px;" });
+    const card = el("div", { class: "card", style: "margin-top:var(--space-md);" });
     card.appendChild(el("h3", { text: "モジュールの表示" }));
     card.appendChild(el("p", { class: "sub", text: "ナビと HOME に表示するモジュールを選びます。非表示にしてもデータは保持されます。" }));
     ZONES.forEach((zone) => {
@@ -111,7 +111,7 @@
         const cb = MK.ui.checkbox(!isHiddenModule(id));
         cb.addEventListener("change", () => { setModuleHidden(id, !cb.checked); S.renderNav(); });
         const label = (m.icon ? m.icon + " " : "") + m.title + (MK.modules[id] ? "" : "・準備中");
-        list.appendChild(el("label", { style: "display:flex;gap:8px;align-items:center;cursor:pointer;" }, [cb, el("span", { text: label })]));
+        list.appendChild(el("label", { style: "display:flex;gap:var(--space-xs);align-items:center;cursor:pointer;" }, [cb, el("span", { text: label })]));
       });
       card.appendChild(list);
     });

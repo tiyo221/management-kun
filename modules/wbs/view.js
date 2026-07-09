@@ -128,7 +128,7 @@
 
   function showUndo() {
     const host = document.getElementById("mk-toasts") || (function () { const h = el("div", { id: "mk-toasts", class: "mk-toasts" }); document.body.appendChild(h); return h; })();
-    const b = el("button", { class: "btn btn-ghost", text: "元に戻す", style: "color:#fff;" });
+    const b = el("button", { class: "btn btn-ghost", text: "元に戻す" });
     const toast = el("div", { class: "mk-toast show" }, ["削除しました　", b]);
     b.addEventListener("click", () => { L().undoDelete(); render(); toast.remove(); });
     host.appendChild(toast);

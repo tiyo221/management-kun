@@ -254,7 +254,7 @@
   }
   // 数値 key の pill 群（ui.pillTabs は文字列 key 前提のため）
   function inlinePills(items, active, onChange) {
-    const wrap = el("span", { style: "display:inline-flex;gap:4px;" });
+    const wrap = el("span", { style: "display:inline-flex;gap:var(--space-xxs);" });
     items.forEach((it) => { const b = el("button", { class: "pill-tab" + (it.key === active ? " active" : ""), text: it.label }); b.addEventListener("click", () => onChange(it.key)); wrap.appendChild(b); });
     return wrap;
   }
