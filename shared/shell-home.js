@@ -1,7 +1,7 @@
 /* シェル：HOME（玄関ダッシュボード。spec §3.6 / Issue #100）。shell-core・shell-nav の後に読む（Issue #140）。
-   2段階の情報密度: ピン留め（pinnedModules）＝フルカード、それ以外＝ゾーン配下の1行チップ。
-   ゾーンは折りたたみ可能（homeZones）。配布プロファイル（member.html）ではピープル/
-   デリバリーゾーンが ZONES に無いため、自動的に「自分」だけになる。
+   HOME は HOME 固有の価値だけに絞る: 要対応バー（attention）＋ピン留めモジュールのフルカードのみ。
+   モジュール一覧の常設表示は常設ランチャーであるサイドバー（shell-nav）に一本化した（Issue #169）。
+   配布プロファイル（member.html）でも同じ2層構成で動く。
    core が S へ載せた定数・ヘルパを分割代入で受け取る（core は先に読まれるので参照可）。 */
 (function () {
   "use strict";
@@ -9,32 +9,12 @@
   const el = MK.util.el;
   const S = window.MK.shell;
   const { META, ZONES, ZONE_MODULES, main } = S;
-  const { route, isHiddenModule, isPinnedModule, getPinnedModules, getHomeZones, toggleHomeZone, setModulePinned } = S;
+  const { route, isHiddenModule, isPinnedModule, getPinnedModules, setModulePinned } = S;
 
   function renderHome() {
     main.appendChild(el("h2", { class: "mk-section-title", text: "🏠 HOME" }));
     renderHomeAttention();
     renderHomePinned();
-    ZONES.forEach((zone) => {
-      // カタログ（META）未知の id・非表示（Issue #35）・ピン済み（先頭セクションに出る）を除外。
-      // 実装済み／未実装（＝準備中チップ）はどちらも出す。
-      const mods = (zone.modules || []).filter((id) => META[id] && !isHiddenModule(id) && !isPinnedModule(id));
-      if (!mods.length) return; // 全部ピン済み or 非表示のゾーンは見出しごと出さない
-      const collapsed = getHomeZones()[zone.label] === true;
-      const head = el("button", {
-        class: "mk-home-zone-toggle" + (collapsed ? " collapsed" : ""),
-        "aria-expanded": String(!collapsed),
-      }, [
-        el("span", { class: "mk-home-caret", text: "▸" }),
-        el("span", { class: "mk-home-zone-label", text: zone.label }),
-      ]);
-      head.addEventListener("click", () => { toggleHomeZone(zone.label); route("home"); });
-      main.appendChild(head);
-      if (collapsed) return;
-      const row = el("div", { class: "mk-home-chips" });
-      mods.forEach((id) => row.appendChild(homeChip(id)));
-      main.appendChild(row);
-    });
   }
 
   // 「要対応」帯（Issue #102）。表示中モジュールの summary().attention を集約し、severity 別の
@@ -74,7 +54,7 @@
   function renderHomePinned() {
     const pinned = getPinnedModules().filter((id) => META[id] && ZONE_MODULES[id] && !isHiddenModule(id));
     if (!pinned.length) {
-      main.appendChild(el("p", { class: "mk-home-pin-hint sub", text: "☆ を押してよく使うモジュールをピン留めすると、ここにサマリー付きで表示されます。" }));
+      main.appendChild(el("p", { class: "mk-home-pin-hint sub", text: "サイドバーの各モジュールの右端にある ☆ を押すと、ここにサマリー付きでピン留め表示されます。" }));
       return;
     }
     main.appendChild(el("h3", { class: "mk-home-zone", text: "📌 ピン留め" }));
@@ -149,29 +129,6 @@
     // ピン留めトグル（内包 button）からのバブリングでは遷移しない（e.target を自分に限定）
     card.addEventListener("keydown", (e) => { if (e.target !== card) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
     return card;
-  }
-
-  // ピンしていないモジュールの1行チップ（アイコン＋名前＋代表値1つ）。クリックで遷移。
-  function homeChip(id) {
-    const meta = META[id];
-    const chip = el("div", { class: "mk-home-chip", role: "button", tabindex: "0" });
-    chip.appendChild(el("span", { class: "mk-home-chip-icon", text: meta.icon || "" }));
-    chip.appendChild(el("span", { class: "mk-home-chip-title", text: meta.title }));
-    // 1行説明（何ができるか。Issue #40）。初見でも用途が分かるよう名前の隣に添える。
-    const desc = moduleDescription(id);
-    if (desc) chip.appendChild(el("span", { class: "mk-home-chip-desc", text: desc }));
-    if (!MK.modules[id]) {
-      chip.appendChild(el("span", { class: "mk-home-chip-stat", text: "準備中" }));
-    } else {
-      const sum = moduleSummary(id);
-      const s = sum && Array.isArray(sum.stats) && !sum.empty ? sum.stats[0] : null;
-      if (s) chip.appendChild(el("span", { class: "mk-home-chip-stat", text: s.label + " " + String(s.value) }));
-    }
-    chip.appendChild(pinButton(id));
-    const go = () => route(id);
-    chip.addEventListener("click", go);
-    chip.addEventListener("keydown", (e) => { if (e.target !== chip) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
-    return chip;
   }
 
   S.renderHome = renderHome;

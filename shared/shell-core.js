@@ -119,14 +119,6 @@
     setSettings({ pinnedModules: p });
   }
 
-  // ---- HOME のゾーン折りたたみ（Issue #100。ナビの mk:settings.nav と同型）----
-  function getHomeZones() { return getSettings().homeZones || {}; }
-  function toggleHomeZone(label) {
-    const z = Object.assign({}, getHomeZones());
-    z[label] = !z[label];
-    setSettings({ homeZones: z });
-  }
-
   // ---- テーマ（ダークモード。spec §6.2）----
   function getTheme() {
     const t = getSettings().theme;
@@ -302,8 +294,6 @@
   S.getPinnedModules = getPinnedModules;
   S.isPinnedModule = isPinnedModule;
   S.setModulePinned = setModulePinned;
-  S.getHomeZones = getHomeZones;
-  S.toggleHomeZone = toggleHomeZone;
   S.getTheme = getTheme;
   S.applyTheme = applyTheme;
   S.toggleTheme = toggleTheme;
