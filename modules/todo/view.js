@@ -7,8 +7,9 @@
   const L = () => MK.logic.todo;
 
   let root = null;
-  let filter = "all";
+  let filter = "next"; // 初期表示は Next（done/someday を混ぜない・Issue #155）。「全て」タブは残す
   let search = "";
+  let sort = "created"; // 並び順（created=追加日順 / due=締め切り順 / project=プロジェクト別 / context=コンテキスト別）
 
   function render() {
     if (!root) return;
@@ -29,6 +30,14 @@
     const tabsBar = ui.toolbar([]);
     tabsBar.appendChild(pill("全て", "all", c.all));
     L().STATUSES.forEach((s) => tabsBar.appendChild(pill(s.label, s.key, c[s.key])));
+    const sortSel = ui.select([
+      { value: "created", label: "追加日順" },
+      { value: "due", label: "締め切り順" },
+      { value: "project", label: "プロジェクト別" },
+      { value: "context", label: "コンテキスト別" },
+    ], sort, (v) => { sort = v; renderList(listHost); });
+    sortSel.style.maxWidth = "150px";
+    tabsBar.appendChild(sortSel);
     const searchBox = ui.input({ placeholder: "検索…", value: search });
     searchBox.style.maxWidth = "220px";
     searchBox.addEventListener("input", () => { search = searchBox.value; renderList(listHost); });
@@ -50,7 +59,7 @@
 
   function renderList(host) {
     host.innerHTML = "";
-    const items = L().filtered(filter, search);
+    const items = L().filtered(filter, search, sort);
     if (!items.length) {
       // 全体で0件（初回）と、フィルタ/検索の結果0件を区別してガイドする
       if (!L().counts().all) host.appendChild(ui.emptyState({
