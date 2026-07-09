@@ -33,7 +33,7 @@
 | `shared/allocations.js` / `demands.js`（共有マスタ） | **resource / dashboard**（要員計画・ダッシュボードがアロケーションを参照） | 自動（`allocations` / `demands` / `resource` / `dashboard`）＋要員計画・ダッシュボード画面の手動確認 |
 | `modules/wbs/logic.js`（進捗集計） | **dashboard**（WBS 進捗を対象別に集約する横断ビュー） | 自動（`dashboard`）＋ダッシュボード画面の手動確認 |
 | `shared/ui.js` / `design.css`（見た目の共通） | **全モジュールの view** | 手動（375/768/1280・ダーク・空状態） |
-| `index.html` / `shared/shell.js`（シェル/ナビ/移行/設定） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
+| `index.html` / `shared/shell*.js`（シェル/ナビ/移行/設定。責務別分割・Issue #140） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
 
 > 各モジュールは基本独立で、共通の依存は「shared」と「人/プロジェクトのマスタ」。例外は **dashboard**（横断集約ビュー）で、共有マスタに加え **wbs の対象別データ（`exportData(projectId)`）を読み取り専用で集約**する（編集はしない）。wbs の進捗集計を変えたら dashboard も確認する。
 
