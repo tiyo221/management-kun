@@ -7,7 +7,7 @@
   const L = () => MK.logic.todo;
 
   let root = null;
-  let filter = "next"; // 初期表示は Next（done/someday を混ぜない・Issue #155）。「全て」タブは残す
+  let filter = "inbox"; // 初期表示は Inbox（GTD 思想＝Inbox Zero を後押し・追加直後のタスクが消えない・Issue #164）。「全て」タブは残す
   let search = "";
   let sort = "created"; // 並び順（created=追加日順 / due=締め切り順 / project=プロジェクト別 / context=コンテキスト別）
 
