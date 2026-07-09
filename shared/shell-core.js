@@ -14,11 +14,25 @@
   // シェル内部の共有オブジェクト（S）。ここで生成し、以降の shell-*.js が拡張する。
   const S = (window.MK.shell = {});
 
-  // モジュールのメタ（title/icon。未実装は「準備中」表示）spec §5。カタログは構成マニフェスト
-  // （shared/manifest.js の window.MK_MANIFEST）を単一ソースとする（Issue #137）。エントリが積まない
-  // モジュールの分は単に参照されないだけで無害。
+  // モジュールのメタ（title/icon。未実装は「準備中」表示）spec §5。
+  // 単一ソースは各モジュールの def（MK.registerModule の title/icon）とする（Issue #142）。
+  // ここでは全カタログ id 分の META を作り、def があればそれを、無ければ（準備中）カタログの
+  // フォールバック値を、それも無ければ id 自身を採る。カタログ（構成マニフェスト・Issue #137）は
+  // 「どのモジュールがあるか／並び順」の単一ソースで、id ごとに META エントリを1つ持たせる
+  // （home/nav/palette 等の `META[id]` 存在判定がカタログ既知性の判定を兼ねるため）。
+  // モジュール JS はシェルより先に読み込まれる（manifest の logic→view→shell 順）ので
+  // ここで MK.modules は出そろっている。
   const MANIFEST = window.MK_MANIFEST || {};
-  const META = MANIFEST.catalog || {};
+  const CATALOG = MANIFEST.catalog || {};
+  const META = {};
+  Object.keys(CATALOG).forEach((id) => {
+    const def = MK.modules[id];
+    const fb = CATALOG[id] || {};
+    META[id] = {
+      title: (def && def.title) || fb.title || id,
+      icon: (def && def.icon) || fb.icon || "",
+    };
+  });
   // ゾーン構成は配布プロファイル（window.MK_CONFIG.zones）から受け取る。未指定なら
   // マニフェストの既定（マネージャ用の全部入り）にフォールバックする（spec §1.4 / §1.5 / §6.4）。
   const DEFAULT_ZONES = MANIFEST.zones || [];
