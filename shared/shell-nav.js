@@ -15,6 +15,40 @@
     return b;
   }
 
+  // モジュールのナビ項目（ラベル＝遷移／右端☆＝ピン留めトグル、と役割を場所で分ける。Issue #169）。
+  // ラベル部は通常の navItem。その右にピン留めトグルを添え、HOME 側の ☆ 導線をサイドバーへ集約する。
+  function moduleNavItem(label, id) {
+    const wrap = el("div", { class: "mk-nav-item-wrap" });
+    wrap.appendChild(navItem(label, id));
+    wrap.appendChild(navPin(id));
+    return wrap;
+  }
+
+  // ピン留めトグル（★/☆）。ラベルとは別 button なので遷移とは衝突しないが、念のため伝播も止める。
+  // 未ピンは行 hover 時だけ表示、ピン済み★は常時表示（CSS 側）。押下後は renderNav 再描画＋
+  // 同じトグルへフォーカスを戻し、キーボードで連続操作できるようにする（HOME の pinButton と同挙動）。
+  function navPin(id) {
+    const pinned = S.isPinnedModule(id);
+    const b = el("button", {
+      class: "mk-nav-pin" + (pinned ? " pinned" : ""),
+      "aria-label": (pinned ? "ピン留めを解除: " : "ピン留め: ") + META[id].title,
+      "aria-pressed": String(pinned),
+      title: pinned ? "ピン留めを解除" : "ピン留め",
+      "data-navpin": id,
+      text: pinned ? "★" : "☆",
+    });
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      S.setModulePinned(id, !pinned);
+      // HOME を表示中ならピン留めカードも即時反映する（route が renderNav も呼ぶ）。それ以外は
+      // ナビだけ再描画すれば足りる。どちらの経路でもナビは作り直されるのでフォーカスを戻せる。
+      if (S.current === "home") S.route("home"); else renderNav();
+      const again = nav.querySelector('[data-navpin="' + CSS.escape(id) + '"]');
+      if (again) again.focus();
+    });
+    return b;
+  }
+
   // ---- ナビの折りたたみ状態（ゾーン単位。設定 mk:settings.nav に { <label>: true=畳む } で保持）----
   function getNav() { return S.getSettings().nav || {}; }
   function toggleNavZone(label) { const n = Object.assign({}, getNav()); n[label] = !n[label]; S.setSettings({ nav: n }); }
@@ -39,7 +73,7 @@
         if (!m) return; // カタログ未知のモジュールは無視
         if (S.isHiddenModule(id)) return; // 非表示モジュールはナビに出さない（Issue #35）
         const implemented = !!MK.modules[id];
-        items.push(navItem((m.icon ? m.icon + " " : "") + m.title + (implemented ? "" : "・準備中"), id));
+        items.push(moduleNavItem((m.icon ? m.icon + " " : "") + m.title + (implemented ? "" : "・準備中"), id));
       });
       if (!items.length) return; // 実質空のゾーンは見出しごと出さない
       appendNavGroup(zone.label, items, (zone.modules || []).indexOf(S.current) >= 0);
