@@ -54,6 +54,29 @@ test("store: QuotaExceededError を握りつぶさず記録し、戻り値 false
   }
 });
 
+test("store: remove() は localStorage キーとキャッシュを落とし、例外環境でも握りつぶす", (MK) => {
+  // 観点: 退役モジュールの名前空間破棄（Issue #167）。read でキャッシュに載せた後 remove すると
+  //       localStorage キーも _cache も消える。removeItem が投げる環境でも例外を伝播させない。
+  MK.store.write("module:todo", { version: 1, tasks: [{ id: "t1" }] });
+  eq(MK.store.read("module:todo").tasks.length, 1); // _cache に載せる
+  MK.store.remove("module:todo");
+  eq(global.localStorage.getItem(MK.store.keyOf("module:todo")), null, "localStorage キーが消える");
+  eq(MK.store.read("module:todo"), null, "read は null（キャッシュも破棄）");
+
+  // removeItem が例外を投げる環境でも remove は投げず、_cache からは落とす（起動シーケンスを止めない）。
+  // localStorage キー自体は消せないため read は遅延ロードで戻り得るが、例外を伝播しないことが要点。
+  const orig = global.localStorage;
+  const throwing = Object.assign({}, orig, { removeItem: () => { throw new Error("no remove"); } });
+  global.localStorage = throwing;
+  try {
+    MK.store.write("module:goals", { version: 1, goals: [] });
+    MK.store.remove("module:goals"); // 例外を伝播しない
+    assert(!("module:goals" in MK.store._cache), "例外環境でも _cache からは落ちる");
+  } finally {
+    global.localStorage = orig;
+  }
+});
+
 test("store: collection() load は未保存・不正形式で既定 { version, [key]: [] } を返す", (MK) => {
   // 観点: 配列キー1本の load 定型（Issue #139）。未保存＝null、key が配列でない＝不正形式
   const c = MK.store.collection("module:todo", { key: "tasks", stamp: true });

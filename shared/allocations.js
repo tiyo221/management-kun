@@ -108,8 +108,7 @@
         persist(d);
       }
       // 吸い上げ後は退役した workload 名前空間をキーごと破棄する（残骸を残さない・冪等）。
-      localStorage.removeItem(MK.store.keyOf("module:workload"));
-      delete MK.store._cache["module:workload"];
+      MK.store.remove("module:workload");
       return moved;
     },
   };

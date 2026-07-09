@@ -107,6 +107,14 @@
       }
     },
 
+    // 名前空間を localStorage キーごと削除し、キャッシュからも落とす（退役モジュールの
+    // 名前空間破棄など。§4.1）。localStorage が例外を投げる環境でも起動シーケンスを
+    // 止めないよう握りつぶす（read() が getItem を素で呼ぶのと同じ堅牢性方針）。
+    remove(ns) {
+      try { localStorage.removeItem(keyOf(ns)); } catch (e) { /* 削除不可な環境では無視 */ }
+      delete this._cache[ns];
+    },
+
     // mk: プレフィックスキーの合計使用量（概算）。UTF-16 前提で 1 文字 2 バイトとして
     // キー名＋値の長さから概算する。ratio は QUOTA_BYTES（約5MB）比。
     usage() {
