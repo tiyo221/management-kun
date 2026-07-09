@@ -28,7 +28,8 @@
   document.getElementById("btn-theme").addEventListener("click", toggleTheme);
   // 設定はナビ末尾から .mk-actions へ移設（Issue #148）。挙動は従来どおり view=settings へ遷移。
   const settingsBtn = document.getElementById("btn-settings");
-  if (settingsBtn) settingsBtn.addEventListener("click", () => { route("settings"); closeSidebar(); });
+  // navItem と同じく、開きっぱなしの人詳細（#83）を畳んでから遷移し、ナビ遷移と挙動を揃える。
+  if (settingsBtn) settingsBtn.addEventListener("click", () => { S.peopleDetailId = null; route("settings"); closeSidebar(); });
   const menuBtn = document.getElementById("btn-menu");
   if (menuBtn) menuBtn.addEventListener("click", toggleSidebar);
   // グローバル検索（Ctrl+K / Cmd+K）。どの画面からでも開ける（Issue #82 / spec §10.2）。
