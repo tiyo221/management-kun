@@ -6,9 +6,15 @@
   const ui = MK.ui;
   const L = () => MK.logic.wbs;
 
-  const DAY_W = 24, ROW_H = 34;
+  const ROW_H = 34;
+  // ガントのズーム段階（1日あたりの px 幅）。日＝従来幅、週/月で圧縮して横長を緩和（Issue #157）。
+  const ZOOM = { day: 24, week: 12, month: 5 };
   let root = null;
   let opsMenu = null;
+  let viewMode = "table"; // "table" | "gantt"（テーブル/ガントのタブ切替）
+  let zoomKey = "day"; // ZOOM のキー
+  let ganttHost = null; // ガントのスクロール容器（「今日へスクロール」用）
+  let ganttMeta = null; // { min, dayW }（スクロール位置計算用）
 
   function render() {
     if (!root) return;
@@ -36,8 +42,42 @@
     const nums = L().wbsNumbers(tasks);
     const hidden = L().hiddenFlags(tasks);
     const visible = []; tasks.forEach((t, i) => { if (!hidden[i]) visible.push(i); });
-    const wrap = el("div", { class: "wbs-wrap" }, [renderTable(tasks, nums, visible), renderGantt(tasks, nums, visible)]);
-    root.appendChild(ui.stack([stats, bar, wrap]));
+
+    // テーブル / ガントのタブ切替。片方を全幅で表示する（Issue #157）。
+    const tabs = ui.pillTabs(
+      [{ key: "table", label: "テーブル" }, { key: "gantt", label: "ガント" }],
+      viewMode, (k) => { viewMode = k; render(); }
+    );
+
+    let panel;
+    if (viewMode === "gantt") {
+      const gantt = renderGantt(tasks, nums, visible);
+      panel = ui.stack([ganttBar(), el("div", { class: "wbs-wrap" }, [gantt])]);
+      // ガントを開いた/ズームしたら今日付近を初期表示にする（rAF で DOM 反映後に）
+      requestAnimationFrame(scrollToToday);
+    } else {
+      ganttHost = null; ganttMeta = null;
+      panel = el("div", { class: "wbs-wrap" }, [renderTable(tasks, nums, visible)]);
+    }
+    root.appendChild(ui.stack([stats, bar, tabs, panel]));
+  }
+
+  // ガント用ツールバー：ズーム（日/週/月）＋「今日へスクロール」。
+  function ganttBar() {
+    const zoom = ui.pillTabs(
+      [{ key: "day", label: "日" }, { key: "week", label: "週" }, { key: "month", label: "月" }],
+      zoomKey, (k) => { zoomKey = k; render(); }
+    );
+    zoom.appendChild(ui.button("今日へスクロール", { onClick: scrollToToday }));
+    return zoom;
+  }
+
+  // ガントのスクロール位置を今日が中央に来るよう調整する。
+  function scrollToToday() {
+    if (!ganttHost || !ganttMeta) return;
+    const idx = MK.util.daysBetween(ganttMeta.min, MK.util.todayISO());
+    const x = idx * ganttMeta.dayW + ganttMeta.dayW / 2;
+    ganttHost.scrollLeft = Math.max(0, x - ganttHost.clientWidth / 2);
   }
 
   function renderTable(tasks, nums, visible) {
@@ -138,11 +178,14 @@
   // ---- ガント（インラインSVG）----
   function renderGantt(tasks, nums, visible) {
     const host = el("div", { class: "wbs-gantt" });
+    const DAY_W = ZOOM[zoomKey] || ZOOM.day;
+    const showDayNum = DAY_W >= 12; // 月ズーム（幅が狭い）では日付数字を省き、月ラベルのみ表示
     const A = MK.util.addDays, D = MK.util.daysBetween;
     let min = null, max = null;
     tasks.forEach((t, i) => { const r = L().isParent(tasks, i) ? L().summaryOf(tasks, i) : t; if (r.start && (!min || r.start < min)) min = r.start; if (r.end && (!max || r.end > max)) max = r.end; });
     if (!min) { min = MK.util.todayISO(); max = A(min, 30); }
     min = A(min, -2); max = A(max, 4);
+    ganttHost = host; ganttMeta = { min, dayW: DAY_W }; // 「今日へスクロール」用
     const days = D(min, max) + 1, W = days * DAY_W, headH = ROW_H, H = headH + visible.length * ROW_H;
     const pos = {}, esc = MK.util.escapeHtml;
     let s = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">';
@@ -150,7 +193,7 @@
       const date = A(min, i), dow = new Date(date + "T00:00:00").getDay(), x = i * DAY_W;
       if (dow === 0 || dow === 6) s += '<rect x="' + x + '" y="0" width="' + DAY_W + '" height="' + H + '" fill="var(--color-surface)"></rect>';
       if (new Date(date + "T00:00:00").getDate() === 1 || i === 0) s += '<text x="' + (x + 3) + '" y="14" font-size="10" fill="var(--color-steel)">' + esc(date.slice(0, 7)) + '</text>';
-      s += '<text x="' + (x + DAY_W / 2) + '" y="28" text-anchor="middle" font-size="9" fill="var(--color-muted)">' + new Date(date + "T00:00:00").getDate() + '</text>';
+      if (showDayNum) s += '<text x="' + (x + DAY_W / 2) + '" y="28" text-anchor="middle" font-size="9" fill="var(--color-muted)">' + new Date(date + "T00:00:00").getDate() + '</text>';
     }
     const todayIdx = D(min, MK.util.todayISO());
     if (todayIdx >= 0 && todayIdx < days) { const tx = todayIdx * DAY_W + DAY_W / 2; s += '<line x1="' + tx + '" y1="0" x2="' + tx + '" y2="' + H + '" stroke="var(--color-error)" stroke-width="1" stroke-dasharray="3 3"></line>'; }
