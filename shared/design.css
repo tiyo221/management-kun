@@ -417,8 +417,9 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 
 /* ---- wbs: テーブル + ガント ---- */
 .wbs-wrap { display: flex; flex-direction: column; border: 1px solid var(--color-hairline); border-radius: var(--rounded-lg); overflow: hidden; background: var(--color-canvas); }
-.wbs-table { overflow: auto; max-height: 44vh; }
-.wbs-gantt { overflow: auto; max-height: 40vh; border-top: 1px solid var(--color-hairline); }
+/* テーブル/ガントはタブで片方ずつ全幅表示する（Issue #157）。単独表示なので高さを広く取る。 */
+.wbs-table { overflow: auto; max-height: 66vh; }
+.wbs-gantt { overflow: auto; max-height: 66vh; }
 .wbs-grid { border-collapse: collapse; font-size: 13px; width: 100%; min-width: 780px; }
 .wbs-grid th, .wbs-grid td { border-bottom: 1px solid var(--color-hairline); padding: 0 8px; height: 34px; white-space: nowrap; }
 .wbs-grid td:nth-child(2), .wbs-grid th:nth-child(2) { width: 99%; } /* タスク名列が余白を吸収 */
