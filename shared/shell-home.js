@@ -54,7 +54,7 @@
   function renderHomePinned() {
     const pinned = getPinnedModules().filter((id) => META[id] && ZONE_MODULES[id] && !isHiddenModule(id));
     if (!pinned.length) {
-      main.appendChild(el("p", { class: "mk-home-pin-hint sub", text: "サイドバーの各モジュールにマウスを重ねて右端の ☆ を押すと、ここにサマリー付きでピン留め表示されます。" }));
+      main.appendChild(el("p", { class: "mk-home-pin-hint sub", text: "サイドバーの各モジュールの右端にある ☆ を押すと、ここにサマリー付きでピン留め表示されます。" }));
       return;
     }
     main.appendChild(el("h3", { class: "mk-home-zone", text: "📌 ピン留め" }));
