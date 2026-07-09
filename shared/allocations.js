@@ -1,8 +1,8 @@
 /* アロケーション管理（共有マスタ）spec §3.7.5 / §4.4
    `人 × 器（Project/将来 Product）× 期間 × 割当%` の計画事実を、モジュールに属さない
    中立な共有マスタとして保持する。People / Projects と同格（別ストア mk:allocations、
-   ctx.allocations 経由で参照・編集）。リソース（resource・旧 staffing）が編集・俯瞰し、workload には
-   依存しない（Issue #45 で workload 内部データから昇格）。 */
+   ctx.allocations 経由で参照・編集）。リソース（resource・旧 staffing）が編集・俯瞰する
+   （Issue #45 で旧 workload 内部データから昇格。workload 自体は Issue #167 で退役・撤去）。 */
 (function () {
   "use strict";
   const MK = window.MK;
@@ -10,7 +10,7 @@
 
   /**
    * 共有アロケーション1件。マネージャがトップダウンで planning する粗い計画事実（spec §3.7.5）。
-   * WBS の担当（assigneeId）や workload のタスクとは**別レコード**で、片方から導出しない・
+   * WBS の担当（assigneeId）とは**別レコード**で、片方から導出しない・
    * 片方を変えても他方に影響しない。
    * @typedef {Object} Allocation
    * @property {string} id - アロケーションID（"a" プレフィックス。旧 workload 由来は "wa")
@@ -90,22 +90,26 @@
     },
 
     /**
-     * 旧 workload 内部データ（`mk:module:workload:v1`.allocations[]）を共有マスタへ一度だけ
-     * 移設する（Issue #45 の昇格移行）。加算的・非破壊: 既存 id は上書きしない。移設後は
-     * workload 側の allocations を除去して二重管理を避ける（冪等）。旧データが無ければ何もしない。
-     * @returns {number} 移設した件数
+     * 退役した workload 名前空間（`mk:module:workload:v1`）を吸い上げる終端ワンショット移行。
+     * 旧 workload 内部が持っていた `allocations[]` を共有マスタへ移設し（Issue #45 の昇格。
+     * 加算的・非破壊: 既存 id は上書きしない）、吸い上げ後は **キーごと破棄**する（Issue #167 で
+     * モジュール本体を撤去したため、負荷タスク等の残骸を localStorage に残さない）。モジュール
+     * 本体のロードには依存せず store レベルで完結する。旧データが無ければ何もしない（冪等）。
+     * @returns {number} 移設したアロケーション件数
      */
     migrateFromWorkload() {
       const w = MK.store.read("module:workload");
-      if (!w || !Array.isArray(w.allocations) || !w.allocations.length) return 0;
-      const d = data();
-      const existing = {}; d.allocations.forEach((a) => (existing[a.id] = true));
+      if (!w) return 0;
       let moved = 0;
-      w.allocations.forEach((a) => { if (a && a.id && !existing[a.id]) { d.allocations.push(a); moved++; } });
-      persist(d);
-      // 二重管理を避けるため、workload からアロケーションを取り除いて保存し直す（冪等化）。
-      const cleaned = Object.assign({}, w); delete cleaned.allocations;
-      MK.store.write("module:workload", cleaned);
+      if (Array.isArray(w.allocations) && w.allocations.length) {
+        const d = data();
+        const existing = {}; d.allocations.forEach((a) => (existing[a.id] = true));
+        w.allocations.forEach((a) => { if (a && a.id && !existing[a.id]) { d.allocations.push(a); moved++; } });
+        persist(d);
+      }
+      // 吸い上げ後は退役した workload 名前空間をキーごと破棄する（残骸を残さない・冪等）。
+      localStorage.removeItem(MK.store.keyOf("module:workload"));
+      delete MK.store._cache["module:workload"];
       return moved;
     },
   };

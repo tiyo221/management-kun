@@ -60,7 +60,7 @@ skill-mieru-kun（自前パーサ・UTF-8・BOM許容）と wbs-tool（BOM付き
 - 旧 JSON ファイル（旧ルート形状）も `io.js` が判別し新エンベロープへ変換する（§7.3）。
 
 ### 7.2 メンバー/プロジェクトの名寄せ
-- 旧メンバー（skills / workload）、`assignee`（wbs）、`project` 文字列（todo）はすべて **§8 名寄せ（参照解決）** の共通フローでマスタへ解決する。
+- 旧メンバー（skills）、`assignee`（wbs）、`project` 文字列（todo）はすべて **§8 名寄せ（参照解決）** の共通フローでマスタへ解決する。（旧・単一HTMLタスクツール `task-tool-data-v1` → workload の取込は、workload 退役に伴い撤去した・Issue #167。）
 - 移行は「ハイブリッド確定」（§8.4）で実行：完全一致は自動リンク、未一致は新規マスタ作成、近似一致のみレビュー画面で確認する。
 
 ### 7.3 旧 JSON ファイルの読込
@@ -70,7 +70,7 @@ skill-mieru-kun（自前パーサ・UTF-8・BOM許容）と wbs-tool（BOM付き
 1. `shared/design.css`（トークン+コンポーネント）整備。
 2. `shared/store.js` / `io.js` / `people.js` / `projects.js`（共通データ層・人/プロジェクト管理・入出力）。
 3. シェル `index.html` + ルーター（モジュール差し替え）。
-4. モジュール移植（既存HTMLのロジックを `modules/*.js` へ。デザインはトークンへ置換）。移植順は依存の少ない **todo → goals → wbs → skills → workload** を推奨。
+4. モジュール移植（既存HTMLのロジックを `modules/*.js` へ。デザインはトークンへ置換）。移植順は依存の少ない **todo → goals → wbs → skills** を推奨（旧 task-mieru-kun 由来の workload も当初はこの後に移植したが、Issue #52 で resource へ役割移譲し #167 で退役・撤去）。
 5. 旧データ移行 UI（§7.1）。
 
 ### 7.5 移行トリガと UX
@@ -89,7 +89,7 @@ skill-mieru-kun（自前パーサ・UTF-8・BOM許容）と wbs-tool（BOM付き
 
 | # | 場面 | 性質 | 対象 |
 |---|---|---|---|
-| ① | 旧ツール移行 | バッチ（一回的） | skills/workload の members、wbs の `assignee`、todo の `project` |
+| ① | 旧ツール移行 | バッチ（一回的） | skills の members、wbs の `assignee`、todo の `project`（workload は退役・#167） |
 | ② | CSV インポート | バッチ（反復） | 名前参照のメンバー/プロジェクト（§4.6） |
 | ③ | JSON マージ取込 | バッチ（反復） | `id` 一致＋名前再解決（[`spec.md`](../spec.md) §4.3） |
 | ④ | 手入力 | 逐次・対話 | タスクの担当者・プロジェクト入力 |

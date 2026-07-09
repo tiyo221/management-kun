@@ -19,7 +19,6 @@
 | goals | – | 任意（Goal↔Project） |
 | questions | – | – |
 | skills | ✓ | – |
-| workload | ✓ | 任意 |
 | resource | ✓ | ✓（`allocations` / `demands` の器＝Project 参照経由） |
 | oneonone | ✓ | – |
 | todo | – | ✓ |
@@ -89,7 +88,6 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 | `active` | boolean | 在籍/有効フラグ（任意・既定 true） |
 
 - モジュール固有のメンバー属性の例:
-  - workload の `capacityWarnHigh` / `capacityWarnLow` → `mk:module:workload` 側に `memberSettings[memberId]` として保持。
   - skills の評価（ratings）は従来どおり skills 側に `memberId` キーで保持。
 - 旧 wbs-tool の `assignee`（文字列）は、マスタ Member への参照（`assigneeId`）へ移行。未解決の文字列は「未割当の表示名」として暫定保持し、マスタ登録を促す（§7）。
 - CSV 入出力に対応（§4.6）。列: `氏名, 役割, 表示色, 備考, 有効`。`有効` は空/未指定は true、`false`/`0`/`no`/`無効` を false と解釈。氏名が空の行はスキップ。取込の全置換／upsert の現行状況は §4.4.1 C の「現行の例外」を正とする。
@@ -123,7 +121,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 | `percent` | number | 割当率(%)。100 超も許容（過剰アサインの可視化） |
 | `note` | string | 備考（任意） |
 
-- WBS の担当（`assigneeId`）・workload のタスク（負荷）とは**別レコード**。片方から導出せず、片方を変えても他方に影響しない（§3.7.5）。
+- WBS の担当（`assigneeId`）とは**別レコード**。片方から導出せず、片方を変えても他方に影響しない（§3.7.5）。
 - 集計純関数 `percentOn(list, memberId, date)`（器を跨いだ期間内合算）をマスタが提供し、要員計画の「空き＝キャパ−全器割当」算出が再利用する。
 - ※ `memberId` / `targetId` の複合参照を持つため、共通契約の `name` 必須・`resolve`/CSV は素直に当てはまらない（名前ではなく参照で成立するマスタ）。編集は要員計画 UI と JSON 入出力を正とし、CSV 取込対象外。
 

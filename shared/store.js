@@ -133,7 +133,7 @@
 
     // 「配列キー1本を持つモジュールデータ」の load/save 定型を集約する（Issue #139）。
     // 各モジュールが再実装していた「store 読取→配列検証→既定返却」「exportedAt 付与→set」
-    // を1か所へ寄せる。複数キーや fixup が要るモジュール（skills/workload/wbs 等）は対象外。
+    // を1か所へ寄せる。複数キーや fixup が要るモジュール（skills/wbs 等）は対象外。
     //   key     … データ本体を格納する配列プロパティ名（例 "tasks"）。
     //   version … 既定データの schema バージョン（既定 1）。
     //   stamp   … true のとき save 時に exportedAt を現在時刻で付与する（既定 false）。

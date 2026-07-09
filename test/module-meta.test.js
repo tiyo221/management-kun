@@ -8,7 +8,7 @@ const path = require("path");
 const vm = require("vm");
 
 // index.html が積む実装済みモジュール（準備中＝未実装は description を持たなくてよい）。
-const MODULES = ["todo", "goals", "questions", "dashboard", "wbs", "skills", "workload", "resource", "oneonone", "techstack", "releases"];
+const MODULES = ["todo", "goals", "questions", "dashboard", "wbs", "skills", "resource", "oneonone", "techstack", "releases"];
 
 // 各 view.js を読み込んで MK.modules に def（title/icon/description）を揃える。
 function loadDefs(MK, rootDir) {

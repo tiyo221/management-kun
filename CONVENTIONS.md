@@ -95,7 +95,7 @@ modules/
 
 ### データ層（logic から使う）
 - `MK.store.scope("module:<id>")` → `{ get(), set(v) }`。破損時も個別 try/parse で他へ波及させない。
-- `MK.store.collection("module:<id>", { key, version, stamp })` → `{ load(), save(d) }`（Issue #139）。**配列キー1本を持つモジュール**の load（store 読取→`key` 配列検証→既定 `{ version, [key]: [] }` 返却）と save（`stamp:true` なら `exportedAt` 付与→`set`）の定型を集約する。複数キーや読込時の fixup が要るモジュール（skills / workload / wbs 等）は `scope()` 直叩きで各自 load/save を書く。
+- `MK.store.collection("module:<id>", { key, version, stamp })` → `{ load(), save(d) }`（Issue #139）。**配列キー1本を持つモジュール**の load（store 読取→`key` 配列検証→既定 `{ version, [key]: [] }` 返却）と save（`stamp:true` なら `exportedAt` 付与→`set`）の定型を集約する。複数キーや読込時の fixup が要るモジュール（skills / wbs 等）は `scope()` 直叩きで各自 load/save を書く。
 - **マスタ**（共通契約は [`spec/masters.md`](spec/masters.md) §4.4.1 B）:
   - `MK.people` / `MK.projects` / `MK.products`: `all() / get(id) / create(attrs) / update(id,patch) / remove(id) / resolve(name) / resolveOrCreate(name) / replaceAll(list) / buildCSVRows() / applyCSV(rows)`。status を持つマスタ（projects / products）は加えて `STATUSES / normalize<Enum>() / counts()`。
   - `MK.allocations`（アロケーション共有マスタ・人×器×期間×%）: `all() / get(id) / of(memberId) / forTarget(targetId) / create / update / remove / replaceAll / percentOn(list, memberId, date)`。
@@ -111,7 +111,7 @@ modules/
 
 1. `modules/<id>/logic.js` を作成。配列キー1本なら `const { load, save } = MK.store.collection("module:<id>", { key, stamp });`（複数キー・fixup が要るなら `const store = MK.store.scope("module:<id>");` で始め load/save を自前で書く）。計算・CRUD・`exportData/importData/loadSample` を定義し、`MK.logic["<id>"] = {...}` で公開（DOM に触れない）。
 2. `modules/<id>/view.js` を作成。`const L = () => MK.logic["<id>"];`、`render()` を `MK.ui` ヘルパで組み、`MK.registerModule("<id>", { title, icon, description, mount, unmount, exportData:()=>L().exportData(), importData:(d,m)=>L().importData(d,m), loadSample:()=>L().loadSample() })`。`description` は「何ができるか」の1行説明（HOME が見取り図として描画・spec §3.6 / Issue #40）。
-3. [`shared/manifest.js`](shared/manifest.js): **モジュールの登録は原則ここ1か所**（Issue #137）。カタログ `CATALOG` に `<id>: {}`（空オブジェクト）を追加し（**カタログに無いモジュールはナビ・HOME に出ず、スクリプトも読み込まれない**）、既定（マネージャ全部入り）の `ZONES` の該当グループ（自分／ピープル／デリバリー…＝§1.4 の領域）に `<id>` を登録する。ゾーンが未定義なら新しいゾーンを追加する。ゾーンに出さないが実体だけ読みたい（旧データ移行専用の workload 等）場合は `LOAD` に追加する。これだけで index.html・member.html の `<script>` 追記もゾーンの二重定義も不要（manifest が `logic→view→shell` を順序どおり動的読込し、shell.js の `META`／`DEFAULT_ZONES` も manifest を参照する）。表示メタ `title`／`icon`／`description` は **カタログに足さず def 側に持たせる**（シェルの `META` が def を単一ソースとして読む。重複ハードコード禁止・§3.6 / Issue #142・#40）。まだ def を書かない「準備中」モジュールを名前だけ先に出したいときのみ、カタログ値に `{ title, icon }` をフォールバックとして書く（def 実装時に空へ戻す）。
+3. [`shared/manifest.js`](shared/manifest.js): **モジュールの登録は原則ここ1か所**（Issue #137）。カタログ `CATALOG` に `<id>: {}`（空オブジェクト）を追加し（**カタログに無いモジュールはナビ・HOME に出ず、スクリプトも読み込まれない**）、既定（マネージャ全部入り）の `ZONES` の該当グループ（自分／ピープル／デリバリー…＝§1.4 の領域）に `<id>` を登録する。ゾーンが未定義なら新しいゾーンを追加する。ゾーンに出さないが実体だけ常に読み込みたい場合は `LOAD` に追加する（現状は該当なし。かつて旧データ移行専用に workload をここへ載せていたが、#167 の退役で撤去した）。これだけで index.html・member.html の `<script>` 追記もゾーンの二重定義も不要（manifest が `logic→view→shell` を順序どおり動的読込し、shell.js の `META`／`DEFAULT_ZONES` も manifest を参照する）。表示メタ `title`／`icon`／`description` は **カタログに足さず def 側に持たせる**（シェルの `META` が def を単一ソースとして読む。重複ハードコード禁止・§3.6 / Issue #142・#40）。まだ def を書かない「準備中」モジュールを名前だけ先に出したいときのみ、カタログ値に `{ title, icon }` をフォールバックとして書く（def 実装時に空へ戻す）。
    - 配布プロファイル（[`member.html`](member.html) 等）に載せたい場合のみ、そのエントリの `MK_CONFIG.zones` にも `<id>` を足す（載せなければ配布物にコードもデータも含まれない・spec §1.5）。マネージャ（[`index.html`](index.html)）は `zones` を宣言せず manifest 既定を使うため追記不要。
 4. 旧ツール移行が必要なら [`shared/shell-settings.js`](shared/shell-settings.js) の `migrateLegacy()` に分岐を、[`shared/shell-core.js`](shared/shell-core.js) の `LEGACY_KEYS` にキーを追加（シェルは責務別に分割済み・Issue #140）。
 5. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、**[`spec.md`](spec.md) §5 のモジュール一覧表に行を追加する（モジュール id の列挙・CSV 対応の ✓ はここだけ・単一ソース）**。CSV に対応させたら §5 表の CSV 列を ✓ にする（`build…CSVRows` を実装したのに ✓ を付け忘れる／逆に外し忘れると [`test/spec-consistency.test.js`](test/spec-consistency.test.js) が失敗する。id 一覧は manifest カタログと突き合わせる）。マスタ利用の有無に増減があれば [`spec/masters.md`](spec/masters.md) §4.4 の利用関係表も同期する。§3.2 / §4.1 / §4.2 / §4.6 / §6.4・README・CLAUDE.md は規則＋参照になっているため個別列挙の追記は不要（もし id や「CSV 対応＝○○」の列挙を見つけたら §5 への参照へ直す）。
@@ -164,4 +164,4 @@ modules/
 | 画面を狭めると topnav が崩れる | `@media` とヘッダーの横スクロール／2段化・ピル `nowrap` を追加（§2.2） |
 | 部品の重複定義（`btn/fld/inp` 等を5モジュールで再定義） | `shared/ui.js` に集約し view から自作を排除（§4） |
 | 描画とロジックの混在 | 全モジュールを `modules/<id>/{logic,view}.js` に分割（§1） |
-| 日付計算の重複（wbs/workload） | `MK.util` に `addDays/daysBetween/mondayOf/fmtDate` を集約 |
+| 日付計算の重複（wbs 等） | `MK.util` に `addDays/daysBetween/mondayOf/fmtDate` を集約 |

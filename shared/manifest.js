@@ -21,14 +21,11 @@
   // ここには持たせない（Issue #142。以前は title/icon をここと def の二重管理だった）。
   // 値は原則空 {}。例外として、まだ def を持たない「準備中」モジュールは、HOME 等で名前を出すため
   // フォールバックの { title, icon } をここに書ける（def を実装したら空へ戻す。shell が def を優先して読む）。
-  // カタログにあるが既定ゾーンに載らないモジュール（例: workload＝旧「負荷」。resource に統合済みだが
-  // 旧データ移行のため実体は残す）は、下の load で明示的に読み込む。
   const CATALOG = {
     todo:      {},
     goals:     {},
     questions: {},
     skills:    {},
-    workload:  {},
     resource:  {},
     oneonone:  {},
     dashboard: {},
@@ -48,9 +45,10 @@
     { label: "テクノロジー", modules: ["techstack"] },
   ];
 
-  // ゾーンに載らないが常に読み込むモジュール（既定＝マネージャプロファイルのみ）。
-  // workload は UI に出さない（zones 外）が、旧ツール移行（shell.js migrateLegacy）が参照するため読む。
-  const LOAD = ["workload"];
+  // ゾーンに載らないが常に読み込むモジュール（既定＝マネージャプロファイルのみ）。現状は無し。
+  // （旧 workload はゾーン外ロードだったが Issue #167 で退役・撤去。旧データの吸い上げは
+  //  モジュール本体に依存しない store レベルの終端移行 MK.allocations.migrateFromWorkload() が担う。）
+  const LOAD = [];
 
   // 共有資産（全プロファイルで読み込む土台。読込順＝依存順。spec §3.3）。
   // プロファイル別の絞り込みはしない（people/projects/allocations と同格の共有マスタは基盤扱い）。
@@ -71,8 +69,8 @@
 
   const cfg = window.MK_CONFIG || {};
   // プロファイルが zones を宣言していればそれ（配布サブセット）を、無ければ既定（マネージャ全部入り）を使う。
-  // ゾーン外の追加ロード（LOAD＝workload）は既定プロファイルにだけ効かせる。配布プロファイルは自分の
-  // zones だけを載せるのが目的なので、旧データ移行専用モジュールまで引き込まない。
+  // ゾーン外の追加ロード（LOAD）は既定プロファイルにだけ効かせる。配布プロファイルは自分の
+  // zones だけを載せるのが目的なので、ゾーン外モジュールまで引き込まない。
   const hasZones = Array.isArray(cfg.zones);
   const zones = hasZones ? cfg.zones : ZONES;
   const extra = hasZones ? [] : LOAD;

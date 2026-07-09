@@ -219,19 +219,10 @@
         });
         MK.modules.skills.importData({ version: 1, skills, ratings }, "replace");
         done++;
-      } else if (moduleId === "workload") {
-        const memMap = {}, memberSettings = {};
-        (raw.members || []).forEach((m) => {
-          const nid = MK.people.resolveOrCreate(m.name);
-          memMap[m.id] = nid;
-          if (m.color) { const ex = MK.people.get(nid); if (ex && !ex.color) MK.people.update(nid, { color: m.color }); }
-          memberSettings[nid] = { high: m.capacityWarnHigh != null ? m.capacityWarnHigh : 80, low: m.capacityWarnLow != null ? m.capacityWarnLow : 60 };
-        });
-        const remap = (list) => (list || []).map((t) => Object.assign({}, t, { id: t.id || MK.util.uid("wt"), memberId: memMap[t.memberId] || null }));
-        const baseline = raw.baseline ? { savedAt: raw.baseline.savedAt || MK.util.todayISO(), tasks: remap(raw.baseline.tasks) } : null;
-        MK.modules.workload.importData({ version: 1, tasks: remap(raw.tasks), baseline, memberSettings }, "replace");
-        done++;
       }
+      // 旧・単一HTMLタスクツール（task-tool-data-v1 → 旧 workload）の取込分岐は Issue #167 で撤去した
+      // （workload モジュール退役。負荷タスクの受け皿が無いため取り込まない。旧 workload 内部の
+      //  アロケーションは起動時の MK.allocations.migrateFromWorkload() が store から吸い上げる）。
     });
     setSettings({ migration: { fromLegacyDone: true } });
     MK.ui.toast(done ? (done + " 件のツールを取り込みました") : "取り込める実装済みモジュールがありませんでした", done ? "success" : "info");

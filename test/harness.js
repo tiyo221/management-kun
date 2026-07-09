@@ -73,7 +73,7 @@ const SHARED_SCRIPTS = MANIFEST.shared.map((s) => "shared/" + s + ".js");
 const MODULE_LOGIC = {};
 Object.keys(MANIFEST.catalog).forEach((id) => { MODULE_LOGIC[id] = "modules/" + id + "/logic.js"; });
 const ALL_MODULE_IDS = Object.keys(MODULE_LOGIC);
-// ゾーンに載るモジュール id（カタログ順）。ゾーン外の workload 等を除く。着脱テストが総なめ対象に使う。
+// ゾーンに載るモジュール id（カタログ順）。ゾーン外ロード（LOAD）分を除く。着脱テストが総なめ対象に使う。
 const ZONE_MODULE_IDS = ALL_MODULE_IDS.filter((id) =>
   (MANIFEST.zones || []).some((z) => (z.modules || []).indexOf(id) >= 0));
 
