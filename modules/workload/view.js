@@ -178,6 +178,7 @@
     mount(container, c) { ctx = c; root = el("div"); container.appendChild(root); render(); },
     unmount() { root = null; ctx = null; },
     summary() { return L().summary(); },
+    summaryFor(entityType, id) { return L().summaryFor(entityType, id); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },
     loadSample() { L().loadSample(); },

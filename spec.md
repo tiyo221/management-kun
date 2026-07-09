@@ -197,7 +197,7 @@ searchItems() {
 
 - `label`（主・必須）／`sub`（補助表示・任意）／`keywords`（追加の探索対象・任意）。選択するとそのモジュールへ遷移する（`route(<id>)`）。
 - **`searchItems` は任意契約**（`summary()` と同型）。未実装・例外・不正形式のモジュールはシェルが無視し、候補が増えないだけで壊れない。
-- マッチング（正規化・部分一致スコア・複数トークン AND・並べ替え）は DOM 非依存の純関数 `MK.search`（`shared/search.js`）に置き、テスト可能にする（`test/search.test.js`）。実装例: todo=未完タスク、questions=未解決の質問。
+- マッチング（正規化・部分一致スコア・複数トークン AND・並べ替え）は DOM 非依存の純関数 `MK.search`（`shared/search.js`）に置き、テスト可能にする（`test/search.test.js`）。実装例: todo=未完タスク、questions=未解決の質問＋ナレッジ、goals=未達成の目標、releases=中止以外のリリース、techstack=技術台帳の全アイテム、wbs=全 PJ 横断の未完の葉タスク（Issue #144）。
 
 ホストが `mount(container, ctx)` に渡す `ctx`:
 
@@ -267,7 +267,7 @@ summaryFor(entityType, id) {
 - **汎用**: `entityType` はマスタ種別に汎用で、`"project"` 等の特定種別に分岐しない（§3.7.6）。対応しない種別には `{ empty: true, ... }`（データ無し）で応える。
 - 横断表示・集約ビューは他モジュールをハード参照せず、必ずコアのリーダ **`MK.readEntitySummary(moduleId, entityType, entityId)`** 経由で問い合わせる。リーダは `MK.readSummary`（§9.5）と同一原則で、**未搭載（`MK_CONFIG` から外した）・`summaryFor` 未実装・`summaryFor` が例外**のいずれでも `null` を返し、呼び手（#83）を壊さない。
 - 集計は logic 側の純関数に置きテスト可能にする（リーダの契約テスト `test/read-entity-summary.test.js`、各モジュールの集約ロジックは `test/summary-for.test.js`）。
-- **実装状況（#83）**: 消費者は**人詳細の集約ビュー**（シェルの `master-people` 詳細）。`skills` / `resource` / `oneonone` が `summaryFor("person", id)` を実装し、詳細画面は登録済みモジュールを `MK.readEntitySummary` で走査して `null` は省き・`empty` は空状態・`stats` は集約値＋「開く →」導線で描画する。プロジェクト側の集約は `dashboard`（#78・project-scoped）に一本化し master 側へは二重実装しない（役割分担は §9.6 の判断記録）。関連プロダクト（owner）は共有マスタ `MK.products` を直接参照する（モジュールではないため契約対象外）。
+- **実装状況（#83 / #144）**: 消費者は**人詳細の集約ビュー**（シェルの `master-people` 詳細）。`skills` / `resource` / `oneonone` / `workload` / `wbs`（全 PJ 横断の担当タスク）が `summaryFor("person", id)` を実装し、詳細画面は登録済みモジュールを `MK.readEntitySummary` で走査して `null` は省き・`empty` は空状態・`stats` は集約値＋「開く →」導線で描画する。プロジェクト側の集約は `dashboard`（#78・project-scoped）に一本化し master 側へは二重実装しない（役割分担は §9.6 の判断記録）。関連プロダクト（owner）は共有マスタ `MK.products` を直接参照する（モジュールではないため契約対象外）。
 
 ### 3.7 スコープ次元（横断 / 単位のスコープ軸）
 

@@ -302,6 +302,26 @@
     ] };
   }
 
+  /**
+   * エンティティ単位の任意契約（spec §3.6.1）。人詳細の集約ビュー（#83）へ、その人の稼働概況を返す。
+   * 担当タスク数と直近4週の平均稼働率・状態（過負荷/適正/余裕）を集約する。「今週」に依存するため
+   * 基準週は weekMondays（今日基準）に委ねる（summary() と同一・決定的テストは今日基準で組む）。
+   * @param {string} entityType - マスタ種別（"person" のみ対応。他は該当なし empty）
+   * @param {string} id - 対象 person の entityId
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   */
+  function summaryFor(entityType, id) {
+    if (entityType !== "person") return { empty: true, stats: [] };
+    const own = tasksOf(id);
+    const st = stats(id, weekMondays(4, 0));
+    const stateLabel = { over: "過負荷", under: "余裕", ok: "適正" };
+    return { empty: own.length === 0, stats: [
+      { label: "担当タスク", value: own.length },
+      { label: "平均稼働", value: Math.round(st.avg) + "%" },
+      { label: "状態", value: stateLabel[st.state] || st.state },
+    ] };
+  }
+
   MK.logic = MK.logic || {};
-  MK.logic.workload = { STATUS, PERIODS, load, save, tasks, members, warnOf, colorOf, effEnd, weekMondays, series, planSeries, stats, summary, addTask, updateTask, removeTask, tasksOf, saveBaseline, clearBaseline, hasBaseline, statusFromCSV, buildCSVRows, applyCSV, exportData, importData, loadSample };
+  MK.logic.workload = { STATUS, PERIODS, load, save, tasks, members, warnOf, colorOf, effEnd, weekMondays, series, planSeries, stats, summary, summaryFor, addTask, updateTask, removeTask, tasksOf, saveBaseline, clearBaseline, hasBaseline, statusFromCSV, buildCSVRows, applyCSV, exportData, importData, loadSample };
 })();

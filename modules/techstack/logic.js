@@ -299,11 +299,26 @@
     ], attention };
   }
 
+  /**
+   * グローバル検索（コマンドパレット）用のレコードを返す（任意契約 def.searchItems・spec §3.5）。
+   * 技術台帳は「使う技術を引く」用途がそのまま検索と一致するので全アイテムを候補にする。
+   * label＝技術名、sub＝採用状況＋カテゴリ、keywords にバージョン・用途メモ・タグを含める。
+   * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
+   */
+  function searchItems() {
+    const label = (key) => { const r = RINGS.find((x) => x.key === key); return r ? r.label : key; };
+    return items().map((it) => ({
+      id: it.id, label: it.name,
+      sub: [label(it.ring), it.category].filter(Boolean).join(" · "),
+      keywords: [it.version, it.note].concat(it.tags || []).filter(Boolean),
+    }));
+  }
+
   MK.logic = MK.logic || {};
   MK.logic.techstack = {
     RINGS, DEADLINE_SOON_DAYS, load, save, items, normalizeRing, normalizeDate,
     deadlineStatus, deadlineCounts, counts, categories, filtered,
     addItem, updateItem, removeItem, buildCSVRows, applyCSV,
-    summary, exportData, importData, loadSample,
+    summary, searchItems, exportData, importData, loadSample,
   };
 })();

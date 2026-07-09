@@ -241,10 +241,25 @@
     ] };
   }
 
+  /**
+   * グローバル検索（コマンドパレット）用のレコードを返す（任意契約 def.searchItems・spec §3.5）。
+   * 中止（cancelled）は追う対象でないので除き、予定・完了のリリースを候補にする。
+   * label＝バージョン/名称、sub＝プロダクト名＋ステータス、keywords に実施日/予定日とメモを含める。
+   * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
+   */
+  function searchItems() {
+    const label = (key) => { const s = STATUSES.find((x) => x.key === key); return s ? s.label : key; };
+    return releases().filter((r) => r.status !== "cancelled").map((r) => ({
+      id: r.id, label: r.version,
+      sub: [productName(r), label(r.status)].filter(Boolean).join(" · "),
+      keywords: [effectiveDate(r), r.note].filter(Boolean),
+    }));
+  }
+
   MK.logic = MK.logic || {};
   MK.logic.releases = {
     STATUSES, load, save, releases, normalizeStatus, effectiveDate, timeline, counts,
     addRelease, updateRelease, removeRelease, productName, upcoming,
-    summary, exportData, importData, loadSample,
+    summary, searchItems, exportData, importData, loadSample,
   };
 })();

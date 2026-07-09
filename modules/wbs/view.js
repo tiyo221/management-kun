@@ -202,6 +202,9 @@
     },
     unmount() { closeOpsMenu(); root = null; },
     summary() { return L().summary(); },
+    // 全 PJ 横断（§3.7.4）: 検索・人単位サマリーは表示中 PJ に限らず全 PJ を走査する。
+    searchItems() { return L().searchItems(); },
+    summaryFor(entityType, id) { return L().summaryFor(entityType, id); },
     // 対象別 scope（§3.7.4）: io が PJ ごとに targetId を渡す。省略時は表示中の store。
     exportData(targetId) { return L().exportData(targetId); },
     importData(data, mode, targetId) { L().importData(data, mode, targetId); },
