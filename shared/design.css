@@ -105,17 +105,22 @@ a { color: var(--color-link-blue); }
 .mk-nav-item:hover { background: var(--color-surface); }
 .mk-nav-item.active { background: var(--color-surface); font-weight: 600; }
 /* モジュール項目: ラベル（遷移）＋右端☆（ピン留めトグル）。ラベルを伸ばし☆を右端に固定（Issue #169）。
-   ☆はレイアウトを動かさないよう常に幅を確保し、未ピンは visibility で隠す（行 hover 時のみ表示）。 */
+   ☆はレイアウトを動かさないよう常に幅を確保し、未ピンは既定で隠す（行 hover / 行内フォーカス時のみ表示）。 */
 .mk-nav-item-wrap { position: relative; display: flex; align-items: center; }
 .mk-nav-item-wrap .mk-nav-item { flex: 1; min-width: 0; }
+/* 隠すのに visibility:hidden ではなく opacity+pointer-events を使う。visibility:hidden はフォーカス不能で、
+   キーボードでアンピンした直後の again.focus()（shell-nav）が no-op になりフォーカスが外れるため。
+   opacity:0 の要素は tab / プログラムフォーカスを受けられ、focus-within で即可視化される（#169 レビュー対応）。 */
 .mk-nav-pin {
   flex-shrink: 0; margin-left: 2px; padding: 2px 6px; background: transparent; border: none;
   font-size: 14px; line-height: 1; color: var(--color-muted); cursor: pointer;
-  border-radius: var(--rounded-sm); visibility: hidden;
+  border-radius: var(--rounded-sm); opacity: 0; pointer-events: none;
+  transition: opacity .12s;
 }
-/* 行 hover に加え、行内のどこか（ラベル or ☆）にフォーカスが来たら ☆ を出す。visibility:hidden の
-   要素はフォーカス不可のため、ラベルへの Tab で ☆ を可視化しないとキーボードから到達できない（#169 レビュー対応）。 */
-.mk-nav-item-wrap:hover .mk-nav-pin, .mk-nav-item-wrap:focus-within .mk-nav-pin, .mk-nav-pin.pinned { visibility: visible; }
+/* 行 hover に加え、行内のどこか（ラベル or ☆）にフォーカスが来たら ☆ を出す（ラベルへの Tab でも可視化）。 */
+.mk-nav-item-wrap:hover .mk-nav-pin, .mk-nav-item-wrap:focus-within .mk-nav-pin, .mk-nav-pin.pinned {
+  opacity: 1; pointer-events: auto;
+}
 .mk-nav-pin:hover { color: var(--color-primary); background: var(--color-canvas); }
 .mk-nav-pin.pinned { color: var(--color-primary); }
 .mk-nav-pin:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
