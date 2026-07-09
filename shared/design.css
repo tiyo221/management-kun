@@ -120,7 +120,7 @@ a { color: var(--color-link-blue); }
 .mk-actions { display: flex; flex-direction: column; gap: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--color-hairline); }
 .mk-actions-data { display: flex; gap: var(--space-xs); }
 .mk-actions-data .btn { flex: 1 1 0; min-width: 0; }
-/* シェル操作（テーマ切替・設定）の並び。左寄せの小ボタン列（Issue #148） */
+/* シェル操作（テーマ切替・設定）の並び。左寄せの小ボタンを横並び（行）に（Issue #148） */
 .mk-actions-tools { display: flex; gap: var(--space-xs); }
 
 /* コンテンツ側: モバイル用 topbar（デスクトップでは隠す）＋ メイン。 */
