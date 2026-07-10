@@ -418,7 +418,19 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .wbs-wrap { display: flex; flex-direction: column; border: 1px solid var(--color-hairline); border-radius: var(--rounded-lg); overflow: hidden; background: var(--color-canvas); }
 /* テーブル/ガントはタブで片方ずつ全幅表示する（Issue #157）。単独表示なので高さを広く取る。 */
 .wbs-table { overflow: auto; max-height: 66vh; }
-.wbs-gantt { overflow: auto; max-height: 66vh; }
+/* ガント freeze panes（Issue #165）: 1 スクロール容器＋2×2 grid＋sticky で固定名前列/固定日付ヘッダを実現。 */
+.wbs-gantt { overflow: auto; max-height: 66vh; position: relative; }
+.wbs-gantt-grid { display: grid; grid-template-rows: 34px max-content; width: max-content; }
+.wbs-gantt-corner { position: sticky; top: 0; left: 0; z-index: 4; display: flex; align-items: center; height: 34px; padding: 0 8px; background: var(--color-surface); color: var(--color-slate); font-size: 13px; font-weight: 600; border-right: 1px solid var(--color-hairline); border-bottom: 1px solid var(--color-hairline); }
+.wbs-gantt-head { position: sticky; top: 0; z-index: 3; background: var(--color-surface); border-bottom: 1px solid var(--color-hairline); }
+.wbs-gantt-names { position: sticky; left: 0; z-index: 2; background: var(--color-canvas); border-right: 1px solid var(--color-hairline); }
+.wbs-gantt-head svg, .wbs-gantt-bars svg { display: block; }
+.wbs-gantt-name-row { display: flex; align-items: center; height: 34px; border-bottom: 1px solid var(--color-hairline-soft); }
+/* バーSVGは行間のみ罫線を引き最下端には引かないため、名前列も最終行の下罫線を消して左右を揃える。 */
+.wbs-gantt-name-row:last-child { border-bottom: none; }
+.wbs-gantt-name { display: flex; align-items: center; gap: 4px; width: 100%; padding-right: 8px; overflow: hidden; font-size: 13px; }
+.wbs-gantt-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink); }
+.wbs-gantt-name-text.summary { color: var(--color-steel); font-weight: 600; }
 .wbs-grid { border-collapse: collapse; font-size: 13px; width: 100%; min-width: 780px; }
 .wbs-grid th, .wbs-grid td { border-bottom: 1px solid var(--color-hairline); padding: 0 8px; height: 34px; white-space: nowrap; }
 .wbs-grid td:nth-child(2), .wbs-grid th:nth-child(2) { width: 99%; } /* タスク名列が余白を吸収 */
@@ -437,7 +449,6 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .wbs-num { color: var(--color-steel); font-variant-numeric: tabular-nums; }
 .wbs-dep-chip { display: inline-block; font-size: 11px; padding: 0 5px; border-radius: var(--rounded-sm); background: var(--tint-sky); color: var(--color-charcoal); cursor: pointer; margin-right: 3px; }
 [data-theme="dark"] .wbs-dep-chip { background: #1f3147; color: #bcd6f5; }
-.wbs-gantt-head { height: 34px; }
 
 /* ---- skills: マトリクス / ヒートマップ ---- */
 .mk-matrix-wrap { overflow: auto; max-height: 64vh; border: 1px solid var(--color-hairline); border-radius: var(--rounded-lg); background: var(--color-canvas); }

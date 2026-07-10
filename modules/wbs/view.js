@@ -7,6 +7,7 @@
   const L = () => MK.logic.wbs;
 
   const ROW_H = 34;
+  const NAME_W = 200; // ガントの固定名前列の幅（Issue #165）
   // ガントのズーム段階（1日あたりの px 幅）。日＝従来幅、週/月で圧縮して横長を緩和（Issue #157）。
   const ZOOM = { day: 24, week: 12, month: 5 };
   let root = null;
@@ -14,7 +15,7 @@
   let viewMode = "table"; // "table" | "gantt"（テーブル/ガントのタブ切替）
   let zoomKey = "day"; // ZOOM のキー
   let ganttHost = null; // ガントのスクロール容器（「今日へスクロール」用）
-  let ganttMeta = null; // { min, dayW }（スクロール位置計算用）
+  let ganttMeta = null; // { min, dayW, nameW }（スクロール位置計算用）
 
   function render() {
     if (!root) return;
@@ -73,11 +74,13 @@
   }
 
   // ガントのスクロール位置を今日が中央に来るよう調整する。
+  // 名前列（NAME_W）は sticky で常在するため、バーが見える幅はそのぶん狭い。
   function scrollToToday() {
     if (!ganttHost || !ganttMeta) return;
     const idx = MK.util.daysBetween(ganttMeta.min, MK.util.todayISO());
     const x = idx * ganttMeta.dayW + ganttMeta.dayW / 2;
-    ganttHost.scrollLeft = Math.max(0, x - ganttHost.clientWidth / 2);
+    const barViewport = Math.max(0, ganttHost.clientWidth - ganttMeta.nameW);
+    ganttHost.scrollLeft = Math.max(0, x - barViewport / 2);
   }
 
   function renderTable(tasks, nums, visible) {
@@ -175,7 +178,9 @@
     setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 6000);
   }
 
-  // ---- ガント（インラインSVG）----
+  // ---- ガント（freeze panes: 固定名前列＋固定日付ヘッダ＋バーSVG）Issue #165 ----
+  // 1つのスクロール容器＋CSS grid（2×2）＋sticky で全同期する（スクロール同期 JS なし）。
+  //   コーナー: sticky top+left ／ 日付ヘッダ: sticky top ／ 名前列: sticky left ／ バー: 通常
   function renderGantt(tasks, nums, visible) {
     const host = el("div", { class: "wbs-gantt" });
     const DAY_W = ZOOM[zoomKey] || ZOOM.day;
@@ -185,38 +190,60 @@
     tasks.forEach((t, i) => { const r = L().isParent(tasks, i) ? L().summaryOf(tasks, i) : t; if (r.start && (!min || r.start < min)) min = r.start; if (r.end && (!max || r.end > max)) max = r.end; });
     if (!min) { min = MK.util.todayISO(); max = A(min, 30); }
     min = A(min, -2); max = A(max, 4);
-    ganttHost = host; ganttMeta = { min, dayW: DAY_W }; // 「今日へスクロール」用
-    const days = D(min, max) + 1, W = days * DAY_W, headH = ROW_H, H = headH + visible.length * ROW_H;
+    ganttHost = host; ganttMeta = { min, dayW: DAY_W, nameW: NAME_W }; // 「今日へスクロール」用
+    const days = D(min, max) + 1, W = days * DAY_W, bodyH = visible.length * ROW_H;
     const pos = {}, esc = MK.util.escapeHtml;
-    let s = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">';
+    const todayIdx = D(min, MK.util.todayISO());
+
+    // 日付ヘッダ（sticky top）: 週末網掛け＋月ラベル＋日付数字。高さ ROW_H。
+    let head = '<svg width="' + W + '" height="' + ROW_H + '" viewBox="0 0 ' + W + ' ' + ROW_H + '">';
+    // バー領域（body）: 週末網掛け・今日線・行罫線・バー・進捗・依存線。y は body 基準（vi*ROW_H）。
+    let body = '<svg width="' + W + '" height="' + bodyH + '" viewBox="0 0 ' + W + ' ' + bodyH + '">';
     for (let i = 0; i < days; i++) {
       const date = A(min, i), dow = new Date(date + "T00:00:00").getDay(), x = i * DAY_W;
-      if (dow === 0 || dow === 6) s += '<rect x="' + x + '" y="0" width="' + DAY_W + '" height="' + H + '" fill="var(--color-surface)"></rect>';
-      if (new Date(date + "T00:00:00").getDate() === 1 || i === 0) s += '<text x="' + (x + 3) + '" y="14" font-size="10" fill="var(--color-steel)">' + esc(date.slice(0, 7)) + '</text>';
-      if (showDayNum) s += '<text x="' + (x + DAY_W / 2) + '" y="28" text-anchor="middle" font-size="9" fill="var(--color-muted)">' + new Date(date + "T00:00:00").getDate() + '</text>';
+      if (dow === 0 || dow === 6) {
+        head += '<rect x="' + x + '" y="0" width="' + DAY_W + '" height="' + ROW_H + '" fill="var(--color-surface)"></rect>';
+        body += '<rect x="' + x + '" y="0" width="' + DAY_W + '" height="' + bodyH + '" fill="var(--color-surface)"></rect>';
+      }
+      if (new Date(date + "T00:00:00").getDate() === 1 || i === 0) head += '<text x="' + (x + 3) + '" y="14" font-size="10" fill="var(--color-steel)">' + esc(date.slice(0, 7)) + '</text>';
+      if (showDayNum) head += '<text x="' + (x + DAY_W / 2) + '" y="28" text-anchor="middle" font-size="9" fill="var(--color-muted)">' + new Date(date + "T00:00:00").getDate() + '</text>';
     }
-    const todayIdx = D(min, MK.util.todayISO());
-    if (todayIdx >= 0 && todayIdx < days) { const tx = todayIdx * DAY_W + DAY_W / 2; s += '<line x1="' + tx + '" y1="0" x2="' + tx + '" y2="' + H + '" stroke="var(--color-error)" stroke-width="1" stroke-dasharray="3 3"></line>'; }
+    // 行の対応づけを助ける薄い横罫線（名前列の行境界と揃える）。
+    for (let vi = 1; vi < visible.length; vi++) { const y = vi * ROW_H; body += '<line x1="0" y1="' + y + '" x2="' + W + '" y2="' + y + '" stroke="var(--color-hairline-soft)" stroke-width="1"></line>'; }
+    if (todayIdx >= 0 && todayIdx < days) { const tx = todayIdx * DAY_W + DAY_W / 2; body += '<line x1="' + tx + '" y1="0" x2="' + tx + '" y2="' + bodyH + '" stroke="var(--color-error)" stroke-width="1" stroke-dasharray="3 3"></line>'; }
     visible.forEach((idx, vi) => {
-      const t = tasks[idx], parent = L().isParent(tasks, idx), r = parent ? L().summaryOf(tasks, idx) : t, y = headH + vi * ROW_H;
+      const t = tasks[idx], parent = L().isParent(tasks, idx), r = parent ? L().summaryOf(tasks, idx) : t, y = vi * ROW_H;
       if (!r.start || !r.end) return;
       const x = D(min, r.start) * DAY_W, w = (D(r.start, r.end) + 1) * DAY_W;
       pos[t.id] = { x, w, y: y + ROW_H / 2 };
-      if (r.start === r.end && !parent) { const cy = y + ROW_H / 2, cx = x + DAY_W / 2; s += '<path d="M ' + cx + ' ' + (cy - 7) + ' L ' + (cx + 7) + ' ' + cy + ' L ' + cx + ' ' + (cy + 7) + ' L ' + (cx - 7) + ' ' + cy + ' Z" fill="var(--color-primary)"></path>'; }
-      else if (parent) { s += '<rect x="' + x + '" y="' + (y + 12) + '" width="' + w + '" height="6" rx="2" fill="var(--color-steel)"></rect>'; }
+      if (r.start === r.end && !parent) { const cy = y + ROW_H / 2, cx = x + DAY_W / 2; body += '<path d="M ' + cx + ' ' + (cy - 7) + ' L ' + (cx + 7) + ' ' + cy + ' L ' + cx + ' ' + (cy + 7) + ' L ' + (cx - 7) + ' ' + cy + ' Z" fill="var(--color-primary)"></path>'; }
+      else if (parent) { body += '<rect x="' + x + '" y="' + (y + 12) + '" width="' + w + '" height="6" rx="2" fill="var(--color-steel)"></rect>'; }
       else {
         const color = (L().STATUS.find((st) => st.key === t.status) || L().STATUS[0]).color;
-        s += '<rect x="' + x + '" y="' + (y + 8) + '" width="' + w + '" height="18" rx="4" fill="var(--color-hairline)"></rect>';
-        s += '<rect x="' + x + '" y="' + (y + 8) + '" width="' + (w * (Number(t.progress) || 0) / 100) + '" height="18" rx="4" fill="' + color + '"></rect>';
-        const name = t.name && t.name.length > Math.floor(w / 7) ? t.name.slice(0, Math.floor(w / 7)) : t.name;
-        s += '<text x="' + (x + 5) + '" y="' + (y + 21) + '" font-size="11" fill="var(--color-ink)">' + esc(name || "") + '</text>';
+        body += '<rect x="' + x + '" y="' + (y + 8) + '" width="' + w + '" height="18" rx="4" fill="var(--color-hairline)"></rect>';
+        body += '<rect x="' + x + '" y="' + (y + 8) + '" width="' + (w * (Number(t.progress) || 0) / 100) + '" height="18" rx="4" fill="' + color + '"></rect>';
       }
     });
     visible.forEach((idx) => {
       const t = tasks[idx]; if (L().isParent(tasks, idx)) return;
-      t.deps.forEach((pid) => { const a = pos[pid], b = pos[t.id]; if (!a || !b) return; const x1 = a.x + a.w, y1 = a.y, x2 = b.x, y2 = b.y, mx = Math.max(x1 + 8, x2 - 8); s += '<path d="M ' + x1 + ' ' + y1 + ' H ' + mx + ' V ' + y2 + ' H ' + x2 + '" fill="none" stroke="var(--color-slate)" stroke-width="1"></path><path d="M ' + x2 + ' ' + y2 + ' l -5 -3 l 0 6 z" fill="var(--color-slate)"></path>'; });
+      t.deps.forEach((pid) => { const a = pos[pid], b = pos[t.id]; if (!a || !b) return; const x1 = a.x + a.w, y1 = a.y, x2 = b.x, y2 = b.y, mx = Math.max(x1 + 8, x2 - 8); body += '<path d="M ' + x1 + ' ' + y1 + ' H ' + mx + ' V ' + y2 + ' H ' + x2 + '" fill="none" stroke="var(--color-slate)" stroke-width="1"></path><path d="M ' + x2 + ' ' + y2 + ' l -5 -3 l 0 6 z" fill="var(--color-slate)"></path>'; });
     });
-    host.innerHTML = s + "</svg>";
+
+    const corner = el("div", { class: "wbs-gantt-corner", text: "タスク名" });
+    const headCell = el("div", { class: "wbs-gantt-head" }); headCell.innerHTML = head + "</svg>";
+    const nameCol = el("div", { class: "wbs-gantt-names" });
+    visible.forEach((idx) => {
+      const t = tasks[idx], parent = L().isParent(tasks, idx);
+      const inner = el("div", { class: "wbs-gantt-name", style: "padding-left:" + (t.level * 14) + "px;" });
+      if (parent) { const tg = el("span", { class: "wbs-toggle", text: t.collapsed ? "▶" : "▼" }); tg.addEventListener("click", () => { L().toggleCollapse(idx); render(); }); inner.appendChild(tg); }
+      else inner.appendChild(el("span", { class: "wbs-toggle", text: "" }));
+      inner.appendChild(el("span", { class: "wbs-num", text: nums[idx] }));
+      inner.appendChild(el("span", { class: "wbs-gantt-name-text" + (parent ? " summary" : ""), text: t.name || "", title: t.name || "" }));
+      nameCol.appendChild(el("div", { class: "wbs-gantt-name-row" }, [inner]));
+    });
+    const barCell = el("div", { class: "wbs-gantt-bars" }); barCell.innerHTML = body + "</svg>";
+
+    host.appendChild(el("div", { class: "wbs-gantt-grid", style: "grid-template-columns:" + NAME_W + "px max-content;" }, [corner, headCell, nameCol, barCell]));
     return host;
   }
 
