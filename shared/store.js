@@ -115,6 +115,24 @@
       delete this._cache[ns];
     },
 
+    // mk: プレフィックスの全キーを削除し、キャッシュを空にする（全データ初期化・Issue #176）。
+    // 対象は mk: で始まるキーのみに限定する（localStorage.clear() は使わない）＝ file:// で
+    // 開いた他ツールや旧ツールキー（非 mk:）を巻き込まないため。load() が prewarm する既知
+    // namespace だけでなく、scoped の対象別キー（mk:module:<id>:<targetId>:v1・§3.7.4）も
+    // 実キー列挙で確実に消す。削除不可な環境でも起動を止めないよう個別に握りつぶす（§10.1）。
+    // 戻り値: 削除したキー数。
+    clearAll() {
+      let removed = 0;
+      allKeys().forEach((k) => {
+        if (k == null || k.indexOf("mk:") !== 0) return;
+        try { localStorage.removeItem(k); removed++; } catch (e) { /* 削除不可な環境では無視 */ }
+      });
+      this._cache = {};
+      this.errors = [];
+      this.lastWriteError = null;
+      return removed;
+    },
+
     // mk: プレフィックスキーの合計使用量（概算）。UTF-16 前提で 1 文字 2 バイトとして
     // キー名＋値の長さから概算する。ratio は QUOTA_BYTES（約5MB）比。
     usage() {
