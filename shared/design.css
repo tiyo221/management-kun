@@ -426,6 +426,8 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .wbs-gantt-names { position: sticky; left: 0; z-index: 2; background: var(--color-canvas); border-right: 1px solid var(--color-hairline); }
 .wbs-gantt-head svg, .wbs-gantt-bars svg { display: block; }
 .wbs-gantt-name-row { display: flex; align-items: center; height: 34px; border-bottom: 1px solid var(--color-hairline-soft); }
+/* バーSVGは行間のみ罫線を引き最下端には引かないため、名前列も最終行の下罫線を消して左右を揃える。 */
+.wbs-gantt-name-row:last-child { border-bottom: none; }
 .wbs-gantt-name { display: flex; align-items: center; gap: 4px; width: 100%; padding-right: 8px; overflow: hidden; font-size: 13px; }
 .wbs-gantt-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink); }
 .wbs-gantt-name-text.summary { color: var(--color-steel); font-weight: 600; }
