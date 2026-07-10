@@ -150,8 +150,9 @@ a { color: var(--color-link-blue); }
 .mk-sidebar-overlay { display: none; }
 .mk-main { width: 100%; max-width: 1100px; margin: 0 auto; padding: var(--space-xxl) var(--space-xl); }
 
-/* 縦リズム（余白のインライン直書きの代わりに使う。CONVENTIONS §2.1） */
-.mk-stack > * + * { margin-top: var(--space-lg); }
+/* 縦リズム（余白のインライン直書きの代わりに使う。CONVENTIONS §2.1）。
+   ブロック間は一段広め（--space-xl＝24px）にして情報の塊を呼吸させる（Issue #173）。 */
+.mk-stack > * + * { margin-top: var(--space-xl); }
 /* カード内の小見出しは先頭以外に上余白（密着防止） */
 .card > h3 { margin: 0; }
 .card > h3:not(:first-child) { margin-top: var(--space-xl); }
@@ -273,8 +274,15 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 
 /* ---- リスト/テーブル汎用 ---- */
 .mk-list { list-style: none; margin: 0; padding: 0; }
-.mk-row { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--color-hairline); background: var(--color-canvas); }
-.mk-row:hover { background: var(--color-surface-soft); }
+/* 生の .mk-row（カード外で単独使用される場合）は薄い下線で区切る（安全側の既定・Issue #173） */
+.mk-row { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-bottom: 1px solid var(--color-hairline-soft); background: var(--color-canvas); }
+.mk-row:hover { background: var(--color-surface); }
+/* カード内リスト（ul.mk-list）は全行下線をやめ、極薄ゼブラ＋hover 面で区切る（Issue #173）。
+   罫線に頼らないことで、同じ情報量でも「壁」に見えず呼吸が出る。区切りはゼブラが担い、
+   hover が現在行を面で示す（specificity で zebra→hover の順に上書き）。 */
+.mk-list .mk-row { border-bottom: none; }
+.mk-list .mk-row:nth-of-type(even) { background: var(--color-surface-soft); }
+.mk-list .mk-row:hover { background: var(--color-surface); }
 .mk-row .grow { flex: 1; min-width: 0; }
 .mk-row .sub { font-size: 13px; color: var(--color-steel); }
 .mk-muted { color: var(--color-muted); }

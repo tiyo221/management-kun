@@ -48,10 +48,11 @@ modules/
 
 ### 2.1 余白・リズム（インラインで余白を置かない）
 - **`style="margin:…"` をモジュールに直書きしない。** ブロック間隔は共通のレイアウト土台に委ねる。
-- モジュール本文は `ui.stack([...])`（`.mk-stack`）に入れる。直下ブロック間に既定間隔（`--space-lg`＝20px）が自動で付く。
+- モジュール本文は `ui.stack([...])`（`.mk-stack`）に入れる。直下ブロック間に既定間隔（`--space-xl`＝24px）が自動で付く（情報の塊を呼吸させるため一段広め・Issue #173）。
 - カード内の小見出し（`h3`）は先頭以外に上余白が自動で付く（`.card > h3` 規則）。ボタンの直後に見出しが続いても密着しない。
 - **`.card` の直下は自動間隔が「限定的」（気を付ける点）**: `.card` 直下に縦リズムが自動で付くのは `h3` と `.sub`（`.card > h3:not(:first-child)` / `.card > .sub + *` 規則）**だけ**。それ以外の任意ブロック（`ui.statsRow`・リスト・ボタン等）を `.card` 直下に並べると**間隔が付かず密着する**。カード内に複数ブロックを積むときは**中身を `ui.stack([...])` で包む**（`h3` は `design.css` で `margin:0` にリセット済みなので stack 化しても崩れない）。
-- **末尾アクション（「開く →」等）に `ui.toolbar` を使わない（気を付ける点）**: `.mk-toolbar` は `margin-bottom` だけを持つ**先頭ツールバー**用。これをカード末尾のアクション行に使うと、上は margin-top が無く**前のブロックと密着**し、下は `margin-bottom` ＋ カード padding で**死に余白**が出る（top/bottom マージン不整合。dashboard で実際に発生）。末尾のボタンは **`mk-stack` の一員として直接置く**（上に `--space-lg`、下は margin なし＝カード padding のみ）。
+- **末尾アクション（「開く →」等）に `ui.toolbar` を使わない（気を付ける点）**: `.mk-toolbar` は `margin-bottom` だけを持つ**先頭ツールバー**用。これをカード末尾のアクション行に使うと、上は margin-top が無く**前のブロックと密着**し、下は `margin-bottom` ＋ カード padding で**死に余白**が出る（top/bottom マージン不整合。dashboard で実際に発生）。末尾のボタンは **`mk-stack` の一員として直接置く**（上に `--space-xl`、下は margin なし＝カード padding のみ）。
+- **一覧は `ul.mk-list > li.mk-row` で組む（罫線に頼らない・Issue #173）**: カード内リスト（`.mk-list .mk-row`）は**全行下線を持たず**、極薄ゼブラ（even 行が `--color-surface-soft`）＋ hover 面で区切る。行に自前の `border-bottom` を足さない。カード外で単独の `.mk-row` を置く場合のみ、既定で薄い下線（`--color-hairline-soft`）が付く。
 - 色・余白・角丸・タイポは [`DESIGN.md`](DESIGN.md) トークン（CSS変数）経由。値の直書き禁止。
 
 ### 2.2 レスポンシブ（崩さない）
