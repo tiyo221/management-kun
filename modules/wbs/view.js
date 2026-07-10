@@ -15,7 +15,7 @@
   let viewMode = "table"; // "table" | "gantt"（テーブル/ガントのタブ切替）
   let zoomKey = "day"; // ZOOM のキー
   let ganttHost = null; // ガントのスクロール容器（「今日へスクロール」用）
-  let ganttMeta = null; // { min, dayW }（スクロール位置計算用）
+  let ganttMeta = null; // { min, dayW, nameW }（スクロール位置計算用）
 
   function render() {
     if (!root) return;
