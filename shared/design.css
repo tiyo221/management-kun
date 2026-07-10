@@ -280,7 +280,7 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-row:hover { background: var(--color-surface); }
 /* カード内リスト（ul.mk-list）は全行下線をやめ、極薄ゼブラ＋hover 面で区切る（Issue #173）。
    罫線に頼らないことで、同じ情報量でも「壁」に見えず呼吸が出る。区切りはゼブラが担い、
-   hover が現在行を面で示す（specificity で zebra→hover の順に上書き）。 */
+   hover が現在行を面で示す（zebra と hover は同 specificity のため、hover を後に宣言して上書き）。 */
 .mk-list .mk-row { border-bottom: none; }
 .mk-list .mk-row:nth-of-type(even) { background: var(--color-surface-soft); }
 .mk-list .mk-row:hover { background: var(--color-surface); }
