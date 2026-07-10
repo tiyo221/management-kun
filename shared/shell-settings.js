@@ -44,6 +44,22 @@
     });
     card.appendChild(sample);
 
+    // 全データの初期化（危険操作・Issue #176）。サイドバーには置かず設定内のみ（誤消去防止）。
+    card.appendChild(el("h3", { text: "全データの初期化" }));
+    card.appendChild(el("p", { class: "sub", text: "人・プロジェクト・各モジュールを含む全データ（mk: で始まる保存領域）を削除して初期状態に戻します。取り消せません。旧ツールのデータは削除されません。" }));
+    const clearBackup = el("button", { class: "btn btn-secondary", text: "初期化前に全体バックアップ（JSON）" });
+    clearBackup.addEventListener("click", exportAll);
+    const clear = el("button", { class: "btn btn-danger", text: "全データを初期化" });
+    clear.addEventListener("click", () => {
+      MK.ui.confirm("全データを削除して初期状態に戻します。取り消せません。よろしいですか？").then((ok) => {
+        if (!ok) return;
+        MK.store.clearAll();
+        MK.ui.toast("全データを初期化しました", "success");
+        route("home");
+      });
+    });
+    card.appendChild(el("div", { class: "mk-toolbar" }, [clearBackup, clear]));
+
     // 起動画面（spec §3.6）
     card.appendChild(el("h3", { text: "起動画面" }));
     card.appendChild(el("p", { class: "sub", text: "オンにすると起動時に前回開いていたモジュールを表示します（オフのときは HOME）。" }));
