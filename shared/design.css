@@ -441,7 +441,13 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .wbs-name { display: flex; align-items: center; gap: 4px; width: 100%; }
 .wbs-name input.cell { flex: 1; min-width: 120px; width: auto; }
 .wbs-toggle { width: 16px; flex: 0 0 16px; cursor: pointer; color: var(--color-steel); text-align: center; }
+.wbs-ops { white-space: nowrap; text-align: right; }
 .wbs-ops button { padding: 2px 6px; font-size: 14px; line-height: 1.2; }
+/* 各行常時表示の移動・インデントボタン（Issue #156）。行 hover / フォーカスで前面化。 */
+.wbs-move { display: inline-flex; gap: 1px; margin-right: 4px; opacity: .45; transition: opacity .12s; }
+.wbs-grid tr:hover .wbs-move, .wbs-grid tr:focus-within .wbs-move { opacity: 1; }
+.wbs-move button { padding: 2px 5px; font-size: 13px; line-height: 1.2; color: var(--color-steel); }
+.wbs-grid tr:focus { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .wbs-ops-menu { position: fixed; z-index: 600; background: var(--color-canvas); border: 1px solid var(--color-hairline); border-radius: var(--rounded-md); box-shadow: rgba(15,15,15,.16) 0 8px 24px -6px; padding: 4px; min-width: 156px; }
 .wbs-ops-item { display: block; width: 100%; text-align: left; background: transparent; border: none; color: var(--color-ink); font-family: inherit; font-size: 13px; padding: 7px 10px; border-radius: var(--rounded-sm); cursor: pointer; }
 .wbs-ops-item:hover { background: var(--color-surface); }
