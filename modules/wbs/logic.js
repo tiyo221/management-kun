@@ -329,15 +329,47 @@
   }
 
   /**
-   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
-   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   * タスクが期限超過か（未完かつ終了日 < 基準日）を返す純関数。期限超過の判定は本関数を単一定義とし、
+   * HOME サマリー（wbs.summary）と PJ 別集約（dashboard.wbsSummary）で共有する（二重定義を避ける・#181）。
+   * 終了日未設定・基準日なしは対象外（false）。
+   * @param {WbsTask} task - 判定対象タスク
+   * @param {string} today - 基準日（YYYY-MM-DD）
+   * @returns {boolean} 未完かつ終了日が基準日より前なら true
    */
-  function summary() {
+  function isOverdue(task, today) {
+    return !!(task && task.status !== "done" && task.end && today && task.end < today);
+  }
+
+  /**
+   * 全プロジェクトを横断して期限超過の葉タスク数を数える（#181）。集計母数は wbs.stats と同じく葉タスクのみ
+   * （親のロールアップ行を二重に数えない）。判定は isOverdue（dashboard と同一定義）を再利用する。
+   * @param {string} today - 基準日（YYYY-MM-DD）
+   * @returns {number} 期限超過の葉タスク数（全 PJ 合計）
+   */
+  function overdueCount(today) {
+    let n = 0;
+    eachProjectTasks().forEach((pj) => {
+      pj.tasks.forEach((t, i) => { if (!isParent(pj.tasks, i) && isOverdue(t, today)) n++; });
+    });
+    return n;
+  }
+
+  /**
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。期限超過タスクがあれば attention（error）で
+   * 昇格し、HOME 要対応バーに出す（#181）。「今日」依存の判定は基準日を引数で受けて決定的にする（§3.6）。
+   * @param {string} [baseDate] - 基準日（YYYY-MM-DD、既定 本日）。決定的テスト用の注入点。
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention?: {label: string, severity: string}[]}}
+   */
+  function summary(baseDate) {
     const s = stats();
-    return { empty: s.leaves === 0, stats: [
+    const today = baseDate || MK.util.todayISO();
+    const overdue = overdueCount(today);
+    const out = { empty: s.leaves === 0, stats: [
       { label: "進行中", value: s.inprogress },
       { label: "進捗", value: s.overall + "%" },
     ] };
+    if (overdue > 0) out.attention = [{ label: "期限超過タスク " + overdue + "件", severity: "error" }];
+    return out;
   }
 
   /**
@@ -400,5 +432,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, wbsNumbers, summaryOf, hiddenFlags, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, searchItems, summaryFor, eachProjectTasks, buildCSVRows, exportData, importData, loadSample };
+  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, isOverdue, overdueCount, wbsNumbers, summaryOf, hiddenFlags, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, searchItems, summaryFor, eachProjectTasks, buildCSVRows, exportData, importData, loadSample };
 })();

@@ -35,8 +35,8 @@
       if (t.status === "done") done++;
       else if (t.status === "inprogress") inprogress++;
       sum += Number(t.progress) || 0;
-      // 期限超過＝未完（done 以外）かつ終了日が基準日より前。終了日未設定は対象外。
-      if (t.status !== "done" && t.end && today && t.end < today) overdue++;
+      // 期限超過＝未完（done 以外）かつ終了日が基準日より前。判定は wbs.isOverdue に単一定義（#181）。
+      if (W.isOverdue(t, today)) overdue++;
     });
     return {
       empty: leaves.length === 0,

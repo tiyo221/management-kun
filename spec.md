@@ -247,7 +247,7 @@ summary() {
 ```
 
 - `summary` 未実装・例外時も HOME は壊さない（カードは「開く」表示にフォールバック）。
-- `attention` は **stats 同様に任意**。未実装・不正形式でも HOME は壊さない（帯に出ないだけ）。実装例: todo=期限切れ/今日期限、techstack=見直し期限の超過/接近、questions=未解決件数。
+- `attention` は **stats 同様に任意**。未実装・不正形式でも HOME は壊さない（帯に出ないだけ）。実装例: todo=期限切れ/今日期限、techstack=見直し期限の超過/接近、questions=未解決件数、resource=過負荷（誰が過負荷か・warn）、wbs=期限超過タスク（error）（#181）。
 - 集計は logic 側の純関数に置き、テスト可能にする（`test/summary.test.js`）。例: todo=未完/全タスク数、goals=達成率/目標数、skills=メンバー/スキル項目数、resource=現在割当/稼働中PJ、wbs=進行中/進捗率。「今日」に依存する集計は基準日を引数で受け取れるようにする（決定的テスト。TESTING §1）。
 
 #### 3.6.1 エンティティ単位の任意契約 `summaryFor(entityType, id)`
