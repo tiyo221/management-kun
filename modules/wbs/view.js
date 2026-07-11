@@ -101,12 +101,17 @@
       tr.dataset.id = String(t.id);
       // キーボード操作（行そのものにフォーカスがある時のみ）: Alt+↑↓ で移動、Tab/Shift+Tab で
       // 字下げ/字上げ、Esc で行フォーカス解除（Issue #156）。入力セル編集中は誤発火させない。
+      // Tab は「これ以上字下げ/字上げできない境界」では横取りせず通常のフォーカス移動に委ね、
+      // キーボードだけで必ず行外へ抜けられるようにする（WCAG 2.1.2 キーボードトラップ回避）。
       tr.addEventListener("keydown", (e) => {
         if (e.target !== tr) return;
-        if (e.altKey && e.key === "ArrowUp") { e.preventDefault(); rowOp(idx, t.id, () => L().moveUp(idx)); }
-        else if (e.altKey && e.key === "ArrowDown") { e.preventDefault(); rowOp(idx, t.id, () => L().moveDown(idx)); }
-        else if (e.key === "Tab") { e.preventDefault(); rowOp(idx, t.id, () => (e.shiftKey ? L().outdent(idx) : L().indent(idx))); }
-        else if (e.key === "Escape") { tr.blur(); }
+        if (e.altKey && e.key === "ArrowUp") { e.preventDefault(); rowOp(t.id, () => L().moveUp(idx)); }
+        else if (e.altKey && e.key === "ArrowDown") { e.preventDefault(); rowOp(t.id, () => L().moveDown(idx)); }
+        else if (e.key === "Tab") {
+          const canMove = e.shiftKey ? tasks[idx].level > 0 : (idx > 0 && tasks[idx].level <= tasks[idx - 1].level);
+          if (!canMove) return; // 境界では Tab を通常のフォーカス移動に委ねる
+          e.preventDefault(); rowOp(t.id, () => (e.shiftKey ? L().outdent(idx) : L().indent(idx)));
+        } else if (e.key === "Escape") { tr.blur(); }
       });
       tr.appendChild(el("td", {}, [el("span", { class: "wbs-num", text: nums[idx] })]));
 
@@ -162,11 +167,11 @@
   }
 
   // 移動・インデントを実行し、rerender 後に同じ行へフォーカスを戻す（Issue #156）。
-  function rowOp(idx, id, fn) { fn(); pendingFocusId = id; render(); }
+  function rowOp(id, fn) { fn(); pendingFocusId = id; render(); }
 
   // 各行に常時表示する移動・インデントボタン（メニューを開かず1クリック）。Issue #156。
   function moveButtons(idx, id) {
-    const mk = (label, title, fn) => { const b = el("button", { class: "btn btn-ghost", text: label, title, "aria-label": title }); b.addEventListener("click", (e) => { e.stopPropagation(); rowOp(idx, id, fn); }); return b; };
+    const mk = (label, title, fn) => { const b = el("button", { class: "btn btn-ghost", text: label, title, "aria-label": title }); b.addEventListener("click", (e) => { e.stopPropagation(); rowOp(id, fn); }); return b; };
     return el("span", { class: "wbs-move" }, [
       mk("↑", "上へ移動 (Alt+↑)", () => L().moveUp(idx)),
       mk("↓", "下へ移動 (Alt+↓)", () => L().moveDown(idx)),
