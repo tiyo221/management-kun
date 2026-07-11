@@ -9,6 +9,8 @@
   let root = null;
   let ctx = null;
   let view = "matrix";
+  let radarSel = null; // レーダー比較で選択中のメンバーID（Set。セッション内で保持）
+  const RADAR_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"];
 
   // メンバー0件の空状態。人はマスタ管理（人の管理）で登録するため、そこへの導線を併置する。
   function membersEmpty(hint) {
@@ -23,9 +25,10 @@
     if (!root) return;
     root.innerHTML = "";
     root.appendChild(ui.sectionTitle("スキル"));
-    root.appendChild(ui.pillTabs([{ key: "skills", label: "スキル管理" }, { key: "matrix", label: "紐づけ（評価入力）" }, { key: "dashboard", label: "ダッシュボード" }], view, (k) => { view = k; render(); }));
+    root.appendChild(ui.pillTabs([{ key: "skills", label: "スキル管理" }, { key: "matrix", label: "紐づけ（評価入力）" }, { key: "dashboard", label: "ダッシュボード" }, { key: "radar", label: "レーダー" }], view, (k) => { view = k; render(); }));
     if (view === "skills") renderSkillsTab();
     else if (view === "matrix") renderMatrix();
+    else if (view === "radar") renderRadar();
     else renderDashboard();
   }
 
@@ -172,6 +175,76 @@
       });
     }
     root.appendChild(ui.stack([heatCard, sumCard, gapCard]));
+  }
+
+  // レーダー: メンバーを選ぶと、その人のスキル評価を多角形で可視化する（複数選択で比較）。
+  function renderRadar() {
+    const ms = L().members();
+    if (!ms.length) { root.appendChild(membersEmpty("レーダーチャートで可視化するには、まず「人の管理」でメンバーを登録してください。")); return; }
+    const vs = L().visibleSkills();
+    if (vs.length < 3) {
+      root.appendChild(ui.emptyState({ title: "スキルが足りません", hint: "レーダーチャートには表示対象のスキルが3つ以上必要です。「スキル管理」タブでスキルを追加してください。" }));
+      return;
+    }
+    // 選択状態を初期化・整合（削除済みメンバーを除外し、最低1人は選ぶ）。
+    if (!radarSel) radarSel = new Set([ms[0].id]);
+    radarSel = new Set(ms.filter((m) => radarSel.has(m.id)).map((m) => m.id));
+    if (!radarSel.size) radarSel.add(ms[0].id);
+
+    const colorFor = (mid) => RADAR_COLORS[Math.max(0, ms.findIndex((m) => m.id === mid)) % RADAR_COLORS.length];
+
+    const picker = el("div", { class: "mk-radar-picker" }, ms.map((m) => {
+      const on = radarSel.has(m.id);
+      const dot = el("span", { class: "mk-radar-dot" }); dot.style.background = colorFor(m.id);
+      const b = el("button", { class: "mk-chip-toggle" + (on ? " is-on" : ""), type: "button", "aria-pressed": on ? "true" : "false" }, [dot, el("span", { text: m.name })]);
+      b.addEventListener("click", () => {
+        if (radarSel.has(m.id)) { if (radarSel.size > 1) radarSel.delete(m.id); } // 最後の1人は残す
+        else radarSel.add(m.id);
+        render();
+      });
+      return b;
+    }));
+
+    const data = L().radarData(ms.filter((m) => radarSel.has(m.id)).map((m) => m.id));
+    const chart = el("div", { class: "mk-radar-wrap" });
+    chart.innerHTML = radarSVG(data, colorFor);
+    const legend = el("div", { class: "mk-radar-legend" }, data.series.map((se) => {
+      const dot = el("span", { class: "mk-radar-dot" }); dot.style.background = colorFor(se.id);
+      return el("span", { class: "mk-radar-legend-item" }, [dot, el("span", { text: se.name + "（評価 " + se.rated + "/" + data.axes.length + "）" })]);
+    }));
+    const card = ui.card([picker, chart, legend]);
+    if (!data.hasRating) card.appendChild(el("div", { class: "mk-radar-note", text: "選択中のメンバーにはまだ評価がありません。「紐づけ（評価入力）」タブで評価を入力してください。" }));
+    root.appendChild(card);
+  }
+
+  // レーダーチャートSVG。軸＝スキル、値0〜5。系列色は colorFor(memberId) から取得（CSS変数でテーマ追従）。
+  function radarSVG(data, colorFor) {
+    const esc = MK.util.escapeHtml;
+    const W = 440, H = 440, cx = W / 2, cy = H / 2, R = 150, N = data.axes.length, max = data.max;
+    const ang = (i) => (-90 + i * 360 / N) * Math.PI / 180;
+    const px = (i, r) => (cx + Math.cos(ang(i)) * r).toFixed(1);
+    const py = (i, r) => (cy + Math.sin(ang(i)) * r).toFixed(1);
+    let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="スキル評価のレーダーチャート">';
+    for (let lv = 1; lv <= max; lv++) {
+      const pts = [];
+      for (let i = 0; i < N; i++) pts.push(px(i, R * lv / max) + "," + py(i, R * lv / max));
+      s += '<polygon points="' + pts.join(" ") + '" fill="none" stroke="var(--color-hairline)" stroke-width="1"></polygon>';
+    }
+    for (let i = 0; i < N; i++) {
+      s += '<line x1="' + cx + '" y1="' + cy + '" x2="' + px(i, R) + '" y2="' + py(i, R) + '" stroke="var(--color-hairline)" stroke-width="1"></line>';
+      const c = Math.cos(ang(i));
+      const anchor = Math.abs(c) < 0.3 ? "middle" : (c > 0 ? "start" : "end");
+      const lbl = data.axes[i].label || "";
+      const short = lbl.length > 8 ? lbl.slice(0, 8) + "…" : lbl;
+      s += '<text x="' + px(i, R + 16) + '" y="' + (Number(py(i, R + 16)) + 4).toFixed(1) + '" text-anchor="' + anchor + '" font-size="11" fill="var(--color-steel)"><title>' + esc(lbl) + '</title>' + esc(short) + '</text>';
+    }
+    data.series.forEach((se) => {
+      const col = colorFor(se.id), pts = [];
+      for (let i = 0; i < N; i++) pts.push(px(i, R * (se.values[i] || 0) / max) + "," + py(i, R * (se.values[i] || 0) / max));
+      s += '<polygon points="' + pts.join(" ") + '" fill="' + col + '" fill-opacity="0.12" stroke="' + col + '" stroke-width="2" stroke-linejoin="round"></polygon>';
+      for (let i = 0; i < N; i++) { if (!se.values[i]) continue; s += '<circle cx="' + px(i, R * se.values[i] / max) + '" cy="' + py(i, R * se.values[i] / max) + '" r="3" fill="' + col + '"></circle>'; }
+    });
+    return s + "</svg>";
   }
 
   function heatStyle(v) {
