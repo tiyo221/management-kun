@@ -243,6 +243,33 @@
   }
 
   /**
+   * レーダーチャート用にメンバーのスキル評価を軸データへ整形する（純関数・描画は view に委譲）。
+   * 軸＝表示対象スキル（中分類）。各メンバーの評価を軸順に並べ、未評価・対象外("-") は 0 とする。
+   * 比較のため複数メンバーを渡せる。存在しないメンバーIDは無視する。
+   * @param {string[]} memberIds - 対象メンバーIDの配列
+   * @returns {{axes: {id:string,label:string,domain:string}[], series: {id:string,name:string,values:number[],rated:number}[], max:number, hasRating:boolean}}
+   *   axes=軸（表示スキル）／series=メンバーごとの値列（rated=数値評価済み軸数）／max=5／hasRating=いずれかに評価があるか。
+   */
+  function radarData(memberIds) {
+    const axes = visibleSkills().map((s) => ({ id: s.id, label: s.item, domain: s.domain }));
+    const byId = {}; members().forEach((m) => (byId[m.id] = m));
+    const d = load();
+    const series = (memberIds || []).map((mid) => {
+      const m = byId[mid];
+      if (!m) return null;
+      let rated = 0;
+      const values = axes.map((ax) => {
+        const v = d.ratings[mid + ":" + ax.id];
+        const n = v && v !== "-" ? Number(v) : 0;
+        if (n > 0) rated++;
+        return n;
+      });
+      return { id: mid, name: m.name, values, rated };
+    }).filter(Boolean);
+    return { axes, series, max: 5, hasRating: series.some((s) => s.rated > 0) };
+  }
+
+  /**
    * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
    * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
    */
@@ -280,5 +307,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.skills = { load, save, skills, visibleSkills, members, rating, setRating, domainsOrder, avgLevel, countAtLeast, gapOf, clampLv, addSkill, updateSkill, removeSkill, buildSkillsCSVRows, applySkillsCSV, buildRatingsCSVRows, applyRatingsCSV, summary, summaryFor, exportData, importData, loadSample };
+  MK.logic.skills = { load, save, skills, visibleSkills, members, rating, setRating, domainsOrder, avgLevel, countAtLeast, gapOf, clampLv, addSkill, updateSkill, removeSkill, buildSkillsCSVRows, applySkillsCSV, buildRatingsCSVRows, applyRatingsCSV, radarData, summary, summaryFor, exportData, importData, loadSample };
 })();

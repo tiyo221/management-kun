@@ -41,3 +41,38 @@ test("skills: 紐づけCSV ラウンドトリップ（名前参照）", (MK) => 
   eq(r.ok, 1);
   eq(S.rating(a, sid), "4");
 });
+
+test("skills: radarData は軸＝表示スキル、値を軸順に並べ 未評価/対象外は 0", (MK) => {
+  // 観点: レーダー用のデータ整形。軸は表示スキルのみ、値は軸順に整列し、未評価・"-" は 0 になる
+  // 入力: 表示スキル2件＋非表示1件。Aは s1=4/s2="-"、Bは s1未評価/s2=3
+  // 期待: axes は表示2件のみ / A.values=[4,0]・rated=1 / B.values=[0,3]・rated=1 / hasRating=true
+  const S = MK.logic.skills;
+  S.addSkill({ domain: "D", item: "S1" });
+  S.addSkill({ domain: "D", item: "S2" });
+  S.addSkill({ domain: "D", item: "Hidden", visible: false });
+  const [s1, s2] = S.skills();
+  const a = MK.people.resolveOrCreate("A"), b = MK.people.resolveOrCreate("B");
+  S.setRating(a, s1.id, "4"); S.setRating(a, s2.id, "-");
+  S.setRating(b, s2.id, "3");
+  const d = S.radarData([a, b]);
+  eq(d.axes.length, 2);
+  eq(d.axes.map((x) => x.label), ["S1", "S2"]);
+  eq(d.series[0].values, [4, 0]);
+  eq(d.series[0].rated, 1);
+  eq(d.series[1].values, [0, 3]);
+  eq(d.series[1].rated, 1);
+  eq(d.hasRating, true);
+});
+
+test("skills: radarData は評価ゼロ/存在しないメンバーを安全に扱う", (MK) => {
+  // 観点: 評価が1件も無い・存在しないIDでも壊れず、空状態を判定できる（受け入れ条件: 少データで壊れない）
+  // 入力: 表示スキル1件。評価なしのメンバー C と、存在しないID
+  // 期待: 存在しないIDは series から除外 / C.rated=0 / hasRating=false
+  const S = MK.logic.skills;
+  S.addSkill({ domain: "D", item: "S1" });
+  const c = MK.people.resolveOrCreate("C");
+  const d = S.radarData([c, "no-such-id"]);
+  eq(d.series.length, 1);
+  eq(d.series[0].rated, 0);
+  eq(d.hasRating, false);
+});

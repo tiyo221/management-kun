@@ -38,6 +38,14 @@
   --color-warning: #dd5b00;
   --color-error: #e03131;
 
+  /* Chart series（カテゴリ配色。グラフの系列色。ダークは [data-theme] で明色へ差し替え） */
+  --chart-1: #5645d4;
+  --chart-2: #1aae39;
+  --chart-3: #dd5b00;
+  --chart-4: #2f7ed8;
+  --chart-5: #c026d3;
+  --chart-6: #0d9488;
+
   /* Rounded */
   --rounded-sm: 6px;
   --rounded-md: 8px;
@@ -373,6 +381,13 @@ textarea.text-input { min-height: 80px; resize: vertical; }
   --color-primary-rgb: 123, 108, 240;
   --color-primary-pressed: #6857e6;
   --color-link-blue: #69b0ff;
+  /* Chart series（暗背景で沈まないよう明度を上げる） */
+  --chart-1: #7b6cf0;
+  --chart-2: #37c353;
+  --chart-3: #ff7a2e;
+  --chart-4: #5aa9ff;
+  --chart-5: #e05ae8;
+  --chart-6: #2dd4bf;
 }
 [data-theme="dark"] body { background: var(--color-surface-soft); }
 /* ink-deep(#000) を背景に使う箇所はダークだと沈むので明色へ反転 */
@@ -483,6 +498,17 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .gap-ok { color: var(--color-success); }
 .gap-short { color: var(--color-error); }
 .mk-barline { margin: 8px 0; }
+/* ---- skills: レーダーチャート（#79）---- */
+.mk-radar-picker { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-sm); }
+.mk-chip-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 5px 10px; border-radius: var(--rounded-full); border: 1px solid var(--color-hairline-strong); background: var(--color-canvas); color: var(--color-steel); cursor: pointer; }
+.mk-chip-toggle.is-on { color: var(--color-ink); font-weight: 600; border-color: var(--color-primary); background: var(--color-surface); }
+.mk-chip-toggle .mk-radar-dot { opacity: .3; }
+.mk-chip-toggle.is-on .mk-radar-dot { opacity: 1; }
+.mk-radar-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--color-muted); flex: 0 0 auto; }
+.mk-radar-wrap { max-width: 480px; margin: 0 auto; }
+.mk-radar-legend { display: flex; flex-wrap: wrap; gap: var(--space-md); justify-content: center; margin-top: var(--space-sm); }
+.mk-radar-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-ink); }
+.mk-radar-note { text-align: center; color: var(--color-steel); font-size: 13px; margin-top: var(--space-sm); }
 
 /* ---- resource: 月次の供給とキャパ（Issue #52）---- */
 .mk-month-list { display: flex; flex-direction: column; }
