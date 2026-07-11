@@ -99,11 +99,14 @@
       const sum = parent ? L().summaryOf(tasks, idx) : null;
       const tr = el("tr", { tabindex: "0" });
       tr.dataset.id = String(t.id);
-      // キーボード操作（行フォーカス中）: Alt+↑↓ で移動、Tab/Shift+Tab で字下げ/字上げ（Issue #156）。
+      // キーボード操作（行そのものにフォーカスがある時のみ）: Alt+↑↓ で移動、Tab/Shift+Tab で
+      // 字下げ/字上げ、Esc で行フォーカス解除（Issue #156）。入力セル編集中は誤発火させない。
       tr.addEventListener("keydown", (e) => {
+        if (e.target !== tr) return;
         if (e.altKey && e.key === "ArrowUp") { e.preventDefault(); rowOp(idx, t.id, () => L().moveUp(idx)); }
         else if (e.altKey && e.key === "ArrowDown") { e.preventDefault(); rowOp(idx, t.id, () => L().moveDown(idx)); }
-        else if (e.key === "Tab" && e.target === tr) { e.preventDefault(); rowOp(idx, t.id, () => (e.shiftKey ? L().outdent(idx) : L().indent(idx))); }
+        else if (e.key === "Tab") { e.preventDefault(); rowOp(idx, t.id, () => (e.shiftKey ? L().outdent(idx) : L().indent(idx))); }
+        else if (e.key === "Escape") { tr.blur(); }
       });
       tr.appendChild(el("td", {}, [el("span", { class: "wbs-num", text: nums[idx] })]));
 
@@ -163,7 +166,7 @@
 
   // 各行に常時表示する移動・インデントボタン（メニューを開かず1クリック）。Issue #156。
   function moveButtons(idx, id) {
-    const mk = (label, title, fn) => { const b = el("button", { class: "btn btn-ghost", text: label, title }); b.addEventListener("click", (e) => { e.stopPropagation(); rowOp(idx, id, fn); }); return b; };
+    const mk = (label, title, fn) => { const b = el("button", { class: "btn btn-ghost", text: label, title, "aria-label": title }); b.addEventListener("click", (e) => { e.stopPropagation(); rowOp(idx, id, fn); }); return b; };
     return el("span", { class: "wbs-move" }, [
       mk("↑", "上へ移動 (Alt+↑)", () => L().moveUp(idx)),
       mk("↓", "下へ移動 (Alt+↓)", () => L().moveDown(idx)),
