@@ -12,6 +12,7 @@
   const ZOOM = { day: 24, week: 12, month: 5 };
   let root = null;
   let opsMenu = null;
+  let pendingFocusId = null; // 移動・インデント後に再フォーカスする行の task id（Issue #156）
   let viewMode = "table"; // "table" | "gantt"（テーブル/ガントのタブ切替）
   let zoomKey = "day"; // ZOOM のキー
   let ganttHost = null; // ガントのスクロール容器（「今日へスクロール」用）
@@ -61,6 +62,12 @@
       panel = el("div", { class: "wbs-wrap" }, [renderTable(tasks, nums, visible)]);
     }
     root.appendChild(ui.stack([stats, bar, tabs, panel]));
+    // 移動・インデント直後は操作した行へフォーカスを戻す（連続操作しやすく）。Issue #156。
+    if (pendingFocusId != null) {
+      const id = pendingFocusId; pendingFocusId = null;
+      const trEl = root.querySelector('tr[data-id="' + id + '"]');
+      if (trEl) trEl.focus();
+    }
   }
 
   // ガント用ツールバー：ズーム（日/週/月）＋「今日へスクロール」。
@@ -90,7 +97,14 @@
       const t = tasks[idx];
       const parent = L().isParent(tasks, idx);
       const sum = parent ? L().summaryOf(tasks, idx) : null;
-      const tr = el("tr");
+      const tr = el("tr", { tabindex: "0" });
+      tr.dataset.id = String(t.id);
+      // キーボード操作（行フォーカス中）: Alt+↑↓ で移動、Tab/Shift+Tab で字下げ/字上げ（Issue #156）。
+      tr.addEventListener("keydown", (e) => {
+        if (e.altKey && e.key === "ArrowUp") { e.preventDefault(); rowOp(idx, t.id, () => L().moveUp(idx)); }
+        else if (e.altKey && e.key === "ArrowDown") { e.preventDefault(); rowOp(idx, t.id, () => L().moveDown(idx)); }
+        else if (e.key === "Tab" && e.target === tr) { e.preventDefault(); rowOp(idx, t.id, () => (e.shiftKey ? L().outdent(idx) : L().indent(idx))); }
+      });
       tr.appendChild(el("td", {}, [el("span", { class: "wbs-num", text: nums[idx] })]));
 
       const nameWrap = el("div", { class: "wbs-name", style: "padding-left:" + (t.level * 14) + "px;" });
@@ -114,7 +128,7 @@
         tr.appendChild(el("td", {}, [statusCell(idx, t)]));
         tr.appendChild(el("td", {}, [depCell(tasks, nums, idx, t)]));
       }
-      tr.appendChild(el("td", { class: "wbs-ops" }, [opsCell(idx)]));
+      tr.appendChild(el("td", { class: "wbs-ops" }, [moveButtons(idx, t.id), opsCell(idx)]));
       grid.appendChild(tr);
     });
     return el("div", { class: "wbs-table" }, [grid]);
@@ -144,6 +158,20 @@
     return wrap;
   }
 
+  // 移動・インデントを実行し、rerender 後に同じ行へフォーカスを戻す（Issue #156）。
+  function rowOp(idx, id, fn) { fn(); pendingFocusId = id; render(); }
+
+  // 各行に常時表示する移動・インデントボタン（メニューを開かず1クリック）。Issue #156。
+  function moveButtons(idx, id) {
+    const mk = (label, title, fn) => { const b = el("button", { class: "btn btn-ghost", text: label, title }); b.addEventListener("click", (e) => { e.stopPropagation(); rowOp(idx, id, fn); }); return b; };
+    return el("span", { class: "wbs-move" }, [
+      mk("↑", "上へ移動 (Alt+↑)", () => L().moveUp(idx)),
+      mk("↓", "下へ移動 (Alt+↓)", () => L().moveDown(idx)),
+      mk("⇤", "字上げ・親へ (Shift+Tab)", () => L().outdent(idx)),
+      mk("⇥", "字下げ・子にする (Tab)", () => L().indent(idx)),
+    ]);
+  }
+
   function opsCell(idx) {
     const b = el("button", { class: "btn btn-ghost", text: "⋯", title: "操作" });
     b.addEventListener("click", (e) => { e.stopPropagation(); openOpsMenu(b, idx); });
@@ -154,10 +182,10 @@
     const rect = anchor.getBoundingClientRect();
     const menu = el("div", { class: "wbs-ops-menu" });
     const run = (fn) => { closeOpsMenu(); fn(); render(); };
+    // 移動・字下げ/字上げは各行の常時ボタン＋キーボードへ移した（Issue #156）。
+    // メニューには頻度の低い追加・削除だけを残す。
     const items = [
       ["＋ 子タスク", () => L().addChild(idx), ""], ["＋ 兄弟タスク", () => L().addSibling(idx), ""],
-      ["⇥ 字下げ（子にする）", () => L().indent(idx), ""], ["⇤ 字上げ（親へ）", () => L().outdent(idx), ""],
-      ["↑ 上へ移動", () => L().moveUp(idx), ""], ["↓ 下へ移動", () => L().moveDown(idx), ""],
       ["✕ 削除", () => { L().deleteTask(idx); showUndo(); }, "danger"],
     ];
     items.forEach(([label, fn, cls]) => { const it = el("button", { class: "wbs-ops-item " + cls, text: label }); it.addEventListener("click", (e) => { e.stopPropagation(); run(fn); }); menu.appendChild(it); });
