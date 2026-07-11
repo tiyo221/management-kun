@@ -7,7 +7,7 @@
   const L = () => MK.logic.questions;
 
   let root = null;
-  let filter = "all";
+  let filter = "open";
   let search = "";
 
   function render() {
