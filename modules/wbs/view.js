@@ -39,7 +39,7 @@
       title: "まだタスクがありません",
       hint: "大項目を追加し、その下に小項目をぶら下げて WBS を組み立てます。進捗や期間はガントに反映されます。",
       action: { label: "＋ 最初の大項目を追加", onClick: () => { L().addRoot(); render(); } },
-    })])); return; }
+    })])); pendingFocusId = null; return; }
 
     const nums = L().wbsNumbers(tasks);
     const hidden = L().hiddenFlags(tasks);
@@ -100,7 +100,8 @@
       const tr = el("tr", { tabindex: "0" });
       tr.dataset.id = String(t.id);
       // キーボード操作（行そのものにフォーカスがある時のみ）: Alt+↑↓ で移動、Tab/Shift+Tab で
-      // 字下げ/字上げ、Esc で行フォーカス解除（Issue #156）。入力セル編集中は誤発火させない。
+      // 字下げ/字上げ、Enter で先頭セルへ（キーボードのみでの編集到達 WCAG 2.1.1）、Esc で行フォーカス
+      // 解除（Issue #156）。入力セル編集中は誤発火させない。
       // Tab は「これ以上字下げ/字上げできない境界」では横取りせず通常のフォーカス移動に委ね、
       // キーボードだけで必ず行外へ抜けられるようにする（WCAG 2.1.2 キーボードトラップ回避）。
       tr.addEventListener("keydown", (e) => {
@@ -111,7 +112,8 @@
           const canMove = e.shiftKey ? tasks[idx].level > 0 : (idx > 0 && tasks[idx].level <= tasks[idx - 1].level);
           if (!canMove) return; // 境界では Tab を通常のフォーカス移動に委ねる
           e.preventDefault(); rowOp(t.id, () => (e.shiftKey ? L().outdent(idx) : L().indent(idx)));
-        } else if (e.key === "Escape") { tr.blur(); }
+        } else if (e.key === "Enter") { const cell = tr.querySelector("input, select"); if (cell) { e.preventDefault(); cell.focus(); } }
+        else if (e.key === "Escape") { tr.blur(); }
       });
       tr.appendChild(el("td", {}, [el("span", { class: "wbs-num", text: nums[idx] })]));
 
