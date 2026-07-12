@@ -7,3 +7,6 @@ Thumbs.db
 
 # 誤って作られる一時ファイル（スクラッチパスがフラット化したもの）
 *scratchpad*
+
+# テスト一覧ツールの生成物（node test/list.js --html で再生成可能）
+test/coverage.html
