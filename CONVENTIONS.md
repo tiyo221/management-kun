@@ -93,6 +93,7 @@ modules/
 - `el(tag, attrs, children)`（`text`=textContent、`html`=エスケープ済み前提、`onX`=イベント）
 - `uid(prefix)` / `nowISO()` / `todayISO()` / `fmtDate(d)` / `addDays(iso,n)` / `daysBetween(a,b)` / `mondayOf(iso)`
 - `normalizeKey(name)`（名寄せ照合キー）/ `escapeHtml(s)`
+- `mergeById(current, incoming)`（id 一致でアップサートした配列を返す純関数。importData の merge 分岐で使う。Issue #186）
 
 ### データ層（logic から使う）
 - `MK.store.scope("module:<id>")` → `{ get(), set(v) }`。破損時も個別 try/parse で他へ波及させない。

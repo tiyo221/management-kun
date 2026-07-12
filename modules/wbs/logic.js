@@ -300,9 +300,8 @@
   function importData(data, mode, targetId) {
     const s = storeFor(targetId);
     if (mode === "merge") {
-      const d = load(s); const byId = {}; d.tasks.forEach((t) => (byId[t.id] = t));
-      (data.tasks || []).forEach((t) => (byId[t.id] = t));
-      d.tasks = Object.keys(byId).map((k) => byId[k]);
+      const d = load(s);
+      d.tasks = MK.util.mergeById(d.tasks, data.tasks);
       d.uid = Math.max(d.uid || 1, data.uid || 1); save(d, s);
     } else { save({ version: 1, uid: data && data.uid ? data.uid : 1, tasks: (data && data.tasks) || [] }, s); }
   }

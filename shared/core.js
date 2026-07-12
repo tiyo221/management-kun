@@ -68,6 +68,17 @@
   util.daysBetween = function (a, b) { return Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000); };
   util.mondayOf = function (iso) { const d = new Date(iso + "T00:00:00"); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return util.fmtDate(d); };
 
+  // id 一致でアップサートする（Issue #186）。current を土台に incoming を id 単位で
+  // 上書き・追加した配列を返す純関数。各モジュールの importData merge 分岐が再実装して
+  // いた「byId マップ→Object.keys で配列化」を1か所へ集約する。結果順序は従来どおり
+  // Object.keys のキー列挙順（数値 id は昇順・文字列 id は挿入順）に一致する。
+  util.mergeById = function (current, incoming) {
+    const byId = {};
+    (current || []).forEach((x) => (byId[x.id] = x));
+    (incoming || []).forEach((x) => (byId[x.id] = x));
+    return Object.keys(byId).map((k) => byId[k]);
+  };
+
   // 名寄せ照合キー（spec §8.2）: NFKC → trim → 連続空白圧縮 → 小文字化
   util.normalizeKey = function (name) {
     return String(name == null ? "" : name)

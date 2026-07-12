@@ -240,10 +240,7 @@
   function importData(data, mode) {
     if (mode === "merge") {
       const d = load();
-      const byId = {};
-      d.tasks.forEach((t) => (byId[t.id] = t));
-      (data.tasks || []).forEach((t) => (byId[t.id] = t));
-      d.tasks = Object.keys(byId).map((k) => byId[k]);
+      d.tasks = MK.util.mergeById(d.tasks, data.tasks);
       save(d);
     } else {
       save({ version: 1, tasks: (data && data.tasks) || [] });
