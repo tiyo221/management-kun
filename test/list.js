@@ -179,26 +179,26 @@ var opt=document.createElement('option');opt.value='';opt.textContent='全ファ
 DATA.forEach(function(g){var o=document.createElement('option');o.value=g.file;o.textContent=g.file+' ('+g.tests.length+')';fileEl.appendChild(o);});\
 function norm(s){return (s||'').toLowerCase();}\
 function chip(cls,label,n){var d=document.createElement('span');d.className='chip'+(cls?' '+cls:'');var b=document.createElement('b');b.textContent=n;d.appendChild(b);d.appendChild(document.createTextNode(' '+label));return d;}\
-function hi(el,text,q){el.textContent='';if(!q){el.textContent=text;return;}var lo=text.toLowerCase(),i=0,idx;while((idx=lo.indexOf(q,i))>=0){el.appendChild(document.createTextNode(text.slice(i,idx)));var m=document.createElement('mark');m.textContent=text.slice(idx,idx+q.length);el.appendChild(m);i=idx+q.length;}el.appendChild(document.createTextNode(text.slice(i)));}\
+function hi(el,text,terms){el.textContent='';if(!terms||!terms.length){el.textContent=text;return;}var lo=text.toLowerCase(),i=0;while(i<text.length){var best=-1,blen=0;for(var k=0;k<terms.length;k++){var idx=lo.indexOf(terms[k],i);if(idx>=0&&(best<0||idx<best)){best=idx;blen=terms[k].length;}}if(best<0)break;el.appendChild(document.createTextNode(text.slice(i,best)));var m=document.createElement('mark');m.textContent=text.slice(best,best+blen);el.appendChild(m);i=best+blen;}el.appendChild(document.createTextNode(text.slice(i)));}\
 function render(){\
-var q=norm(qEl.value.trim()),onlyMiss=missEl.checked,file=fileEl.value;\
+var terms=norm(qEl.value).split(/\\s+/).filter(Boolean),onlyMiss=missEl.checked,file=fileEl.value;\
 listEl.textContent='';var shown=0,shownMiss=0;\
 DATA.forEach(function(g){\
 if(file&&g.file!==file)return;\
 var tests=g.tests.filter(function(t){\
 if(onlyMiss&&!t.miss.length)return false;\
-if(q){var hay=norm(t.name+' '+t.観点+' '+t.入力+' '+t.期待);if(hay.indexOf(q)<0)return false;}\
+if(terms.length){var hay=norm(t.name+' '+t.観点+' '+t.入力+' '+t.期待);for(var k=0;k<terms.length;k++){if(hay.indexOf(terms[k])<0)return false;}}\
 return true;});\
 if(!tests.length)return;\
 var sec=document.createElement('section');sec.className='file';\
 var h=document.createElement('h2');h.textContent=g.file;var c=document.createElement('span');c.className='count';c.textContent=' ('+tests.length+')';h.appendChild(c);sec.appendChild(h);\
 tests.forEach(function(t){shown++;if(t.miss.length)shownMiss++;\
 var card=document.createElement('div');card.className='t'+(t.miss.length?' miss':'');\
-var nm=document.createElement('div');nm.className='name';var ns=document.createElement('span');hi(ns,t.name,q);nm.appendChild(ns);\
+var nm=document.createElement('div');nm.className='name';var ns=document.createElement('span');hi(ns,t.name,terms);nm.appendChild(ns);\
 var ln=document.createElement('span');ln.className='ln';ln.textContent=':'+t.line;nm.appendChild(ln);\
 if(t.miss.length){var bd=document.createElement('span');bd.className='badge';bd.textContent='欠落 '+t.miss.join('/');nm.appendChild(bd);}\
 card.appendChild(nm);\
-LABELS.forEach(function(k){var r=document.createElement('div');r.className='row';var kk=document.createElement('span');kk.className='k';kk.textContent=k;var vv=document.createElement('span');vv.className='v'+(t[k]?'':' none');if(t[k])hi(vv,t[k],q);else vv.textContent='（未記載）';r.appendChild(kk);r.appendChild(vv);card.appendChild(r);});\
+LABELS.forEach(function(k){var r=document.createElement('div');r.className='row';var kk=document.createElement('span');kk.className='k';kk.textContent=k;var vv=document.createElement('span');vv.className='v'+(t[k]?'':' none');if(t[k])hi(vv,t[k],terms);else vv.textContent='（未記載）';r.appendChild(kk);r.appendChild(vv);card.appendChild(r);});\
 sec.appendChild(card);});\
 listEl.appendChild(sec);});\
 if(!shown){var e=document.createElement('div');e.className='empty';e.textContent='該当するテストがありません';listEl.appendChild(e);}\
