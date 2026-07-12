@@ -376,18 +376,36 @@
 
   /**
    * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。主表記は人（FTE。Issue #71）。
-   * 本日時点のチームの空き要員（人）と、過負担（割当 > 1人分）のメンバー数を返す。
-   * データ源のアロケーションが皆無なら empty=true。
-   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   * 本日時点のチームの空き要員（人）と、過負担（割当 > 1人分）のメンバー数を返す。過負担がいれば
+   * attention（warn）で昇格し、HOME 要対応バーに「誰が過負荷か」を出す（#181）。
+   * データ源のアロケーションが皆無なら empty=true。「今日」依存の判定は基準日を引数で受けて決定的にする（§3.6）。
+   * @param {string} [baseDate] - 基準日（YYYY-MM-DD、既定 本日）。決定的テスト用の注入点。
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention?: {label: string, severity: string}[]}}
    */
-  function summary() {
-    const list = alloc(), mem = members(), today = MK.util.todayISO(), cap = DEFAULT_CAPACITY;
-    let over = 0;
-    mem.forEach((m) => { if (totalPercent(list, m.id, today) > cap) over++; });
-    return { empty: !list.length, stats: [
+  function summary(baseDate) {
+    const list = alloc(), mem = members(), today = baseDate || MK.util.todayISO(), cap = DEFAULT_CAPACITY;
+    const over = [];
+    mem.forEach((m) => { const p = totalPercent(list, m.id, today); if (p > cap) over.push({ name: m.name || "(無名)", assigned: p }); });
+    over.sort((a, b) => b.assigned - a.assigned); // 最も過負荷な人を代表にする
+    const out = { empty: !list.length, stats: [
       { label: "空き要員", value: fteLabel(teamFreeOn(list, mem, today, cap)) },
-      { label: "過負担", value: over + "人" },
+      { label: "過負担", value: over.length + "人" },
     ] };
+    if (over.length) out.attention = [{ label: overloadLabel(over), severity: "warn" }];
+    return out;
+  }
+
+  /**
+   * 過負荷メンバー一覧を要対応バー用の1行ラベルへ整形する（#181）。誰が過負荷かが分かる粒度にし、
+   * 複数人ならバーが長くならないよう「代表 ほかN人」に畳む。呼び出し側で assigned 降順にソート済みを前提とする。
+   * @param {{name: string, assigned: number}[]} over - 過負荷メンバー（assigned 降順・非空）
+   * @returns {string} 例:「過負荷: 佐藤 (1.3人分)」/「過負荷: 佐藤 ほか2人」
+   */
+  function overloadLabel(over) {
+    const top = over[0];
+    return over.length === 1
+      ? "過負荷: " + top.name + " (" + fteLabel(top.assigned) + "分)"
+      : "過負荷: " + top.name + " ほか" + (over.length - 1) + "人";
   }
 
   /**
