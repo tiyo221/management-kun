@@ -212,9 +212,8 @@
    */
   function importData(data, mode) {
     if (mode === "merge") {
-      const d = load(); const byId = {}; d.skills.forEach((s) => (byId[s.id] = s));
-      (data.skills || []).forEach((s) => (byId[s.id] = s));
-      d.skills = Object.keys(byId).map((k) => byId[k]);
+      const d = load();
+      d.skills = MK.util.mergeById(d.skills, data.skills);
       Object.assign(d.ratings, data.ratings || {}); save(d);
     } else { save({ version: 1, skills: (data && data.skills) || [], ratings: (data && data.ratings) || {} }); }
   }

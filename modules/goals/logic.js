@@ -264,10 +264,8 @@
    */
   function importData(data, mode) {
     if (mode === "merge") {
-      const d = load(); const byId = {};
-      d.goals.forEach((g) => (byId[g.id] = g));
-      (data.goals || []).forEach((g) => (byId[g.id] = g));
-      d.goals = Object.keys(byId).map((k) => byId[k]); save(d);
+      const d = load();
+      d.goals = MK.util.mergeById(d.goals, data.goals); save(d);
     } else { save({ version: 1, goals: (data && data.goals) || [] }); }
   }
   /**

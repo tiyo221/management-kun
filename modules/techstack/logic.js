@@ -247,10 +247,7 @@
   function importData(data, mode) {
     if (mode === "merge") {
       const d = load();
-      const byId = {};
-      d.items.forEach((it) => (byId[it.id] = it));
-      (data.items || []).forEach((it) => (byId[it.id] = it));
-      d.items = Object.keys(byId).map((k) => byId[k]);
+      d.items = MK.util.mergeById(d.items, data.items);
       save(d);
     } else {
       save({ version: 1, items: (data && data.items) || [] });

@@ -20,6 +20,19 @@ test("util 日付ヘルパ", (MK) => {
   eq(new Date(mon + "T00:00:00").getDay(), 1);
 });
 
+test("util.mergeById: id 一致でアップサートし挿入順を保つ", (MK) => {
+  // 観点: current を土台に incoming を id 単位で上書き・追加する。文字列 id では
+  //       current の順を維持したまま既存を差し替え、新規は末尾に追加される
+  // 入力: current=[a,b] / incoming=[b'(更新),c(新規)]
+  // 期待: [a, b'(更新後), c] の順・件数3
+  const current = [{ id: "a", v: 1 }, { id: "b", v: 2 }];
+  const incoming = [{ id: "b", v: 20 }, { id: "c", v: 3 }];
+  eq(MK.util.mergeById(current, incoming), [{ id: "a", v: 1 }, { id: "b", v: 20 }, { id: "c", v: 3 }]);
+  // 空・未定義入力でも落ちず配列を返す
+  eq(MK.util.mergeById(null, undefined), []);
+  eq(MK.util.mergeById([{ id: "x" }], null), [{ id: "x" }]);
+});
+
 test("io.csv: クォート・カンマ・改行を含むラウンドトリップ", (MK) => {
   // 観点: CSVは値中のカンマ・二重引用符・改行をエスケープでき、stringify→parse で完全に元へ戻る
   // 入力: セルに ","・引用符・改行 を含む2行
