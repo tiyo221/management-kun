@@ -341,34 +341,43 @@
   }
 
   /**
-   * 全プロジェクトを横断して期限超過の葉タスク数を数える（#181）。集計母数は wbs.stats と同じく葉タスクのみ
-   * （親のロールアップ行を二重に数えない）。判定は isOverdue（dashboard と同一定義）を再利用する。
+   * 全プロジェクトを横断して葉タスクの HOME サマリー指標を集計する（#181）。母数は wbs.stats と同じく葉タスクのみ
+   * （親のロールアップ行を二重に数えない）。期限超過の判定は isOverdue（dashboard と同一定義）を再利用する。
+   * summary が消費する3指標（進行中・平均進捗・期限超過）を単一走査で数え、HOME での指標間スコープの食い違いを防ぐ。
    * @param {string} today - 基準日（YYYY-MM-DD）
-   * @returns {number} 期限超過の葉タスク数（全 PJ 合計）
+   * @returns {{leaves: number, inprogress: number, overall: number, overdue: number}}
+   *   全 PJ 合計の葉タスク数・進行中数・平均進捗率(%)・期限超過数
    */
-  function overdueCount(today) {
-    let n = 0;
+  function crossProjectStats(today) {
+    let leaves = 0, inprogress = 0, sum = 0, overdue = 0;
     eachProjectTasks().forEach((pj) => {
-      pj.tasks.forEach((t, i) => { if (!isParent(pj.tasks, i) && isOverdue(t, today)) n++; });
+      pj.tasks.forEach((t, i) => {
+        if (isParent(pj.tasks, i)) return;
+        leaves++;
+        if (t.status === "inprogress") inprogress++;
+        sum += Number(t.progress) || 0;
+        if (isOverdue(t, today)) overdue++;
+      });
     });
-    return n;
+    return { leaves, inprogress, overall: leaves ? Math.round(sum / leaves) : 0, overdue };
   }
 
   /**
-   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。期限超過タスクがあれば attention（error）で
-   * 昇格し、HOME 要対応バーに出す（#181）。「今日」依存の判定は基準日を引数で受けて決定的にする（§3.6）。
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。指標は全 PJ を横断して集計し（wbs は Project 次元の
+   * scoped モジュールのため・§3.7.4）、進行中/進捗/期限超過のスコープを揃える。期限超過タスクがあれば attention
+   * （error）で昇格し HOME 要対応バーに出す（#181）。「今日」依存の判定は基準日を引数で受けて決定的にする（§3.6）。
+   * ※ モジュール自身のカード指標（表示中 PJ 単位）は stats() が担い、本 summary は HOME 横断表示専用。
    * @param {string} [baseDate] - 基準日（YYYY-MM-DD、既定 本日）。決定的テスト用の注入点。
    * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention?: {label: string, severity: string}[]}}
    */
   function summary(baseDate) {
-    const s = stats();
     const today = baseDate || MK.util.todayISO();
-    const overdue = overdueCount(today);
+    const s = crossProjectStats(today);
     const out = { empty: s.leaves === 0, stats: [
       { label: "進行中", value: s.inprogress },
       { label: "進捗", value: s.overall + "%" },
     ] };
-    if (overdue > 0) out.attention = [{ label: "期限超過タスク " + overdue + "件", severity: "error" }];
+    if (s.overdue > 0) out.attention = [{ label: "期限超過タスク " + s.overdue + "件", severity: "error" }];
     return out;
   }
 
@@ -432,5 +441,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, isOverdue, overdueCount, wbsNumbers, summaryOf, hiddenFlags, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, searchItems, summaryFor, eachProjectTasks, buildCSVRows, exportData, importData, loadSample };
+  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, isOverdue, wbsNumbers, summaryOf, hiddenFlags, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, searchItems, summaryFor, eachProjectTasks, buildCSVRows, exportData, importData, loadSample };
 })();
