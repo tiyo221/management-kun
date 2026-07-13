@@ -19,6 +19,8 @@ test("todo: 追加は inbox・件数・完了・フィルタ", (MK) => {
 test("todo: filtered の並び替え（締め切り/プロジェクト/コンテキスト/既定）", (MK) => {
   // 観点: sort 引数で締め切り順(未設定は末尾)・プロジェクト別・コンテキスト別に並び、
   //       既定(created)は追加日順（挿入順＝新しい順）のまま
+  // 入力: applyCSV で A(Alpha/@pc/7-20)・B(Beta/@mail/期限なし)・C(Alpha/@home/7-05) を行順投入
+  // 期待: due→[C,A,B]（未設定 B は末尾）、project→[A,C,B]、context→[C,B,A]、created/既定→[A,B,C]（挿入順）
   const T = MK.logic.todo;
   // applyCSV で決め打ちのタスクを投入（unshift ではなく行順で入る）
   T.applyCSV([
@@ -45,6 +47,9 @@ test("todo: filtered の並び替え（締め切り/プロジェクト/コンテ
 
 test("todo: CSV ラウンドトリップ（ステータス/プロジェクト名寄せ・全置換）", (MK) => {
   // 観点: buildCSVRows→applyCSV で往復でき、プロジェクトは名前で参照、ステータスは key/ラベル両対応
+  // 入力: 4行（企画書=next・複数コンテキスト・PJ名／買い物=ラベル"Inbox"・PJ空／完了タスク=ラベル"Done"／タイトル空）を applyCSV し出力を再取込
+  // 期待: ok=3/skip=1。コンテキストは空白分割、"Done"→done で completedAt 付与、PJ 名は Projects へ名寄せ、
+  //       PJ 空は未割当(null)、往復でヘッダ一致・再取込 ok=3
   const T = MK.logic.todo;
   const rows = [
     ["タイトル", "ステータス", "プロジェクト", "コンテキスト", "期限", "メモ"],

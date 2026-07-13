@@ -30,6 +30,8 @@ function loadCatalog(rootDir) {
 
 test("meta: 全モジュールに1行説明（description）がある（Issue #40）", (MK) => {
   // 観点: 各 view.js の registerModule が非空の description を持つ（初見の見取り図の単一ソース）
+  // 入力: 実装済み全モジュールの view.js を読み込み MK.modules に def を揃える
+  // 期待: 各 def が登録済みで、description が非空文字列
   const rootDir = path.join(__dirname, "..");
   loadDefs(MK, rootDir);
   MODULES.forEach((id) => {
@@ -41,6 +43,8 @@ test("meta: 全モジュールに1行説明（description）がある（Issue #4
 
 test("meta: 全モジュールの def に title/icon がある（表示メタの単一ソース・Issue #142）", (MK) => {
   // 観点: title/icon の単一ソースは def。シェルの META は def を優先して読む。
+  // 入力: 実装済み全モジュールの def（view.js 読み込み後）
+  // 期待: 各 def が非空の title と icon を持つ
   const rootDir = path.join(__dirname, "..");
   loadDefs(MK, rootDir);
   MODULES.forEach((id) => {
@@ -53,6 +57,8 @@ test("meta: 全モジュールの def に title/icon がある（表示メタの
 test("meta: 実装済み id の catalog 値は空（title/icon の二重定義を禁止・Issue #142）", (MK) => {
   // 観点: def を持つモジュールはカタログに title/icon を書かない（＝再び二重管理に戻らない）。
   // 準備中（def 無し）のみカタログ側にフォールバックの title/icon を許す。
+  // 入力: 実装済み def と shared/manifest.js の catalog を突き合わせる
+  // 期待: def を持つ id は catalog 値の title/icon が両方 null（二重定義がない）
   const rootDir = path.join(__dirname, "..");
   loadDefs(MK, rootDir);
   const catalog = loadCatalog(rootDir);

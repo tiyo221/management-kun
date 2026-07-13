@@ -3,6 +3,8 @@
 
 test("goals: CSV 出力・取込（種別フラット化・入れ子復元・ラウンドトリップ）", (MK) => {
   // 観点: buildCSVRows のヘッダ、種別列で goal/step をフラット化、applyCSV が入れ子を復元し全置換する
+  // 入力: goal/step を交互に並べた行（日本語ラベル「完了」・不正完了日・空タイトル step を含む）
+  // 期待: goal 2件へ復元、step は直前 goal に入れ子化、「完了」→done、不正完了日は取込時刻で補完、空タイトルはスキップ
   const G = MK.logic.goals;
   const rows = [
     ["種別", "タイトル", "説明", "期限", "状態", "完了日", "振り返り"],
@@ -35,6 +37,8 @@ test("goals: CSV 出力・取込（種別フラット化・入れ子復元・ラ
 
 test("goals: CSV 親 goal のない step 行はスキップ", (MK) => {
   // 観点: 先頭に goal がなく step から始まる場合、その step は親なしとしてスキップされる
+  // 入力: step「孤児ステップ」→ goal「有効な目標」の順（先頭が step）
+  // 期待: goal は1件だけ復元され、孤児 step は捨てられる（有効な目標の steps は 0 件）
   const G = MK.logic.goals;
   const n = G.applyCSV([
     ["種別", "タイトル", "説明", "期限", "状態", "完了日", "振り返り"],

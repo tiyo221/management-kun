@@ -4,7 +4,8 @@
 
    使い方:
      node test/list.js            全テストを ファイル別に「観点/入力/期待」付きで表示
-     node test/list.js --missing  3項目（観点/入力/期待）が欠けているテストだけを表示（品質点検用）
+     node test/list.js --missing  規約（TESTING.md §5）を満たさないテストだけを表示（品質点検用）
+                                  ＝観点なし、または非自明なのに入力/期待が欠け「自明」宣言もないもの
      node test/list.js --md       Markdown で出力（> test/COVERAGE.md にリダイレクトできる）
      node test/list.js --html     検索・絞り込みできる自己完結 HTML を test/coverage.html に生成（file:// で開ける）
      node test/list.js <keyword>  テスト名・コメントに <keyword> を含むものだけに絞り込む
@@ -14,17 +15,19 @@ const fs = require("fs");
 const path = require("path");
 
 const LABELS = ["観点", "入力", "期待"];
+// パースで拾うラベルは表示用3項目＋「自明」マーカー（TESTING.md §5: 観点だけで足りると宣言する印）
+const PARSE_LABELS = LABELS.concat(["自明"]);
 // 「観点:」「入力：」など、全角/半角コロンの両方を許す
-const LABEL_RE = new RegExp("^(" + LABELS.join("|") + ")[:：]\\s*(.*)$");
+const LABEL_RE = new RegExp("^(" + PARSE_LABELS.join("|") + ")[:：]\\s*(.*)$");
 
-/* 1ファイルをパースして [{name, 観点, 入力, 期待, line}] を返す */
+/* 1ファイルをパースして [{name, 観点, 入力, 期待, 自明, line}] を返す */
 function parseFile(src) {
   const lines = src.split(/\r?\n/);
   const tests = [];
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(/^\s*test\(\s*["'`](.+?)["'`]\s*,/);
     if (!m) continue;
-    const entry = { name: m[1], line: i + 1, 観点: "", 入力: "", 期待: "" };
+    const entry = { name: m[1], line: i + 1, 観点: "", 入力: "", 期待: "", 自明: "" };
     let current = null; // 直前のラベル（複数行コメントの継続を拾う）
     // test( の直後に続く // コメント行だけを見る（本体コードに入ったら打ち切る）
     for (let j = i + 1; j < lines.length; j++) {
@@ -61,6 +64,14 @@ function missingLabels(t) {
   return LABELS.filter((k) => !t[k]);
 }
 
+/* TESTING.md §5 の要求水準を満たすか。
+   観点は必須。入力/期待は非自明なテストでは必須だが、「自明」マーカーを付けたテストは観点だけで足りると宣言済みとみなす。 */
+function isCompliant(t) {
+  if (!t.観点) return false; // 観点は常に必須
+  if (t.自明) return true;   // 観点のみで足りると明示宣言（単純な CSV ラウンドトリップ等）
+  return !!(t.入力 && t.期待);
+}
+
 /* --- 出力 --- */
 function printHuman(groups, opts) {
   let total = 0, withAll = 0, missing = 0;
@@ -71,15 +82,16 @@ function printHuman(groups, opts) {
     for (const t of shown) {
       total++;
       const miss = missingLabels(t);
-      if (miss.length === 0) withAll++; else missing++;
-      const flag = miss.length ? "  ⚠ 欠落: " + miss.join("/") : "";
+      if (isCompliant(t)) withAll++; else missing++;
+      const flag = isCompliant(t) ? "" : "  ⚠ 欠落: " + miss.join("/");
       console.log("\n- " + t.name + "  (:" + t.line + ")" + flag);
       for (const k of LABELS) {
         if (t[k]) console.log("    " + k + ": " + t[k]);
       }
+      if (t.自明) console.log("    自明: " + t.自明);
     }
   }
-  console.log("\n=== 表示 " + total + " tests（3項目そろい " + withAll + " / 欠落あり " + missing + "） ===");
+  console.log("\n=== 表示 " + total + " tests（規約充足 " + withAll + " / 未充足 " + missing + "） ===");
 }
 
 function printMarkdown(groups, opts) {
@@ -98,18 +110,20 @@ function printMarkdown(groups, opts) {
     for (const t of shown) {
       total++;
       const miss = missingLabels(t);
-      if (miss.length) missing++;
-      out.push("### " + t.name + (miss.length ? " ⚠️（欠落: " + miss.join("/") + "）" : ""));
+      const ok = isCompliant(t);
+      if (!ok) missing++;
+      out.push("### " + t.name + (ok ? "" : " ⚠️（欠落: " + miss.join("/") + "）"));
       out.push("");
       for (const k of LABELS) {
-        out.push("- **" + k + "**: " + (t[k] || "_（未記載）_"));
+        out.push("- **" + k + "**: " + (t[k] || (t.自明 ? "_（自明のため省略）_" : "_（未記載）_")));
       }
+      if (t.自明) out.push("- **自明**: " + t.自明);
       out.push("");
     }
   }
   out.push("---");
   out.push("");
-  out.push("合計 " + total + " テスト / 3項目欠落あり " + missing + " テスト");
+  out.push("合計 " + total + " テスト / 規約未充足 " + missing + " テスト");
   console.log(out.join("\n"));
 }
 
@@ -118,7 +132,7 @@ function printMarkdown(groups, opts) {
 function buildHtml(groups, seed) {
   const data = groups.map((g) => ({
     file: g.file,
-    tests: g.tests.map((t) => ({ name: t.name, line: t.line, 観点: t.観点, 入力: t.入力, 期待: t.期待, miss: missingLabels(t) })),
+    tests: g.tests.map((t) => ({ name: t.name, line: t.line, 観点: t.観点, 入力: t.入力, 期待: t.期待, 自明: t.自明, miss: missingLabels(t), ok: isCompliant(t) })),
   }));
   const json = JSON.stringify(data).replace(/</g, "\\u003c"); // </script> 混入を防ぐ
   const seedJson = JSON.stringify(seed || { q: "", missing: false }).replace(/</g, "\\u003c");
@@ -174,7 +188,7 @@ var LABELS=['観点','入力','期待'];\
 var qEl=document.getElementById('q'),fileEl=document.getElementById('file'),missEl=document.getElementById('missing');\
 var listEl=document.getElementById('list'),statsEl=document.getElementById('stats');\
 var totT=0,totMiss=0;\
-DATA.forEach(function(g){g.tests.forEach(function(t){totT++;if(t.miss.length)totMiss++;});});\
+DATA.forEach(function(g){g.tests.forEach(function(t){totT++;if(!t.ok)totMiss++;});});\
 var opt=document.createElement('option');opt.value='';opt.textContent='全ファイル ('+DATA.length+')';fileEl.appendChild(opt);\
 DATA.forEach(function(g){var o=document.createElement('option');o.value=g.file;o.textContent=g.file+' ('+g.tests.length+')';fileEl.appendChild(o);});\
 function norm(s){return (s||'').toLowerCase();}\
@@ -186,23 +200,24 @@ listEl.textContent='';var shown=0,shownMiss=0;\
 DATA.forEach(function(g){\
 if(file&&g.file!==file)return;\
 var tests=g.tests.filter(function(t){\
-if(onlyMiss&&!t.miss.length)return false;\
-if(terms.length){var hay=norm(t.name+' '+t.観点+' '+t.入力+' '+t.期待);for(var k=0;k<terms.length;k++){if(hay.indexOf(terms[k])<0)return false;}}\
+if(onlyMiss&&t.ok)return false;\
+if(terms.length){var hay=norm(t.name+' '+t.観点+' '+t.入力+' '+t.期待+' '+t.自明);for(var k=0;k<terms.length;k++){if(hay.indexOf(terms[k])<0)return false;}}\
 return true;});\
 if(!tests.length)return;\
 var sec=document.createElement('section');sec.className='file';\
 var h=document.createElement('h2');h.textContent=g.file;var c=document.createElement('span');c.className='count';c.textContent=' ('+tests.length+')';h.appendChild(c);sec.appendChild(h);\
-tests.forEach(function(t){shown++;if(t.miss.length)shownMiss++;\
-var card=document.createElement('div');card.className='t'+(t.miss.length?' miss':'');\
+tests.forEach(function(t){shown++;if(!t.ok)shownMiss++;\
+var card=document.createElement('div');card.className='t'+(t.ok?'':' miss');\
 var nm=document.createElement('div');nm.className='name';var ns=document.createElement('span');hi(ns,t.name,terms);nm.appendChild(ns);\
 var ln=document.createElement('span');ln.className='ln';ln.textContent=':'+t.line;nm.appendChild(ln);\
-if(t.miss.length){var bd=document.createElement('span');bd.className='badge';bd.textContent='欠落 '+t.miss.join('/');nm.appendChild(bd);}\
+if(!t.ok){var bd=document.createElement('span');bd.className='badge';bd.textContent='欠落 '+t.miss.join('/');nm.appendChild(bd);}\
 card.appendChild(nm);\
-LABELS.forEach(function(k){var r=document.createElement('div');r.className='row';var kk=document.createElement('span');kk.className='k';kk.textContent=k;var vv=document.createElement('span');vv.className='v'+(t[k]?'':' none');if(t[k])hi(vv,t[k],terms);else vv.textContent='（未記載）';r.appendChild(kk);r.appendChild(vv);card.appendChild(r);});\
+LABELS.forEach(function(k){var r=document.createElement('div');r.className='row';var kk=document.createElement('span');kk.className='k';kk.textContent=k;var vv=document.createElement('span');vv.className='v'+(t[k]?'':' none');if(t[k])hi(vv,t[k],terms);else vv.textContent=(t.自明?'（自明のため省略）':'（未記載）');r.appendChild(kk);r.appendChild(vv);card.appendChild(r);});\
+if(t.自明){var r2=document.createElement('div');r2.className='row';var k2=document.createElement('span');k2.className='k';k2.textContent='自明';var v2=document.createElement('span');v2.className='v';hi(v2,t.自明,terms);r2.appendChild(k2);r2.appendChild(v2);card.appendChild(r2);}\
 sec.appendChild(card);});\
 listEl.appendChild(sec);});\
 if(!shown){var e=document.createElement('div');e.className='empty';e.textContent='該当するテストがありません';listEl.appendChild(e);}\
-statsEl.textContent='';statsEl.appendChild(chip('','表示',shown+' / '+totT));statsEl.appendChild(chip('','3項目そろい',totT-totMiss));statsEl.appendChild(chip(totMiss?'warn':'','欠落あり',totMiss));\
+statsEl.textContent='';statsEl.appendChild(chip('','表示',shown+' / '+totT));statsEl.appendChild(chip('','規約充足',totT-totMiss));statsEl.appendChild(chip(totMiss?'warn':'','未充足',totMiss));\
 }\
 qEl.addEventListener('input',render);fileEl.addEventListener('change',render);missEl.addEventListener('change',render);\
 qEl.value=SEED.q||'';missEl.checked=!!SEED.missing;render();\
@@ -216,9 +231,9 @@ const onlyMissing = args.includes("--missing");
 const keywords = args.filter((a) => !a.startsWith("--"));
 
 const keep = (t) => {
-  if (onlyMissing && missingLabels(t).length === 0) return false;
+  if (onlyMissing && isCompliant(t)) return false;
   if (keywords.length) {
-    const hay = (t.name + " " + t.観点 + " " + t.入力 + " " + t.期待).toLowerCase();
+    const hay = (t.name + " " + t.観点 + " " + t.入力 + " " + t.期待 + " " + t.自明).toLowerCase();
     if (!keywords.every((k) => hay.includes(k.toLowerCase()))) return false;
   }
   return true;

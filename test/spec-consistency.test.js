@@ -59,11 +59,17 @@ function csvModules() {
 const sorted = (s) => [...s].sort();
 
 test("spec §5: 一覧表のモジュール id が実装（マニフェストのカタログ）と一致する（#117）", () => {
+  // 観点: spec.md §5 の表（モジュール列挙の単一ソース）と実装のカタログがズレていないか
+  // 入力: spec.md §5 表の id 列と shared/manifest.js の catalog キー
+  // 期待: 両集合が完全一致（追加漏れ・削除漏れがあれば検出）
   const { ids } = parseSpecModuleTable();
   eq(sorted(ids), sorted(implementedModules()), "spec.md §5 の表 id ⇄ manifest カタログ");
 });
 
 test("spec §5: CSV 列 ✓ が実装（build…CSVRows を持つモジュール）と一致する（#117）", () => {
+  // 観点: §5 表の CSV✓ と、実装で CSV 整形関数を持つモジュールがズレていないか
+  // 入力: spec.md §5 表で CSV=✓ の id 集合と、logic.js に build…CSVRows を持つ id 集合
+  // 期待: 両集合が完全一致（CSV 対応の追加漏れ・表の陳腐化を検出）
   const { csv } = parseSpecModuleTable();
   // CSV 対応の唯一の正＝§5 の表。実装からの導出とズレたら、表かコードのどちらかが陳腐化している。
   eq(sorted(csv), sorted(csvModules()), "spec.md §5 の CSV✓ ⇄ build…CSVRows を持つモジュール");
