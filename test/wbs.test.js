@@ -25,6 +25,23 @@ test("wbs: 依存の循環を検出・防止", (MK) => {
   eq(W.addDep(1, t3), false);
 });
 
+test("wbs: 日付逆転（開始 > 終了）を不正入力として弾く", (MK) => {
+  // 観点: 開始 > 終了 になる更新は保存せず拒否する（TESTING.md §1 の必須境界「日付逆転」）
+  // 入力: サンプル t3（index 2, start=今日+5, end=今日+9）の終了日を開始より前（今日+3）へ変更しようとする
+  // 期待: datesInverted=true / update=false / end は元(+9)のまま。逆転しない更新(+15)は true で反映される
+  const W = MK.logic.wbs;
+  W.loadSample();
+  const today = MK.util.todayISO();
+  const start = W.tasks()[2].start, before = W.tasks()[2].end;
+  const badEnd = MK.util.addDays(today, 3); // 開始(+5)より前 → 逆転
+  assert(W.datesInverted(start, badEnd), "逆転を検出");
+  eq(W.update(2, { end: badEnd }), false, "逆転する更新は拒否");
+  eq(W.tasks()[2].end, before, "拒否時はデータ不変");
+  const okEnd = MK.util.addDays(today, 15);
+  eq(W.update(2, { end: okEnd }), true, "逆転しない更新は許可");
+  eq(W.tasks()[2].end, okEnd);
+});
+
 test("wbs: 削除と元に戻す", (MK) => {
   // 観点: タスク削除は件数へ反映され、undo で元の状態に完全復元できる
   // 入力: サンプル5件 → 葉 t2（index 1）を削除 → undoDelete()
