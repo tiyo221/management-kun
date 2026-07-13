@@ -96,7 +96,7 @@
    * @param {Object} [opts]
    * @param {string} [opts.fallback] - normalize が未知値を寄せる既定キー（省略時は先頭キー）
    * @param {Object.<string, string>} [opts.byLabel] - 「日本語ラベル→key」変換テーブル（モジュール固有語彙）
-   * @returns {{ STATUSES: Object[], label: function(string): string, normalize: function(*): string, counts: function(Array, function): Object }}
+   * @returns {{ label: function(string): string, normalize: function(*): string, counts: function(Array, function): Object }}
    */
   util.statusSet = function (statuses, opts) {
     const o = opts || {};
@@ -104,7 +104,6 @@
     const fallback = o.fallback != null ? o.fallback : (keys[0] || "");
     const byLabel = o.byLabel || null;
     return {
-      STATUSES: statuses,
       // key を表示ラベルへ。未知・空はキーをそのまま返す（従来の定型と同一）。
       label: function (key) {
         const s = statuses.find((x) => x.key === key);
