@@ -253,7 +253,7 @@
    */
   function loadSample() {
     const now = MK.util.nowISO();
-    const dayOffset = (n) => { const d = new Date(); d.setDate(d.getDate() + n); const p = (x) => String(x).padStart(2, "0"); return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()); };
+    const dayOffset = (n) => MK.util.addDays(MK.util.todayISO(), n);
     const pid = (name) => MK.projects.resolveOrCreate(name);
     const t = (title, status, opts) => Object.assign({ id: MK.util.uid("t"), title, notes: "", status, contexts: [], projectId: null, due: null, createdAt: now, updatedAt: now, completedAt: status === "done" ? now : null }, opts || {});
     save({ version: 1, tasks: [
