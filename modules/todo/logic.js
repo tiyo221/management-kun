@@ -41,8 +41,9 @@
     { key: "someday", label: "Someday" },
     { key: "done", label: "Done" },
   ];
-  // ラベル解決 / 件数集計の定型は共有ヘルパへ集約（Issue #188）。
-  const statusSet = MK.util.statusSet(STATUSES, { fallback: "inbox" });
+  // ラベル解決 / 件数集計の定型は共有ヘルパへ集約（Issue #188）。正規化は CSV 専用の
+  // statusFromCSV（key/ラベル両対応）を使うため normalize/fallback はここでは使わない。
+  const statusSet = MK.util.statusSet(STATUSES);
 
   // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→tasks 配列検証→既定返却、
   // save＝exportedAt 付与→store.set（返り値は保存成否）。仕様は MK.store.collection を参照。
