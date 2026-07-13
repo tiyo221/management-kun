@@ -126,7 +126,7 @@
   /**
    * 日付が逆転している（開始・終了ともに設定済みで開始 > 終了）かを返す純関数。
    * 開始か終了のどちらかが未設定（空文字）なら対象外（false）。TESTING.md §1 の必須境界「日付逆転」を
-   * 単一定義とし、update のガードと表示側で共有する（YYYY-MM-DD は文字列比較で日付順が一致する）。
+   * 単一定義とし、update のガードで用いる（YYYY-MM-DD は文字列比較で日付順が一致する）。
    * @param {string} start - 開始日（YYYY-MM-DD、未設定なら空文字）
    * @param {string} end - 終了日（YYYY-MM-DD、未設定なら空文字）
    * @returns {boolean} 開始 > 終了 なら true
