@@ -12,13 +12,11 @@
       schemaVersion: MK.store.SCHEMA_VERSION,
       exportedAt: MK.util.nowISO(),
       scope,
-      people: MK.people.all(),
-      projects: MK.projects.all(),
-      products: MK.products ? MK.products.all() : [],
-      allocations: MK.allocations ? MK.allocations.all() : [],
-      demands: MK.demands ? MK.demands.all() : [],
-      modules: {},
     };
+    // 共有マスタはレジストリ（#187）を1ループで舐めて詰める。未ロードのマスタは
+    // 登録されないので載らない（旧 `MK.products && …` ガードと同義）。
+    MK.masters.registry.forEach((m) => { env[m.key] = m.api.all(); });
+    env.modules = {};
     MK.moduleOrder.forEach((id) => {
       const mod = MK.modules[id];
       if (!mod || typeof mod.exportData !== "function") return;
@@ -34,11 +32,11 @@
         env.modules[id] = { version: 1, data: mod.exportData() };
       }
     });
-    if (scope === "people") { env.projects = []; env.products = []; env.allocations = []; env.demands = []; env.modules = {}; }
-    if (scope === "projects") { env.people = []; env.products = []; env.allocations = []; env.demands = []; env.modules = {}; }
-    if (scope === "products") { env.people = []; env.projects = []; env.allocations = []; env.demands = []; env.modules = {}; }
-    if (scope === "allocations") { env.people = []; env.projects = []; env.products = []; env.demands = []; env.modules = {}; }
-    if (scope === "demands") { env.people = []; env.projects = []; env.products = []; env.allocations = []; env.modules = {}; }
+    // マスタ単体 scope なら、自分以外のマスタを空配列へ落とし modules を外す（従来の5行ぶんを1ループに）。
+    if (MK.masters.registry.some((m) => m.key === scope)) {
+      MK.masters.registry.forEach((m) => { if (m.key !== scope) env[m.key] = []; });
+      env.modules = {};
+    }
     return env;
   };
 
@@ -65,26 +63,15 @@
     }
     mode = mode === "merge" ? "merge" : "replace";
 
-    if (Array.isArray(env.people) && env.people.length) {
-      if (mode === "replace") MK.people.replaceAll(env.people);
-      else env.people.forEach((m) => (MK.people.get(m.id) ? MK.people.update(m.id, m) : MK.people.create(m)));
-    }
-    if (Array.isArray(env.projects) && env.projects.length) {
-      if (mode === "replace") MK.projects.replaceAll(env.projects);
-      else env.projects.forEach((p) => (MK.projects.get(p.id) ? MK.projects.update(p.id, p) : MK.projects.create(p)));
-    }
-    if (MK.products && Array.isArray(env.products) && env.products.length) {
-      if (mode === "replace") MK.products.replaceAll(env.products);
-      else env.products.forEach((p) => (MK.products.get(p.id) ? MK.products.update(p.id, p) : MK.products.create(p)));
-    }
-    if (MK.allocations && Array.isArray(env.allocations) && env.allocations.length) {
-      if (mode === "replace") MK.allocations.replaceAll(env.allocations);
-      else env.allocations.forEach((a) => (MK.allocations.get(a.id) ? MK.allocations.update(a.id, a) : MK.allocations.create(a)));
-    }
-    if (MK.demands && Array.isArray(env.demands) && env.demands.length) {
-      if (mode === "replace") MK.demands.replaceAll(env.demands);
-      else env.demands.forEach((x) => (MK.demands.get(x.id) ? MK.demands.update(x.id, x) : MK.demands.create(x)));
-    }
+    // 共有マスタの取込はレジストリ（#187）× mode の1ループに畳む。people/projects が先頭に
+    // 並ぶ読込順のおかげで、後続マスタ／モジュールの名寄せ参照が成立する。未ロードのマスタは
+    // レジストリに載らないので取込対象から自然に外れる（旧 `MK.products && …` ガードと同義）。
+    MK.masters.registry.forEach((m) => {
+      const list = env[m.key];
+      if (!Array.isArray(list) || !list.length) return;
+      if (mode === "replace") m.api.replaceAll(list);
+      else list.forEach((it) => (m.api.get(it.id) ? m.api.update(it.id, it) : m.api.create(it)));
+    });
     Object.keys(env.modules || {}).forEach((id) => {
       const mod = MK.modules[id];
       if (!mod || typeof mod.importData !== "function") return;

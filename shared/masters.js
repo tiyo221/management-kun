@@ -9,6 +9,14 @@
   "use strict";
   const MK = window.MK;
 
+  // 登録済み共有マスタのレジストリ（Issue #187）。define() が呼ばれるたびに
+  // { key, api } を読込順（people→projects→products→allocations→demands）で積む。
+  // io.js のエンベロープ入出力はこの配列を1ループで舐めることで、マスタの手書き列挙
+  // （scope ゼロ化5行・取込5ブロック）を畳む。key は ns（＝エンベロープのプロパティ名）。
+  // 未ロードのマスタは define() されないので配列に載らず、取り回しから自然に外れる
+  // （旧 `MK.products && …` ガードと同じ「無ければ触らない」を担保する）。
+  const registry = [];
+
   /**
    * 共有マスタの CRUD 骨格を組み立てて返す。
    * @param {string} ns - ストア名前空間（`mk:<ns>:v1`。複数形小文字。例 "people"）。
@@ -107,8 +115,9 @@
       };
     }
 
+    registry.push({ key: ns, api });
     return api;
   }
 
-  MK.masters = { define };
+  MK.masters = { define, registry };
 })();
