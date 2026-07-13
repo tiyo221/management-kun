@@ -124,6 +124,15 @@
    */
   function hiddenFlags(tasks) { const hidden = new Array(tasks.length).fill(false); tasks.forEach((t, i) => { if (t.collapsed) { const [s, e] = childrenRange(tasks, i); for (let k = s; k < e; k++) hidden[k] = true; } }); return hidden; }
   /**
+   * 日付が逆転している（開始・終了ともに設定済みで開始 > 終了）かを返す純関数。
+   * 開始か終了のどちらかが未設定（空文字）なら対象外（false）。TESTING.md §1 の必須境界「日付逆転」を
+   * 単一定義とし、update のガードで用いる（YYYY-MM-DD は文字列比較で日付順が一致する）。
+   * @param {string} start - 開始日（YYYY-MM-DD、未設定なら空文字）
+   * @param {string} end - 終了日（YYYY-MM-DD、未設定なら空文字）
+   * @returns {boolean} 開始 > 終了 なら true
+   */
+  function datesInverted(start, end) { return !!(start && end && start > end); }
+  /**
    * 依存関係の追加が循環を生むかを判定する（純粋関数）。
    * @param {WbsTask[]} tasks - タスク配列
    * @param {number} currentId - 依存を追加する側（後続）のタスクID
@@ -215,13 +224,23 @@
    */
   function undoDelete() { if (!lastDeleted) return; const d = load(); d.tasks.splice(lastDeleted.index, 0, ...lastDeleted.block); lastDeleted = null; save(d); }
   /**
-   * 指定インデックスのタスクを部分更新して保存する。
+   * 指定インデックスのタスクを部分更新して保存する。start/end を含む patch を適用した結果が
+   * 日付逆転（開始 > 終了）になる場合は不正入力として弾き、保存せず false を返す（TESTING.md §1）。
+   * 日付は片方ずつ持ち込まれるため、範囲を広げる側（先に終了→開始 など）から編集すれば通る。
    * @param {number} idx - 対象タスクのインデックス
    * @param {Partial<WbsTask>} patch - 上書きするフィールド
-   * @returns {void}
-   * ※ store へ保存する副作用あり。
+   * @returns {boolean} 適用・保存したら true、日付逆転で拒否したら false
+   * ※ 適用時 store へ保存する副作用あり。
    */
-  function update(idx, patch) { const d = load(); Object.assign(d.tasks[idx], patch); save(d); }
+  function update(idx, patch) {
+    const d = load(); const t = d.tasks[idx];
+    if ("start" in patch || "end" in patch) {
+      const nextStart = "start" in patch ? patch.start : t.start;
+      const nextEnd = "end" in patch ? patch.end : t.end;
+      if (datesInverted(nextStart, nextEnd)) return false;
+    }
+    Object.assign(t, patch); save(d); return true;
+  }
   /**
    * 指定タスクの折りたたみ状態を反転して保存する。
    * @param {number} idx - 対象タスクのインデックス
@@ -440,5 +459,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, isOverdue, wbsNumbers, summaryOf, hiddenFlags, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, searchItems, summaryFor, eachProjectTasks, buildCSVRows, exportData, importData, loadSample };
+  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, isOverdue, wbsNumbers, summaryOf, hiddenFlags, datesInverted, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, searchItems, summaryFor, eachProjectTasks, buildCSVRows, exportData, importData, loadSample };
 })();
