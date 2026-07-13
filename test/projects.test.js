@@ -3,6 +3,8 @@
 
 test("projects: CSV 出力・取込（往復・名空スキップ・状態正規化）", (MK) => {
   // 観点: buildCSVRows のヘッダ、applyCSV が全置換・名空はスキップ・状態のキー/ラベル両対応
+  // 入力: 5行（active／archived／"アーカイブ"(ラベル)／"bogus"(未知)／名前空）を applyCSV
+  // 期待: 取込 4件（名前空はスキップ）、ラベルは archived に、未知は active に正規化、ヘッダは既定列順
   const P = MK.projects;
   const rows = [
     ["プロジェクト名", "表示色", "状態", "備考"],
@@ -24,6 +26,7 @@ test("projects: CSV 出力・取込（往復・名空スキップ・状態正規
 
 test("projects: CSV round-trip（出力→取込でフィールドが保たれる）", (MK) => {
   // 観点: buildCSVRows → applyCSV で主要フィールドが往復する
+  // 自明: 出力した行をそのまま取り込み、color/status/note が保たれるだけの素朴なラウンドトリップ
   const P = MK.projects;
   P.create({ name: "往復PJ", color: "#abcdef", status: "archived", note: "メモ" });
   const rows = P.buildCSVRows();
