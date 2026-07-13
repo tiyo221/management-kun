@@ -57,6 +57,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 | `applyCSV(rows)` | `number` | CSV 取込（下記 C の名寄せ upsert）・取込件数を返す |
 
 - status を持つマスタは加えて **`STATUSES` / `normalize<Enum>()` / `counts()`**（`all` ＋各 key の件数マップ）を提供する。
+- 上表の同型メソッド（`data` / `persist` / `all` / `get` / `create` / `update` / `remove` / `replaceAll`、および名寄せ `resolve` / `resolveOrCreate`）は**共有ファクトリ `MK.masters.define(ns, opts)`**（[`shared/masters.js`](../shared/masters.js)・Issue #185）が供給し、各マスタファイルは固有部分だけを足す。`opts` は `collKey`（ルート配列名）・`prefix`（id 採番）・`defaults`（既定属性。関数なら都度評価）・`domain`（既定 `ns`）・保存前フック `onCreate(item)` / `onUpdate(item, patch)`（正規化・timestamps を差し込む）・`onReplace(item)`（全置換時の整形）・`resolvable`（`name` を持つマスタ＝people/projects/products のみ名寄せを生やす。参照で成立する allocations/demands には生やさない）。`store.collection`（#139）・`renderMaster`（#138）と同じ「同型は共通化・固有だけ差し込む」方針の延長。
 
 #### C. CSV 取込は「名寄せ upsert」を標準とする
 - `applyCSV(rows)` は行ごとに `name` を正規化キーで既存と照合し、**一致すれば id を保ったまま更新／なければ新規作成**する（§8.3 / §8.4）。`name` が空の行はスキップ。

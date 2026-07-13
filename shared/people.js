@@ -2,67 +2,16 @@
 (function () {
   "use strict";
   const MK = window.MK;
-  const NS = "people";
 
-  function data() {
-    const d = MK.store.read(NS);
-    if (!d || !Array.isArray(d.members)) return { version: 1, members: [] };
-    return d;
-  }
-  function persist(d) {
-    MK.store.write(NS, d);
-    MK.bus.emit("masters:changed", { domain: "people" });
-  }
+  // CRUD 骨格・名寄せは共通ファクトリから供給し（Issue #185・spec §4.4.1）、CSV だけ足す。
+  const people = MK.masters.define("people", {
+    collKey: "members",
+    prefix: "m",
+    resolvable: true,
+    defaults: { name: "", role: "", color: "", note: "", active: true },
+  });
 
-  const people = {
-    all() { return data().members.slice(); },
-    get(id) { return data().members.find((m) => m.id === id) || null; },
-
-    create(attrs) {
-      const d = data();
-      const m = Object.assign(
-        { id: MK.util.uid("m"), name: "", role: "", color: "", note: "", active: true },
-        attrs || {}
-      );
-      if (!m.id) m.id = MK.util.uid("m");
-      d.members.push(m);
-      persist(d);
-      return m;
-    },
-
-    update(id, patch) {
-      const d = data();
-      const m = d.members.find((x) => x.id === id);
-      if (!m) return null;
-      Object.assign(m, patch);
-      persist(d);
-      return m;
-    },
-
-    remove(id) {
-      const d = data();
-      d.members = d.members.filter((m) => m.id !== id);
-      persist(d);
-    },
-
-    // 名寄せ: 照合キー完全一致の既存メンバーを返す（spec §8.3）
-    resolve(name) {
-      const key = MK.util.normalizeKey(name);
-      if (!key) return null;
-      return data().members.find((m) => MK.util.normalizeKey(m.name) === key) || null;
-    },
-
-    // MVP: 完全一致がなければ新規作成して id を返す（spec §8.4 自動作成）
-    resolveOrCreate(name) {
-      const found = this.resolve(name);
-      if (found) return found.id;
-      return this.create({ name: String(name).trim() }).id;
-    },
-
-    replaceAll(members) {
-      persist({ version: 1, members: Array.isArray(members) ? members : [] });
-    },
-
+  Object.assign(people, {
     // ---- CSV（DOM 非依存の純整形/取込。ファイル選択・DL はシェルの view 側）----
     /**
      * メンバーをCSV行データ（ヘッダ＋各行）に整形する。列は spec §4.6.1（人）に対応。
@@ -96,7 +45,7 @@
       this.replaceAll(list);
       return list.length;
     },
-  };
+  });
 
   MK.people = people;
 })();

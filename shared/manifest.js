@@ -56,7 +56,7 @@
   // （spec §1.5）。共有マスタ（products/demands 等）は UI（masters 設定・該当モジュール）が無ければ
   // 作成経路が無く、配布物で参照されないだけで無害。土台を絞る仕組みは必要になるまで作らない（YAGNI）。
   const SHARED = [
-    "core", "store", "scope", "io",
+    "core", "store", "scope", "io", "masters",
     "people", "projects", "products", "search", "allocations", "demands",
     "ui", "sample",
   ];

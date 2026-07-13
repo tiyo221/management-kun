@@ -5,7 +5,6 @@
 (function () {
   "use strict";
   const MK = window.MK;
-  const NS = "products";
 
   /**
    * プロダクトの状態（ステータス）定義。key＝内部値、label＝表示名。表示順もこの配列順に従う。
@@ -61,29 +60,43 @@
     return s || null;
   }
 
-  function data() {
-    const d = MK.store.read(NS);
-    if (!d || !Array.isArray(d.products)) return { version: 1, products: [] };
-    return d;
-  }
-  function persist(d) {
-    MK.store.write(NS, d);
-    MK.bus.emit("masters:changed", { domain: "products" });
-  }
+  // CRUD 骨格・名寄せ（resolve/resolveOrCreate）は共通ファクトリから供給する（Issue #185・spec §4.4.1）。
+  // products 固有の正規化（status/projectIds/ownerId）と createdAt/updatedAt は保存前フックで差し込み、
+  // counts/relatedProjects/ownerPerson/移行/CSV は下で Object.assign する。id 体系は `prod_<epoch>_<rand>`
+  // （§4.7）で、将来 Product 次元のエンティティ供給元（scope.master）・`mk:module:<id>:<productId>:v1` の
+  // targetId になりうる。
+  const products = MK.masters.define("products", {
+    collKey: "products",
+    prefix: "prod",
+    resolvable: true,
+    // createdAt/updatedAt は生成時刻に依存するため関数で都度評価する。
+    defaults: function () {
+      const now = MK.util.nowISO();
+      return { name: "", status: "planned", owner: "", ownerId: null, summary: "", repo: "", tags: [], projectIds: [], createdAt: now, updatedAt: now };
+    },
+    // create 時の正規化（status/projectIds/ownerId を既定へ寄せる）。
+    onCreate: function (p) {
+      p.status = normalizeStatus(p.status);
+      p.projectIds = normalizeProjectIds(p.projectIds);
+      p.ownerId = normalizeOwnerId(p.ownerId);
+    },
+    // update 時は patch に含まれるキーだけ正規化し、updatedAt を現在時刻で更新する。
+    onUpdate: function (p, patch) {
+      if (Object.prototype.hasOwnProperty.call(patch, "status")) p.status = normalizeStatus(patch.status);
+      if (Object.prototype.hasOwnProperty.call(patch, "projectIds")) p.projectIds = normalizeProjectIds(patch.projectIds);
+      if (Object.prototype.hasOwnProperty.call(patch, "ownerId")) p.ownerId = normalizeOwnerId(patch.ownerId);
+      p.updatedAt = MK.util.nowISO();
+    },
+    // replaceAll（バックアップ復元・CSV 取込）時は projectIds/ownerId のみ正規化する（従来どおり）。
+    onReplace: function (p) {
+      return Object.assign({}, p, { projectIds: normalizeProjectIds(p.projectIds), ownerId: normalizeOwnerId(p.ownerId) });
+    },
+  });
 
-  /**
-   * プロダクトマスタ API。将来 Product 次元のエンティティ供給元（scope.master）にもなる。
-   * id 体系は `prod_<epoch>_<rand>`（§4.7）で、将来 `mk:module:<id>:<productId>:v1` の targetId になりうる。
-   */
-  const products = {
+  Object.assign(products, {
     STATUSES,
     normalizeStatus,
     normalizeProjectIds,
-
-    /** @returns {object[]} 全プロダクトの複製配列 */
-    all() { return data().products.slice(); },
-    /** @param {string} id @returns {object|null} 一致するプロダクト、無ければ null */
-    get(id) { return data().products.find((p) => p.id === id) || null; },
 
     /**
      * ステータス別および全体の件数を集計する。
@@ -92,97 +105,8 @@
     counts() {
       const c = { all: 0 };
       STATUSES.forEach((s) => (c[s.key] = 0));
-      data().products.forEach((p) => { c.all++; c[p.status] = (c[p.status] || 0) + 1; });
+      this.all().forEach((p) => { c.all++; c[p.status] = (c[p.status] || 0) + 1; });
       return c;
-    },
-
-    /**
-     * プロダクトを1件作成して保存する。status は正規化する。
-     * @param {Object} [attrs] - 上書きする初期属性
-     * @returns {object} 作成したプロダクト
-     * ※ store へ保存する副作用あり。
-     */
-    create(attrs) {
-      const d = data();
-      const now = MK.util.nowISO();
-      const p = Object.assign(
-        { id: MK.util.uid("prod"), name: "", status: "planned", owner: "", ownerId: null, summary: "", repo: "", tags: [], projectIds: [], createdAt: now, updatedAt: now },
-        attrs || {}
-      );
-      if (!p.id) p.id = MK.util.uid("prod");
-      p.status = normalizeStatus(p.status);
-      p.projectIds = normalizeProjectIds(p.projectIds);
-      p.ownerId = normalizeOwnerId(p.ownerId);
-      d.products.push(p);
-      persist(d);
-      return p;
-    },
-
-    /**
-     * 指定プロダクトを部分更新して保存する（updatedAt を現在時刻で更新、status は正規化）。
-     * @param {string} id - 対象 id
-     * @param {Object} patch - 上書きするフィールド
-     * @returns {object|null} 更新後のプロダクト、該当なしなら null
-     * ※ store へ保存する副作用あり。
-     */
-    update(id, patch) {
-      const d = data();
-      const p = d.products.find((x) => x.id === id);
-      if (!p) return null;
-      Object.assign(p, patch);
-      if (Object.prototype.hasOwnProperty.call(patch, "status")) p.status = normalizeStatus(patch.status);
-      if (Object.prototype.hasOwnProperty.call(patch, "projectIds")) p.projectIds = normalizeProjectIds(patch.projectIds);
-      if (Object.prototype.hasOwnProperty.call(patch, "ownerId")) p.ownerId = normalizeOwnerId(patch.ownerId);
-      p.updatedAt = MK.util.nowISO();
-      persist(d);
-      return p;
-    },
-
-    /**
-     * 指定プロダクトを削除して保存する。
-     * @param {string} id - 対象 id
-     * @returns {void}
-     * ※ store へ保存する副作用あり。
-     */
-    remove(id) {
-      const d = data();
-      d.products = d.products.filter((p) => p.id !== id);
-      persist(d);
-    },
-
-    /**
-     * 名寄せ（spec §8.3）。プロダクト名の正規化キー完全一致で引く。
-     * @param {string} name
-     * @returns {object|null}
-     */
-    resolve(name) {
-      const key = MK.util.normalizeKey(name);
-      if (!key) return null;
-      return data().products.find((p) => MK.util.normalizeKey(p.name) === key) || null;
-    },
-    /**
-     * 完全一致がなければ新規作成して id を返す（spec §8.4）。将来 Product 次元の対象解決に使う。
-     * @param {string} name
-     * @returns {string|null} プロダクト id（空名は null）
-     */
-    resolveOrCreate(name) {
-      if (!name || !String(name).trim()) return null;
-      const found = this.resolve(name);
-      if (found) return found.id;
-      return this.create({ name: String(name).trim() }).id;
-    },
-
-    /**
-     * 全プロダクトを置き換えて保存する（バックアップ復元・CSV 取込用）。
-     * @param {object[]} list
-     * @returns {void}
-     * ※ store へ保存する副作用あり（全置換）。
-     */
-    replaceAll(list) {
-      const products = (Array.isArray(list) ? list : []).map((p) => Object.assign({}, p, {
-        projectIds: normalizeProjectIds(p.projectIds), ownerId: normalizeOwnerId(p.ownerId),
-      }));
-      persist({ version: 1, products: products });
     },
 
     /**
@@ -211,14 +135,16 @@
      * ※ store へ保存する副作用あり（対象が1件以上ある場合のみ）。
      */
     migrateOwnerToPeople() {
-      const d = data();
+      const list = this.all();
       let moved = 0;
-      d.products.forEach((p) => {
+      list.forEach((p) => {
         if (p.ownerId || !p.owner || !String(p.owner).trim()) return;
         p.ownerId = MK.people.resolveOrCreate(p.owner);
         moved++;
       });
-      if (moved) persist(d);
+      // 保存＋masters:changed 発火は replaceAll に一任する。旧 persist と異なり onReplace
+      // （projectIds/ownerId 正規化）が追加で走るが、格納済みデータは常に正規化済みのため冪等（実害なし）。
+      if (moved) this.replaceAll(list);
       return moved;
     },
 
@@ -267,7 +193,7 @@
       this.replaceAll(list);
       return list.length;
     },
-  };
+  });
 
   MK.products = products;
 })();
