@@ -41,6 +41,8 @@
     { key: "someday", label: "Someday" },
     { key: "done", label: "Done" },
   ];
+  // ラベル解決 / 件数集計の定型は共有ヘルパへ集約（Issue #188）。
+  const statusSet = MK.util.statusSet(STATUSES, { fallback: "inbox" });
 
   // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→tasks 配列検証→既定返却、
   // save＝exportedAt 付与→store.set（返り値は保存成否）。仕様は MK.store.collection を参照。
@@ -56,10 +58,7 @@
    * @returns {Object.<string, number>} `all` と各ステータスキーをキーに持つ件数マップ
    */
   function counts() {
-    const c = { all: 0 };
-    STATUSES.forEach((s) => (c[s.key] = 0));
-    tasks().forEach((t) => { c.all++; c[t.status] = (c[t.status] || 0) + 1; });
-    return c;
+    return statusSet.counts(tasks(), (t) => t.status);
   }
 
   /**
@@ -190,7 +189,7 @@
    * @returns {string[][]} 2次元配列の CSV 行データ
    */
   function buildCSVRows() {
-    const label = (key) => { const s = STATUSES.find((x) => x.key === key); return s ? s.label : key; };
+    const label = statusSet.label;
     const rows = [["タイトル", "ステータス", "プロジェクト", "コンテキスト", "期限", "メモ"]];
     tasks().forEach((t) => rows.push([
       t.title, label(t.status), projectNameOf(t.projectId),
@@ -310,7 +309,7 @@
    * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
    */
   function searchItems() {
-    const label = (key) => { const s = STATUSES.find((x) => x.key === key); return s ? s.label : key; };
+    const label = statusSet.label;
     return tasks().filter((t) => t.status !== "done").map((t) => {
       const pj = projectNameOf(t.projectId);
       return { id: t.id, label: t.title,

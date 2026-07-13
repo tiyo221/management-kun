@@ -38,7 +38,12 @@
     { key: "investigating", label: "調査中" },
     { key: "resolved", label: "わかった" },
   ];
-  const STATUS_KEYS = STATUSES.map((s) => s.key);
+  // ラベル解決 / 正規化 / 件数集計の定型は共有ヘルパへ集約（Issue #188）。日本語ラベル→key の
+  // 変換テーブル（モジュール固有語彙）は byLabel で維持する。
+  const statusSet = MK.util.statusSet(STATUSES, {
+    fallback: "open",
+    byLabel: { "未解決": "open", "調査中": "investigating", "わかった": "resolved" },
+  });
 
   /**
    * ステータスを正規化する（未知・未指定は "open" に寄せる）。key（open 等）または
@@ -47,11 +52,7 @@
    * @returns {string} 正規化したステータスキー
    */
   function normalizeStatus(status) {
-    const s = String(status == null ? "" : status).trim();
-    const byLabel = { "未解決": "open", "調査中": "investigating", "わかった": "resolved" };
-    if (byLabel[s]) return byLabel[s];
-    const k = s.toLowerCase();
-    return STATUS_KEYS.indexOf(k) >= 0 ? k : "open";
+    return statusSet.normalize(status);
   }
 
   // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→items 配列検証→既定返却、
@@ -80,13 +81,11 @@
    * @returns {Object.<string, number>} `all` / 各ステータスキー / `knowledge` を持つ件数マップ
    */
   function counts() {
-    const c = { all: 0, knowledge: 0 };
-    STATUSES.forEach((s) => (c[s.key] = 0));
-    items().forEach((it) => {
-      c.all++;
-      c[it.status] = (c[it.status] || 0) + 1;
-      if (isKnowledge(it)) c.knowledge++;
-    });
+    // all ＋ 各ステータスキーは共有ヘルパで集計し、モジュール固有の追加キー knowledge は呼び出し側で足す。
+    const list = items();
+    const c = statusSet.counts(list, (it) => it.status);
+    c.knowledge = 0;
+    list.forEach((it) => { if (isKnowledge(it)) c.knowledge++; });
     return c;
   }
 
@@ -295,7 +294,7 @@
    * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
    */
   function searchItems() {
-    const label = (key) => { const s = STATUSES.find((x) => x.key === key); return s ? s.label : key; };
+    const label = statusSet.label;
     return items().filter((it) => it.status !== "resolved" || isKnowledge(it)).map((it) => ({
       id: it.id, label: it.title, sub: isKnowledge(it) ? "ナレッジ" : label(it.status),
       keywords: [it.detail, it.resolvedNote].concat(it.tags || []).filter(Boolean),

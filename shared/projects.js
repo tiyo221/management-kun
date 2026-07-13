@@ -15,14 +15,16 @@
     { key: "archived", label: "アーカイブ" },
   ];
 
+  // ラベル解決の定型は共有ヘルパへ集約（Issue #188）。
+  const statusSet = MK.util.statusSet(STATUSES);
+
   /**
    * status キーを表示ラベルへ変換する純関数（未知・空はキーをそのまま返す）。
    * @param {string} key - ステータスキー
    * @returns {string} 表示ラベル
    */
   function statusLabel(key) {
-    const s = STATUSES.find((x) => x.key === key);
-    return s ? s.label : (key || "");
+    return statusSet.label(key) || "";
   }
 
   // CRUD 骨格・名寄せは共通ファクトリから供給し（Issue #185・spec §4.4.1）、STATUSES と CSV だけ足す。

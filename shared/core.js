@@ -88,6 +88,49 @@
       .toLowerCase();
   };
 
+  /**
+   * ステータス定義（`[{ key, label }]`）から定型メソッドを束ねた小ヘルパを作る（Issue #188）。
+   * 複数モジュール／マスタで反復していた「ラベル解決 / 正規化 / 件数集計」の共通部分だけを集約する。
+   * counts の追加キー（questions の knowledge 等）や productId 絞り込みは呼び出し側で足す。
+   * @param {{key: string, label: string}[]} statuses - 表示順を兼ねたステータス定義配列
+   * @param {Object} [opts]
+   * @param {string} [opts.fallback] - normalize が未知値を寄せる既定キー（省略時は先頭キー）
+   * @param {Object.<string, string>} [opts.byLabel] - 「日本語ラベル→key」変換テーブル（モジュール固有語彙）
+   * @returns {{ STATUSES: Object[], label: function(string): string, normalize: function(*): string, counts: function(Array, function): Object }}
+   */
+  util.statusSet = function (statuses, opts) {
+    const o = opts || {};
+    const keys = statuses.map((s) => s.key);
+    const fallback = o.fallback != null ? o.fallback : (keys[0] || "");
+    const byLabel = o.byLabel || null;
+    return {
+      STATUSES: statuses,
+      // key を表示ラベルへ。未知・空はキーをそのまま返す（従来の定型と同一）。
+      label: function (key) {
+        const s = statuses.find((x) => x.key === key);
+        return s ? s.label : key;
+      },
+      // key または（byLabel があれば）日本語ラベルを寛容に解釈し、未知・未指定は fallback へ寄せる。
+      normalize: function (v) {
+        const raw = String(v == null ? "" : v).trim();
+        if (byLabel && byLabel[raw]) return byLabel[raw];
+        const k = raw.toLowerCase();
+        return keys.indexOf(k) >= 0 ? k : fallback;
+      },
+      // `all` ＋ 各 key を 0 初期化して集計。getKey は要素からステータスキーを取り出す関数。
+      counts: function (items, getKey) {
+        const c = { all: 0 };
+        statuses.forEach((s) => (c[s.key] = 0));
+        (items || []).forEach((it) => {
+          c.all++;
+          const k = getKey(it);
+          c[k] = (c[k] || 0) + 1;
+        });
+        return c;
+      },
+    };
+  };
+
   // HTML エスケープ（XSS 防止・spec §10.1）
   util.escapeHtml = function (s) {
     return String(s == null ? "" : s)

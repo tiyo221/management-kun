@@ -18,7 +18,8 @@
     { key: "maintenance", label: "保守（Maintenance）" },
     { key: "sunset", label: "終息（Sunset）" },
   ];
-  const STATUS_KEYS = STATUSES.map((s) => s.key);
+  // ラベル解決 / 正規化 / 件数集計の定型は共有ヘルパへ集約（Issue #188）。
+  const statusSet = MK.util.statusSet(STATUSES, { fallback: "planned" });
 
   /**
    * status を正規化する（未知・未指定は "planned" に寄せる）。
@@ -26,8 +27,7 @@
    * @returns {string} 正規化したステータスキー
    */
   function normalizeStatus(status) {
-    const s = String(status == null ? "" : status).trim().toLowerCase();
-    return STATUS_KEYS.indexOf(s) >= 0 ? s : "planned";
+    return statusSet.normalize(status);
   }
 
   /**
@@ -103,10 +103,7 @@
      * @returns {Object.<string, number>} `all` と各ステータスキーの件数マップ
      */
     counts() {
-      const c = { all: 0 };
-      STATUSES.forEach((s) => (c[s.key] = 0));
-      this.all().forEach((p) => { c.all++; c[p.status] = (c[p.status] || 0) + 1; });
-      return c;
+      return statusSet.counts(this.all(), (p) => p.status);
     },
 
     /**
