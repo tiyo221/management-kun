@@ -7,7 +7,6 @@
 (function () {
   "use strict";
   const MK = window.MK;
-  const NS = "demands";
 
   /**
    * 共有需要1件。マネージャがトップダウンで見積もる粗い需要事実（§3.7.5）。
@@ -24,52 +23,17 @@
    * @property {string} note - 備考
    */
 
-  function data() {
-    const d = MK.store.read(NS);
-    if (!d || !Array.isArray(d.demands)) return { version: 1, demands: [] };
-    return d;
-  }
-  function persist(d) {
-    MK.store.write(NS, d);
-    MK.bus.emit("masters:changed", { domain: "demands" });
-  }
+  // CRUD 骨格は共通ファクトリから供給し（Issue #185・spec §4.4.1）、固有の絞り込み・集計だけ足す。
+  // targetId 参照で成立するマスタのため名寄せ（resolvable）は生やさない（§4.4 注記）。
+  const demands = MK.masters.define("demands", {
+    collKey: "demands",
+    prefix: "d",
+    defaults: { targetId: null, dim: "project", startDate: "", endDate: "", requiredPercent: 100, role: "", note: "" },
+  });
 
-  const demands = {
-    all() { return data().demands.slice(); },
-    get(id) { return data().demands.find((x) => x.id === id) || null; },
+  Object.assign(demands, {
     /** 指定の器（Project 等）に紐づく需要一覧。 */
-    forTarget(targetId) { return data().demands.filter((x) => x.targetId === targetId); },
-
-    create(attrs) {
-      const d = data();
-      const x = Object.assign(
-        { id: MK.util.uid("d"), targetId: null, dim: "project", startDate: "", endDate: "", requiredPercent: 100, role: "", note: "" },
-        attrs || {}
-      );
-      if (!x.id) x.id = MK.util.uid("d");
-      d.demands.push(x);
-      persist(d);
-      return x;
-    },
-
-    update(id, patch) {
-      const d = data();
-      const x = d.demands.find((y) => y.id === id);
-      if (!x) return null;
-      Object.assign(x, patch);
-      persist(d);
-      return x;
-    },
-
-    remove(id) {
-      const d = data();
-      d.demands = d.demands.filter((x) => x.id !== id);
-      persist(d);
-    },
-
-    replaceAll(list) {
-      persist({ version: 1, demands: Array.isArray(list) ? list : [] });
-    },
+    forTarget(targetId) { return this.all().filter((x) => x.targetId === targetId); },
 
     /**
      * 指定の器・指定日の必要率を合算する純関数（同一器に期間の重なる複数需要があれば合算）。
@@ -101,7 +65,7 @@
       });
       return s;
     },
-  };
+  });
 
   MK.demands = demands;
 })();

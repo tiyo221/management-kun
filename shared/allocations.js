@@ -6,7 +6,6 @@
 (function () {
   "use strict";
   const MK = window.MK;
-  const NS = "allocations";
 
   /**
    * 共有アロケーション1件。マネージャがトップダウンで planning する粗い計画事実（spec §3.7.5）。
@@ -23,54 +22,19 @@
    * @property {string} note - 備考
    */
 
-  function data() {
-    const d = MK.store.read(NS);
-    if (!d || !Array.isArray(d.allocations)) return { version: 1, allocations: [] };
-    return d;
-  }
-  function persist(d) {
-    MK.store.write(NS, d);
-    MK.bus.emit("masters:changed", { domain: "allocations" });
-  }
+  // CRUD 骨格は共通ファクトリから供給し（Issue #185・spec §4.4.1）、固有の絞り込み・集計・移行だけ足す。
+  // targetId/memberId 参照で成立するマスタのため名寄せ（resolvable）は生やさない（§4.4 注記）。
+  const allocations = MK.masters.define("allocations", {
+    collKey: "allocations",
+    prefix: "a",
+    defaults: { memberId: null, targetId: null, dim: "project", startDate: "", endDate: "", percent: 50, note: "" },
+  });
 
-  const allocations = {
-    all() { return data().allocations.slice(); },
-    get(id) { return data().allocations.find((a) => a.id === id) || null; },
+  Object.assign(allocations, {
     /** 指定メンバーのアロケーション一覧。 */
-    of(mid) { return data().allocations.filter((a) => a.memberId === mid); },
+    of(mid) { return this.all().filter((a) => a.memberId === mid); },
     /** 指定の器（Project 等）に紐づくアロケーション一覧。 */
-    forTarget(targetId) { return data().allocations.filter((a) => a.targetId === targetId); },
-
-    create(attrs) {
-      const d = data();
-      const a = Object.assign(
-        { id: MK.util.uid("a"), memberId: null, targetId: null, dim: "project", startDate: "", endDate: "", percent: 50, note: "" },
-        attrs || {}
-      );
-      if (!a.id) a.id = MK.util.uid("a");
-      d.allocations.push(a);
-      persist(d);
-      return a;
-    },
-
-    update(id, patch) {
-      const d = data();
-      const a = d.allocations.find((x) => x.id === id);
-      if (!a) return null;
-      Object.assign(a, patch);
-      persist(d);
-      return a;
-    },
-
-    remove(id) {
-      const d = data();
-      d.allocations = d.allocations.filter((a) => a.id !== id);
-      persist(d);
-    },
-
-    replaceAll(list) {
-      persist({ version: 1, allocations: Array.isArray(list) ? list : [] });
-    },
+    forTarget(targetId) { return this.all().filter((a) => a.targetId === targetId); },
 
     /**
      * 指定メンバー・指定日の合計割当率を算出する純関数（器を跨いで percent を合算）。
@@ -102,16 +66,16 @@
       if (!w) return 0;
       let moved = 0;
       if (Array.isArray(w.allocations) && w.allocations.length) {
-        const d = data();
-        const existing = {}; d.allocations.forEach((a) => (existing[a.id] = true));
-        w.allocations.forEach((a) => { if (a && a.id && !existing[a.id]) { d.allocations.push(a); moved++; } });
-        persist(d);
+        const cur = this.all();
+        const existing = {}; cur.forEach((a) => (existing[a.id] = true));
+        w.allocations.forEach((a) => { if (a && a.id && !existing[a.id]) { cur.push(a); moved++; } });
+        this.replaceAll(cur); // 保存＋masters:changed 発火は replaceAll に一任（従来の persist と等価）
       }
       // 吸い上げ後は退役した workload 名前空間をキーごと破棄する（残骸を残さない・冪等）。
       MK.store.remove("module:workload");
       return moved;
     },
-  };
+  });
 
   MK.allocations = allocations;
 })();

@@ -2,7 +2,6 @@
 (function () {
   "use strict";
   const MK = window.MK;
-  const NS = "projects";
 
   /**
    * プロジェクトの状態（ステータス）定義。key＝内部値、label＝表示名。表示順もこの配列順に従う。
@@ -26,67 +25,17 @@
     return s ? s.label : (key || "");
   }
 
-  function data() {
-    const d = MK.store.read(NS);
-    if (!d || !Array.isArray(d.projects)) return { version: 1, projects: [] };
-    return d;
-  }
-  function persist(d) {
-    MK.store.write(NS, d);
-    MK.bus.emit("masters:changed", { domain: "projects" });
-  }
+  // CRUD 骨格・名寄せは共通ファクトリから供給し（Issue #185・spec §4.4.1）、STATUSES と CSV だけ足す。
+  const projects = MK.masters.define("projects", {
+    collKey: "projects",
+    prefix: "p",
+    resolvable: true,
+    defaults: { name: "", color: "", status: "active", note: "" },
+  });
 
-  const projects = {
+  Object.assign(projects, {
     STATUSES,
     statusLabel,
-    all() { return data().projects.slice(); },
-    get(id) { return data().projects.find((p) => p.id === id) || null; },
-
-    create(attrs) {
-      const d = data();
-      const p = Object.assign(
-        { id: MK.util.uid("p"), name: "", color: "", status: "active", note: "" },
-        attrs || {}
-      );
-      if (!p.id) p.id = MK.util.uid("p");
-      d.projects.push(p);
-      persist(d);
-      return p;
-    },
-
-    update(id, patch) {
-      const d = data();
-      const p = d.projects.find((x) => x.id === id);
-      if (!p) return null;
-      Object.assign(p, patch);
-      persist(d);
-      return p;
-    },
-
-    remove(id) {
-      const d = data();
-      d.projects = d.projects.filter((p) => p.id !== id);
-      persist(d);
-    },
-
-    // 名寄せ（spec §8.3）
-    resolve(name) {
-      const key = MK.util.normalizeKey(name);
-      if (!key) return null;
-      return data().projects.find((p) => MK.util.normalizeKey(p.name) === key) || null;
-    },
-
-    // MVP: 完全一致がなければ新規作成して id を返す（spec §8.4）
-    resolveOrCreate(name) {
-      if (!name || !String(name).trim()) return null;
-      const found = this.resolve(name);
-      if (found) return found.id;
-      return this.create({ name: String(name).trim() }).id;
-    },
-
-    replaceAll(list) {
-      persist({ version: 1, projects: Array.isArray(list) ? list : [] });
-    },
 
     // ---- CSV（DOM 非依存の純整形/取込。ファイル選択・DL はシェルの view 側）----
     /**
@@ -120,7 +69,7 @@
       this.replaceAll(list);
       return list.length;
     },
-  };
+  });
 
   MK.projects = projects;
 })();
