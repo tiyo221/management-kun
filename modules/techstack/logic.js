@@ -40,7 +40,8 @@
     { key: "assess", label: "評価（Assess）" },
     { key: "hold", label: "保留（Hold）" },
   ];
-  const RING_KEYS = RINGS.map((r) => r.key);
+  // ラベル解決 / 正規化 / 件数集計の定型は共有ヘルパへ集約（Issue #188。ステータスと同型の「リング」）。
+  const ringSet = MK.util.statusSet(RINGS, { fallback: "assess" });
 
   /** 見直し期限が「接近」とみなされる残日数の閾値（この日数以内で soon）。 */
   const DEADLINE_SOON_DAYS = 90;
@@ -60,8 +61,7 @@
    * @returns {string} 正規化したリングキー
    */
   function normalizeRing(ring) {
-    const r = String(ring == null ? "" : ring).trim().toLowerCase();
-    return RING_KEYS.indexOf(r) >= 0 ? r : "assess";
+    return ringSet.normalize(ring);
   }
 
   /**
@@ -111,10 +111,7 @@
    * @returns {Object.<string, number>} `all` と各リングキーをキーに持つ件数マップ
    */
   function counts() {
-    const c = { all: 0 };
-    RINGS.forEach((r) => (c[r.key] = 0));
-    items().forEach((it) => { c.all++; c[it.ring] = (c[it.ring] || 0) + 1; });
-    return c;
+    return ringSet.counts(items(), (it) => it.ring);
   }
 
   /**
@@ -303,7 +300,7 @@
    * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
    */
   function searchItems() {
-    const label = (key) => { const r = RINGS.find((x) => x.key === key); return r ? r.label : key; };
+    const label = ringSet.label;
     return items().map((it) => ({
       id: it.id, label: it.name,
       sub: [label(it.ring), it.category].filter(Boolean).join(" · "),

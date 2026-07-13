@@ -40,7 +40,8 @@
     { key: "done", label: "完了（Done）" },
     { key: "cancelled", label: "中止（Cancelled）" },
   ];
-  const STATUS_KEYS = STATUSES.map((s) => s.key);
+  // ラベル解決 / 正規化 / 件数集計の定型は共有ヘルパへ集約（Issue #188）。
+  const statusSet = MK.util.statusSet(STATUSES, { fallback: "planned" });
 
   // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→releases 配列検証→既定返却、
   // save＝exportedAt 付与→store.set（返り値は保存成否）。仕様は MK.store.collection を参照。
@@ -57,8 +58,7 @@
    * @returns {string} 正規化したステータスキー
    */
   function normalizeStatus(status) {
-    const s = String(status == null ? "" : status).trim().toLowerCase();
-    return STATUS_KEYS.indexOf(s) >= 0 ? s : "planned";
+    return statusSet.normalize(status);
   }
 
   /**
@@ -96,14 +96,11 @@
    * @returns {Object.<string, number>} `all` と各ステータスキーの件数マップ
    */
   function counts(productId) {
-    const c = { all: 0 };
-    STATUSES.forEach((s) => (c[s.key] = 0));
-    releases().forEach((r) => {
-      if (productId && productId !== "all" && r.productId !== productId) return;
-      c.all++;
-      c[r.status] = (c[r.status] || 0) + 1;
-    });
-    return c;
+    // productId 絞り込みは呼び出し側の関心なので、集計前にリストを絞ってから共有ヘルパへ渡す。
+    const list = productId && productId !== "all"
+      ? releases().filter((r) => r.productId === productId)
+      : releases();
+    return statusSet.counts(list, (r) => r.status);
   }
 
   /**
@@ -245,7 +242,7 @@
    * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
    */
   function searchItems() {
-    const label = (key) => { const s = STATUSES.find((x) => x.key === key); return s ? s.label : key; };
+    const label = statusSet.label;
     return releases().filter((r) => r.status !== "cancelled").map((r) => ({
       id: r.id, label: r.version,
       sub: [productName(r), label(r.status)].filter(Boolean).join(" · "),
