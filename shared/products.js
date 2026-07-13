@@ -142,7 +142,9 @@
         p.ownerId = MK.people.resolveOrCreate(p.owner);
         moved++;
       });
-      if (moved) this.replaceAll(list); // 保存＋masters:changed 発火は replaceAll に一任
+      // 保存＋masters:changed 発火は replaceAll に一任する。旧 persist と異なり onReplace
+      // （projectIds/ownerId 正規化）が追加で走るが、格納済みデータは常に正規化済みのため冪等（実害なし）。
+      if (moved) this.replaceAll(list);
       return moved;
     },
 
