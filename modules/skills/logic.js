@@ -280,7 +280,8 @@
     const targeted = list.filter((s) => s.targetLevel != null && s.requiredCount != null);
     const covered = targeted.filter((s) => gapOf(s).state === "ok").length;
     const short = targeted.filter((s) => gapOf(s).state === "short").length;
-    // 未評価: 目標設定済みスキル×メンバーで、評価が空欄（"-"・数値以外＝未入力）のセル数＝評価を埋める一手。
+    // 未評価: 目標設定済みスキル×メンバーで、評価が未入力（空欄）のセル数＝評価を埋める一手。
+    // "-"（対象外）は本人に評価不要という判断済みなので未評価に数えない（"" のみ対象）。
     const ms = members();
     let unrated = 0;
     targeted.forEach((s) => ms.forEach((m) => { if (rating(m.id, s.id) === "") unrated++; }));
