@@ -132,8 +132,10 @@
         tr.appendChild(el("td", { class: "summary", text: "—" }));
         tr.appendChild(el("td", { class: "summary", text: "—" }));
       } else {
-        tr.appendChild(el("td", {}, [cellInput(t.start, "date", (v) => { L().update(idx, { start: v }); render(); })]));
-        tr.appendChild(el("td", {}, [cellInput(t.end, "date", (v) => { L().update(idx, { end: v }); render(); })]));
+        // update は日付逆転（開始>終了）を拒否して false を返す（logic.js）。拒否時はトーストで理由を示す
+        // （depCell の循環拒否と同じ流儀）。render() が入力欄を元値へ戻すので、無言だと理由が伝わらないため（Issue #200）。
+        tr.appendChild(el("td", {}, [cellInput(t.start, "date", (v) => { if (!L().update(idx, { start: v })) MK.ui.toast("開始日は終了日より後にできません", "error"); render(); })]));
+        tr.appendChild(el("td", {}, [cellInput(t.end, "date", (v) => { if (!L().update(idx, { end: v })) MK.ui.toast("終了日は開始日より前にできません", "error"); render(); })]));
         tr.appendChild(el("td", {}, [cellInput(String(t.progress), "number", (v) => { L().update(idx, { progress: clamp(v) }); render(); })]));
         tr.appendChild(el("td", {}, [statusCell(idx, t)]));
         tr.appendChild(el("td", {}, [depCell(tasks, nums, idx, t)]));
