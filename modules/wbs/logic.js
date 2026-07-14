@@ -359,43 +359,65 @@
   }
 
   /**
-   * 全プロジェクトを横断して葉タスクの HOME サマリー指標を集計する（#181）。母数は wbs.stats と同じく葉タスクのみ
-   * （親のロールアップ行を二重に数えない）。期限超過の判定は isOverdue（dashboard と同一定義）を再利用する。
-   * summary が消費する3指標（進行中・平均進捗・期限超過）を単一走査で数え、HOME での指標間スコープの食い違いを防ぐ。
+   * 全プロジェクトを横断して、PJ ごとの HOME サマリー指標を集計する純関数（#204）。母数は wbs.stats と同じく
+   * 葉タスクのみ（親のロールアップ行を二重に数えない）。期限超過の判定は isOverdue（dashboard と同一定義）を再利用する。
+   * summary は「主語をタスクから PJ へ」寄せるため（scoped モジュールを HOME の1枚に畳む・§3.6）、混合平均ではなく
+   * PJ 単位の状態（進行中/未着手/期限超過件数）を PJ ごとに保持し、呼び出し側で件数化・代表選出できるようにする。
    * @param {string} today - 基準日（YYYY-MM-DD）
-   * @returns {{leaves: number, inprogress: number, overall: number, overdue: number}}
-   *   全 PJ 合計の葉タスク数・進行中数・平均進捗率(%)・期限超過数
+   * @returns {{id: (string|null), name: string, leaves: number, inprogress: number, notstarted: number, overdue: number}[]}
+   *   PJ ごとの葉タスク数・進行中葉数・未着手葉数・期限超過葉数
    */
-  function crossProjectStats(today) {
-    let leaves = 0, inprogress = 0, sum = 0, overdue = 0;
-    eachProjectTasks().forEach((pj) => {
+  function projectSummaries(today) {
+    return eachProjectTasks().map((pj) => {
+      let leaves = 0, inprogress = 0, notstarted = 0, overdue = 0;
       pj.tasks.forEach((t, i) => {
         if (isParent(pj.tasks, i)) return;
         leaves++;
         if (t.status === "inprogress") inprogress++;
-        sum += Number(t.progress) || 0;
+        if (t.status === "notstarted") notstarted++;
         if (isOverdue(t, today)) overdue++;
       });
+      return { id: pj.id, name: pj.name, leaves, inprogress, notstarted, overdue };
     });
-    return { leaves, inprogress, overall: leaves ? Math.round(sum / leaves) : 0, overdue };
   }
 
   /**
-   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。指標は全 PJ を横断して集計し（wbs は Project 次元の
-   * scoped モジュールのため・§3.7.4）、進行中/進捗/期限超過のスコープを揃える。期限超過タスクがあれば attention
-   * （error）で昇格し HOME 要対応バーに出す（#181）。「今日」依存の判定は基準日を引数で受けて決定的にする（§3.6）。
+   * 期限超過を抱える PJ 一覧を要対応バー用の1行ラベルへ整形する（#204）。resource の overloadLabel と同型で、
+   * どの PJ を見るべきかが分かる粒度にし、PJ 数が増えてもバーが伸びないよう「代表 ほかN件」に畳む。
+   * 代表＝期限超過件数が最多の PJ。呼び出し側で overdue 降順にソート済みを前提とする。
+   * @param {{name: string, overdue: number}[]} over - 期限超過 PJ（overdue 降順・非空）
+   * @returns {string} 例:「期限超過: 〇〇PJ（3件）」/「期限超過: 〇〇PJ ほか1件」
+   */
+  function overduePjLabel(over) {
+    const top = over[0], name = top.name || "(無名PJ)";
+    return over.length === 1
+      ? "期限超過: " + name + "（" + top.overdue + "件）"
+      : "期限超過: " + name + " ほか" + (over.length - 1) + "件";
+  }
+
+  /**
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。wbs は Project 次元の scoped モジュール（§3.7.4）で
+   * データが PJ ごとの store に分かれるため、HOME の1枚に畳む際は主語をタスクから PJ へ寄せて件数化する（§3.6 方針）。
+   * stats＝PJ 軸の状態（進行中PJ／未着手PJ）、attention＝最も遅れている代表 PJ を名指し＋件数（error）で、
+   * 遅延は attention に寄せ stats と同一事実を二重表示しない（方針③）。混合平均の進捗% は「どの PJ を見るべきか
+   * 分からない数字」のため撤去する。「今日」依存の判定は基準日を引数で受けて決定的にする（§3.6）。
    * ※ モジュール自身のカード指標（表示中 PJ 単位）は stats() が担い、本 summary は HOME 横断表示専用。
    * @param {string} [baseDate] - 基準日（YYYY-MM-DD、既定 本日）。決定的テスト用の注入点。
    * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention?: {label: string, severity: string}[]}}
    */
   function summary(baseDate) {
     const today = baseDate || MK.util.todayISO();
-    const s = crossProjectStats(today);
-    const out = { empty: s.leaves === 0, stats: [
-      { label: "進行中", value: s.inprogress },
-      { label: "進捗", value: s.overall + "%" },
+    const pjs = projectSummaries(today);
+    const totalLeaves = pjs.reduce((n, p) => n + p.leaves, 0);
+    const activePJ = pjs.filter((p) => p.inprogress > 0).length;                       // 進行中タスクのある PJ
+    const notStartedPJ = pjs.filter((p) => p.leaves > 0 && p.notstarted === p.leaves).length; // 葉が全て未着手＝キックオフの一手
+    const out = { empty: totalLeaves === 0, stats: [
+      { label: "進行中PJ", value: activePJ },
+      { label: "未着手PJ", value: notStartedPJ },
     ] };
-    if (s.overdue > 0) out.attention = [{ label: "期限超過タスク " + s.overdue + "件", severity: "error" }];
+    const over = pjs.filter((p) => p.overdue > 0)
+      .sort((a, b) => b.overdue - a.overdue || String(a.name).localeCompare(String(b.name))); // 最も遅れている PJ を代表に
+    if (over.length) out.attention = [{ label: overduePjLabel(over), severity: "error" }];
     return out;
   }
 
@@ -459,5 +481,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, isOverdue, wbsNumbers, summaryOf, hiddenFlags, datesInverted, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, searchItems, summaryFor, eachProjectTasks, buildCSVRows, exportData, importData, loadSample };
+  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, isOverdue, wbsNumbers, summaryOf, hiddenFlags, datesInverted, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, projectSummaries, overduePjLabel, searchItems, summaryFor, eachProjectTasks, buildCSVRows, exportData, importData, loadSample };
 })();
