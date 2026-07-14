@@ -63,21 +63,32 @@ test("releases: upcoming は起点日以降の予定を予定日昇順で返す"
   eq(R.upcoming("2026-01-01").map((r) => r.version), ["today", "later"]);
 });
 
-test("releases: summary は予定件数と直近予定日", (MK) => {
-  // 観点: empty はデータ皆無のみ true。stats[0]=予定件数、stats[1]=直近予定（無ければ —）
-  // 入力: 未来日は today 起点の相対で作る（過去だけだと直近予定が — になるため）。完了のみ→未来 planned を追加
-  // 期待: 空は empty=true。完了のみでは直近予定="—"、未来 planned 追加後は stats[0]=1・stats[1]=その未来日
+test("releases: summary は直近予定（＋あと何日）と日程未定・遅延を返す", (MK) => {
+  // 観点: 行動指標へ差し替え（母数 予定 を撤去・stats↔attention の同一事実重複なし・#205）。基準日は引数で固定
+  // 入力: 基準日 2026-01-10。完了1・未来 planned1・日程未定 planned1・遅延（過去 planned）1
+  // 期待: 空は empty=true。stats[0]=直近予定（未来日＋あとN日）・stats[1]=日程未定件数、attention に 遅延 件数（warn）
   const R = MK.logic.releases;
-  eq(R.summary().empty, true);
+  const base = "2026-01-10";
+  const s0 = R.summary(base);
+  eq(s0.empty, true);
+  eq(s0.stats[1].value, 0);            // 日程未定は 0
+  eq(s0.stats[0].value, "—");          // 直近予定なし
+  eq(s0.attention.length, 0);          // 遅延なし
   const p = MK.products.create({ name: "P" });
-  const future = MK.util.addDays(MK.util.todayISO(), 7);
-  R.addRelease({ productId: p.id, version: "v1", plannedDate: "2025-01-01", actualDate: "2025-01-01", status: "done" });
-  eq(R.summary().stats[1].value, "—"); // 完了のみ → 直近予定なし
-  R.addRelease({ productId: p.id, version: "v2", plannedDate: future });
-  const s = R.summary();
+  R.addRelease({ productId: p.id, version: "done1", plannedDate: "2026-01-01", actualDate: "2026-01-01", status: "done" });
+  R.addRelease({ productId: p.id, version: "next", plannedDate: "2026-01-24" });   // 未来 planned（あと14日）
+  R.addRelease({ productId: p.id, version: "tbd", plannedDate: "" });               // 日程未定
+  R.addRelease({ productId: p.id, version: "late", plannedDate: "2026-01-05" });    // 遅延（過去 planned）
+  const s = R.summary(base);
   eq(s.empty, false);
-  eq(s.stats[0].value, 1); // planned は v2 のみ
-  eq(s.stats[1].value, future);
+  eq(s.stats.length, 2);                              // 母数 予定 は撤去
+  eq(s.stats[0].label, "直近予定");
+  eq(s.stats[0].value, "2026-01-24（あと14日）");     // 直近の未来 planned ＋あと何日
+  eq(s.stats[1].label, "日程未定");
+  eq(s.stats[1].value, 1);
+  eq(s.attention.length, 1);
+  eq(s.attention[0].label, "遅延 1件");
+  eq(s.attention[0].severity, "warn");
 });
 
 test("releases: productName は削除済み Product 参照で空文字にフォールバック", (MK) => {

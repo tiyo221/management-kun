@@ -223,16 +223,27 @@
 
   /**
    * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
-   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
-   *   `empty` はデータ皆無（空状態表示）、`stats` は「予定 n件」と「直近予定日（無ければ —）」。
+   * @param {string} [today] - 基準日（"YYYY-MM-DD"。省略時は本日。テスト用）
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention: {label: string, severity: string}[]}}
+   *   `empty` はデータ皆無（空状態表示）、`stats` は行動指標、`attention` は要対応事項（HOME の帯）。
    */
-  function summary() {
+  function summary(today) {
+    const base = today || MK.util.todayISO();
     const c = counts();
-    const next = upcoming(MK.util.todayISO())[0] || null;
+    const next = upcoming(base)[0] || null;
+    const list = releases();
+    // 日程未定: planned だが plannedDate が空＝日付を決める一手。
+    const undated = list.filter((r) => r.status === "planned" && !r.plannedDate).length;
+    // 遅延: planned のまま plannedDate が基準日より前（＝未リリースの超過。ISO 日付は辞書順＝時系列順）。
+    const delayed = list.filter((r) => r.status === "planned" && r.plannedDate && r.plannedDate < base).length;
+    const attention = [];
+    if (delayed > 0) attention.push({ label: "遅延 " + delayed + "件", severity: "warn" });
+    // 行動指標: 次に出す直近予定（＋あと何日）と、日付を決める一手の 日程未定。
+    // 母数（予定 件数）は撤去し、遅延は attention と重複するため stats に出さない（spec §3.6 方針①③・#205）。
     return { empty: c.all === 0, stats: [
-      { label: "予定", value: c.planned },
-      { label: "直近予定", value: next ? next.plannedDate : "—" },
-    ] };
+      { label: "直近予定", value: next ? next.plannedDate + "（あと" + MK.util.daysBetween(base, next.plannedDate) + "日）" : "—" },
+      { label: "日程未定", value: undated },
+    ], attention };
   }
 
   /**
