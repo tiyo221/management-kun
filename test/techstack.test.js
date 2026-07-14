@@ -47,17 +47,18 @@ test("techstack: categories は出現順・重複なし・空除外", (MK) => {
   eq(T.categories(), ["言語", "DB"]);
 });
 
-test("techstack: summary は技術件数と Hold 件数", (MK) => {
-  // 観点: summary.stats[0]=技術総数, stats[1]=Hold 件数
-  // 入力: 2件追加し、1件を ring="hold" にする
-  // 期待: empty=false、stats[0].value=2（総数）、stats[1].value=1（Hold 件数）
+test("techstack: summary は保留（Hold）と評価中（Assess+Trial）", (MK) => {
+  // 観点: 行動指標 stats[0]=Hold 件数, stats[1]=評価中（assess+trial）。母数・期限 stat は撤去（#206）
+  // 入力: 2件追加し、1件を ring="hold"・もう1件を ring="assess"（既定）のまま
+  // 期待: empty=false、stats は2件、stats[0].value=1（Hold）、stats[1].value=1（評価中）
   const T = MK.logic.techstack;
   T.addItem("X"); T.addItem("Y");
   T.updateItem(T.items()[0].id, { ring: "hold" });
   const s = T.summary();
   eq(s.empty, false);
-  eq(s.stats[0].value, 2);
-  eq(s.stats[1].value, 1);
+  eq(s.stats.length, 2);
+  eq(s.stats[0].label, "保留（Hold）"); eq(s.stats[0].value, 1);
+  eq(s.stats[1].label, "評価中"); eq(s.stats[1].value, 1);
 });
 
 test("techstack: CSV 出力・取込（ラベル/キー・タグ分割）", (MK) => {
@@ -100,10 +101,10 @@ test("techstack: deadlineStatus は none/overdue/soon/ok を判定", (MK) => {
   eq(T.deadlineStatus("不正な日付", today), "none");     // 形式不正は none
 });
 
-test("techstack: deadlineCounts と summary の期限接近/超過", (MK) => {
-  // 観点: 接近・超過の件数を集計し summary の stats[2] に反映する
+test("techstack: deadlineCounts は接近/超過を集計する", (MK) => {
+  // 観点: 接近・超過の件数を集計する（期限は summary の attention 側で申告・stat では出さない #206）
   // 入力: today=2026-07-05 に対し reviewDate=過去/90日以内/遠未来/未設定 の4件
-  // 期待: deadlineCounts は overdue=1・soon=1、summary の stats[2].label="期限 接近/超過"
+  // 期待: deadlineCounts は overdue=1・soon=1
   const T = MK.logic.techstack;
   const today = "2026-07-05";
   T.addItem("超過");   T.updateItem(T.items()[0].id, { reviewDate: "2026-01-01" });
@@ -113,8 +114,6 @@ test("techstack: deadlineCounts と summary の期限接近/超過", (MK) => {
   const dc = T.deadlineCounts(today);
   eq(dc.overdue, 1);
   eq(dc.soon, 1);
-  const s = T.summary();
-  eq(s.stats[2].label, "期限 接近/超過");
 });
 
 test("techstack: 不正な reviewDate は updateItem で '' に正規化", (MK) => {
