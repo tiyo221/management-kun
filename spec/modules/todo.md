@@ -41,4 +41,4 @@ GTD ベースの軽量タスク管理。
 - 初期タブは **Next**（done/someday を初期表示に混ぜない）。「全て」タブは残し従来通り全件を見られる。
 
 ## サマリー（HOME 表示）
-`summary(today?)` は `未完 N` / `全タスク M` を返す純関数（[`spec.md`](../../spec.md) §3.6）。`attention` として期限切れ（error）／今日期限（warn）の件数を申告する（HOME の要対応帯・Issue #102。完了と期限未設定は対象外＝`dueCounts(today?)`）。
+`summary(today?)` は `未完 N` / `期日未設定 M`（未完かつ due なし＝要整理。期限を切る一手につながる）を返す純関数（[`spec.md`](../../spec.md) §3.6）。母数の全タスクは出さない（方針①・Issue #202）。`attention` として期限切れ（error）／今日期限（warn）の件数を申告する（HOME の要対応帯・Issue #102。完了と期限未設定は対象外＝`dueCounts(today?)`）。stats・attention は同じ事実を二重表示しない（方針③）。

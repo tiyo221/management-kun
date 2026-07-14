@@ -294,12 +294,14 @@
   function summary(today) {
     const c = counts(); // counts() は全ステータスを 0 初期化するため c.done は常に数値
     const dc = dueCounts(today);
+    // 期日未設定＝未完（done 以外）かつ due なし。期限を切る一手につながる要整理タスク。
+    const noDue = tasks().filter((x) => x.status !== "done" && !x.due).length;
     const attention = [];
     if (dc.overdue > 0) attention.push({ label: "期限切れ " + dc.overdue + "件", severity: "error" });
     if (dc.dueToday > 0) attention.push({ label: "今日期限 " + dc.dueToday + "件", severity: "warn" });
     return { empty: c.all === 0, stats: [
       { label: "未完", value: c.all - c.done },
-      { label: "全タスク", value: c.all },
+      { label: "期日未設定", value: noDue },
     ], attention };
   }
 
