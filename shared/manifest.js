@@ -23,6 +23,7 @@
   // フォールバックの { title, icon } をここに書ける（def を実装したら空へ戻す。shell が def を優先して読む）。
   const CATALOG = {
     todo:      {},
+    daily:     {},
     goals:     {},
     questions: {},
     skills:    {},
@@ -38,7 +39,7 @@
   // 配布プロファイル（member.html）は自分のゾーンを MK_CONFIG.zones で上書き宣言する（サブセット）。
   // 分類は EM が見る領域で切る（自分＋4領域。spec §1.4 / §3.6）。
   const ZONES = [
-    { label: "自分", modules: ["todo", "goals", "questions"] },
+    { label: "自分", modules: ["todo", "daily", "goals", "questions"] },
     { label: "ピープル", modules: ["skills", "resource", "oneonone"] },
     { label: "デリバリー", modules: ["dashboard", "wbs"] },
     { label: "プロダクト", modules: ["releases"] },

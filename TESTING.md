@@ -32,6 +32,7 @@
 | `shared/products.js`（マスタ） | **releases / dashboard**（Product マスタを参照） | 自動＋該当画面の手動確認 |
 | `shared/allocations.js` / `demands.js`（共有マスタ） | **resource / dashboard**（要員計画・ダッシュボードがアロケーションを参照） | 自動（`allocations` / `demands` / `resource` / `dashboard`）＋要員計画・ダッシュボード画面の手動確認 |
 | `modules/wbs/logic.js`（進捗集計） | **dashboard**（WBS 進捗を対象別に集約する横断ビュー） | 自動（`dashboard`）＋ダッシュボード画面の手動確認 |
+| `modules/todo/logic.js`（`toggleDone` / `next` / `tasks`） | **daily**（todo の next を引き・完了を同期する） | 自動（`daily`）＋デイリー画面の手動確認 |
 | `shared/ui.js` / `design.css`（見た目の共通） | **全モジュールの view** | 手動（375/768/1280・ダーク・空状態） |
 | `index.html` / `shared/shell*.js`（シェル/ナビ/移行/設定。責務別分割・Issue #140） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
 
@@ -115,6 +116,7 @@ test("wbs: 依存の循環を検出", (MK) => {
 - **module-meta**: 全モジュール def が1行説明 `description` を持つこと（HOME の見取り図・Issue #40。view.js を読み込んで検証）
 - **spec-consistency**: spec.md §5 のモジュール一覧表が実装と一致すること（id ⇄ index.html のロード対象／CSV✓ ⇄ `build…CSVRows` を持つモジュール。仕様の陳腐化を検出・Issue #117）
 - **todo**: 追加/件数/完了/フィルタ
+- **daily**: 時間割の積み上げ・並べ替え・開始起点/日またぎ・todo(next)引き込みと完了同期・翌日繰り越し・summary
 - **goals**: 進捗・いまここ・全完了で達成
 - **questions**: 追加/解決/フィルタ
 - **skills**: 平均・ギャップ判定・紐づけCSVラウンドトリップ
