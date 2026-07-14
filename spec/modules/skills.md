@@ -34,3 +34,9 @@
 | `skill-tool-data-v1` `{members, skills, ratings}` | `members` → `mk:people`（名寄せ）、`skills` / `ratings` → `mk:module:skills:v1` |
 
 移行フロー全体は [`import-migration.md`](../import-migration.md) §7、名寄せは §8 を参照。
+
+## サマリー（HOME 表示）
+`summary()` は行動指標を返す純関数（[`spec.md`](../../spec.md) §3.6・方針①③・#203）。「今日」に依存しないため基準日は取らない。
+
+- stats: `カバー率 <P>%`（目標設定済みスキル＝目標レベル・必要人数の両方ありのうち、必要人数を充足しているものの割合＝状態。目標設定済みが無ければ `—`）／`未評価 N`（目標設定済みスキル×メンバーで評価が空欄＝未入力のセル数）。母数の `メンバー` / `スキル項目` は撤去。
+- attention: `不足スキル N件`（`gapOf` が `short`＝必要人数に達していないスキル数・`warn`）。不足は attention に集約し stats へ二重表示しない。
