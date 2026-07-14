@@ -163,6 +163,28 @@ test("daily: 取り込みは不正な minutes / done / startTime を寛容に正
   eq(s.overflow, false);
 });
 
+test("daily: 取り込みは id 欠落を採番し、不正な date は当日へ寄せる", (MK) => {
+  // 観点: id 欠落を許すと mergeById が byId[undefined] へ集約して取りこぼし、id 一致で引く
+  //       moveItem/removeItem/toggleDone も誤ヒットする。date 欠落はどの日にも属さない幽霊項目になる。
+  // 入力: replace で id なし2件（うち1件は date 欠落・1件は不正 date）、merge で id なし1件を追加
+  // 期待: replace で2件とも生き残り（採番されて別 id）、date は当日へ。merge でも潰し合わずに増える
+  const D = MK.logic.daily;
+  const today = MK.util.todayISO();
+  D.importData({ version: 1, items: [
+    { title: "id なし1", minutes: 30, source: "manual", todoId: null },              // id・date 欠落
+    { title: "id なし2", date: "2026/07/15", minutes: 30, source: "manual", todoId: null }, // 不正 date 形式
+  ] }, "replace");
+  eq(D.items().length, 2);                                       // どちらも消えない（byId[undefined] に潰されない）
+  const ids = D.items().map((x) => x.id);
+  assert(ids[0] && ids[1] && ids[0] !== ids[1], "id が採番され重複しない");
+  eq(D.items().map((x) => x.date), [today, today]);               // 欠落・不正 date は当日へ
+  eq(D.dayItems(today).length, 2);                               // 画面（日の器）から到達できる
+  // merge でも id なしが既存を潰さない
+  D.importData({ items: [{ title: "id なし3", minutes: 30, source: "manual", todoId: null }] }, "merge");
+  eq(D.items().length, 3);
+  eq(D.dayItems(today).map((x) => x.title), ["id なし1", "id なし2", "id なし3"]);
+});
+
 test("daily: overflow はちょうど 24:00 では立たず、超過で立つ", (MK) => {
   // 観点: 24:00 ちょうどに終わるのは「日をまたいで」いないので警告しない（境界値）。
   // 入力: 23:00 起点で 60分 → ちょうど 24:00。さらに 15分 足すと超過

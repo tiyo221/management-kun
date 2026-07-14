@@ -298,12 +298,24 @@
   function exportData() { return load(); }
   /**
    * 取り込んだ項目を正規化する（外部 JSON は手書き・AI 生成もありうるため寛容に受けて寄せる）。
-   * minutes はプリセット外・不正値でも正の整数へ寄せ、done は真偽値へ寄せる。
+   * id 欠落は採番（mergeById が byId[undefined] へ集約して取りこぼすため、また id 一致で引く
+   * moveItem/removeItem/toggleDone が別項目へ誤ヒットするため）。date は不正・欠落なら当日へ寄せる
+   * （どの日にも属さないと画面から到達できない項目になるため）。minutes は正の整数、done は真偽値へ。
    * @param {DailyItem[]} list - 取り込む項目配列
    * @returns {DailyItem[]} 正規化した項目配列
    */
   function normalizeItems(list) {
-    return (list || []).map((it) => Object.assign({}, it, { minutes: normMinutes(it && it.minutes), done: !!(it && it.done) }));
+    const today = MK.util.todayISO();
+    return (list || []).map((it) => {
+      const src = it || {};
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(src.date || "")) ? src.date : today;
+      return Object.assign({}, src, {
+        id: src.id ? src.id : MK.util.uid("d"),
+        date,
+        minutes: normMinutes(src.minutes),
+        done: !!src.done,
+      });
+    });
   }
   /**
    * 外部データを取り込む。merge は id 一致で上書きマージ、それ以外は全置換。

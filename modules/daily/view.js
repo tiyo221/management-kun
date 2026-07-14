@@ -48,7 +48,12 @@
       [dateLabel(date)]);
     const startInput = ui.input({ type: "time", value: L().startTime() });
     startInput.style.maxWidth = "120px";
-    startInput.addEventListener("change", () => { L().setStartTime(startInput.value); render(); });
+    startInput.addEventListener("change", () => {
+      // 空にされたら現状維持へ倒す（黙って既定の 09:00 に戻さない）。
+      if (!startInput.value) { startInput.value = L().startTime(); return; }
+      L().setStartTime(startInput.value);
+      render();
+    });
     return ui.toolbar([
       ui.button("◀", { variant: "btn-ghost", onClick: () => { date = MK.util.addDays(date, -1); render(); } }),
       label,
@@ -113,34 +118,33 @@
     ]);
   }
 
-  // 合計・終了時刻・はみ出し警告＋「残りを明日へ送る」
+  // 合計・終了時刻・はみ出し警告＋「残りを明日へ送る」（その日に項目があるときだけ出す）
   function footer() {
-    const sched = L().schedule(date);
     const rows = L().dayItems(date);
+    if (!rows.length) return null;
+    const sched = L().schedule(date);
     const remaining = rows.filter((it) => !it.done).length;
-    const bar = ui.toolbar([]);
-    if (rows.length) {
-      const info = el("div", { class: "grow sub" }, [
+    const bar = ui.toolbar([
+      el("div", { class: "grow sub" }, [
         "合計 " + fmtDur(sched.totalMin) + " ／ 終了 " + sched.endLabel,
         sched.overflow ? el("span", { class: "chip", style: "margin-left:var(--space-xs);color:var(--color-error);", text: "⚠ 日をまたぎます" }) : null,
-      ]);
-      bar.appendChild(info);
-    } else {
-      bar.appendChild(el("div", { class: "grow" }));
-    }
-    const nextDay = dateLabel(MK.util.addDays(date, 1));
-    bar.appendChild(ui.button("残り" + (remaining ? remaining + "件" : "") + "を " + nextDay + " へ送る", {
+      ]),
+    ]);
+    // 繰り越し元/先は確認ダイアログを開く前に両方キャプチャする（片方だけ後読みすると、
+    // 確認中に日ナビが動いたとき「7/15 の残りを 7/17 へ」のようなズレになる）。
+    const from = date, to = MK.util.addDays(date, 1);
+    const btn = ui.button("残り" + (remaining ? remaining + "件" : "") + "を " + dateLabel(to) + " へ送る", {
       onClick: () => {
-        if (!remaining) { MK.ui.toast("繰り越す未完了タスクはありません", "info"); return; }
-        const to = MK.util.addDays(date, 1);
         MK.ui.confirm("未完了 " + remaining + " 件を翌日（" + dateLabel(to) + "）へ繰り越しますか？").then((ok) => {
           if (!ok) return;
-          const n = L().rolloverTo(date, to);
+          const n = L().rolloverTo(from, to);
           render();
           MK.ui.toast(n + " 件を翌日へ繰り越しました", "success");
         });
       },
-    }));
+    });
+    if (!remaining) btn.disabled = true; // 未完了ゼロなら押せない（不活性ボタンにしない）
+    bar.appendChild(btn);
     return bar;
   }
 
@@ -162,9 +166,11 @@
         ]);
         const row = el("li", { class: "mk-row" }, [grow]);
         grow.addEventListener("click", () => {
-          L().pullFromTodo(date, c.id, Number(newMin));
+          // logic は引き込めないとき null を返す（next でなくなった／他の日に載った等）。契約を尊重する。
+          const added = L().pullFromTodo(date, c.id, Number(newMin));
           closeModal();
           render();
+          if (!added) { MK.ui.toast("「" + c.title + "」は引き込めませんでした", "error"); return; }
           MK.ui.toast("「" + c.title + "」を今日の候補に追加しました", "success");
         });
         list.appendChild(row);
