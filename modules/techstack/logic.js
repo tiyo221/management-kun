@@ -286,10 +286,11 @@
     const attention = [];
     if (dc.overdue > 0) attention.push({ label: "見直し期限超過 " + dc.overdue + "件", severity: "error" });
     if (dc.soon > 0) attention.push({ label: "見直し期限 " + DEADLINE_SOON_DAYS + "日以内 " + dc.soon + "件", severity: "warn" });
+    // 行動指標: 判断待ちの保留（Hold）と、採否の判断が要る評価中（Assess/Trial）。
+    // 母数（技術総数）と、attention の見直し期限と丸かぶりする期限 stat は撤去（spec §3.6 方針①③・#206）。
     return { empty: c.all === 0, stats: [
-      { label: "技術", value: c.all },
       { label: "保留（Hold）", value: c.hold },
-      { label: "期限 接近/超過", value: dc.soon + " / " + dc.overdue },
+      { label: "評価中", value: c.assess + c.trial },
     ], attention };
   }
 
