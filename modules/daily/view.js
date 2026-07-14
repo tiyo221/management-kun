@@ -8,7 +8,14 @@
   const L = () => MK.logic.daily;
 
   // 所要時間の選択肢（分）。刻みはプリセット選択（自由入力にはしない・Issue #213 決定）。
-  const MIN_OPTS = [15, 30, 45, 60, 90, 120].map((m) => ({ value: String(m), label: fmtDur(m) }));
+  const MIN_PRESETS = [15, 30, 45, 60, 90, 120];
+  const MIN_OPTS = MIN_PRESETS.map((m) => ({ value: String(m), label: fmtDur(m) }));
+  // 既存値がプリセット外（JSON 取込などで入りうる）でも、その値を選択肢に混ぜて正しく表示する。
+  // 混ぜないと select が現在値を選べず、触った瞬間に別の値へ黙って書き換わる。
+  function minOptsFor(minutes) {
+    if (MIN_PRESETS.indexOf(minutes) >= 0) return MIN_OPTS;
+    return MIN_PRESETS.concat([minutes]).sort((a, b) => a - b).map((m) => ({ value: String(m), label: fmtDur(m) }));
+  }
   const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
 
   let root = null;
@@ -95,7 +102,7 @@
     const title = el("div", { class: it.done ? "mk-done" : "", text: it.title });
     const grow = el("div", { class: "grow" }, [title, el("div", { class: "sub" }, chips)]);
 
-    const minSel = ui.select(MIN_OPTS, String(it.minutes), (v) => { L().setMinutes(it.id, Number(v)); render(); });
+    const minSel = ui.select(minOptsFor(it.minutes), String(it.minutes), (v) => { L().setMinutes(it.id, Number(v)); render(); });
     minSel.style.maxWidth = "110px";
 
     return el("li", { class: "mk-row" }, [
@@ -138,7 +145,7 @@
   }
 
   function openPullModal() {
-    const cands = L().pullableTodos(date);
+    const cands = L().pullableTodos();
     let body;
     if (!cands.length) {
       body = ui.emptyState({
@@ -180,7 +187,9 @@
     description: "今日やることを時間割にして1日を組み立てる",
     scope: "global",
     mount(container) { date = MK.util.todayISO(); root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; },
+    // モジュール離脱時に開きっぱなしのモーダルを畳む（overlay が残ると、破棄済み root に対して
+    // 候補クリックが走り書き込みだけ効いてしまうため）。
+    unmount() { closeModal(); _modal = null; root = null; },
     summary() { return L().summary(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },

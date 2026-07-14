@@ -65,9 +65,9 @@
 | エントリ | profile | ゾーン | 用途 |
 |---|---|---|---|
 | [`index.html`](index.html) | `manager` | 自分＋ピープル＋デリバリー＋プロダクト＋テクノロジー（全部入り）＋マスタ管理 | マネージャ本人 |
-| [`member.html`](member.html) | `member` | 自分のみ（todo / goals / questions） | チームメンバーへ配布。ピープル/デリバリー/プロダクト/テクノロジーの各モジュールとマスタ管理には到達不能 |
+| [`member.html`](member.html) | `member` | 自分のみ（todo / daily / goals / questions） | チームメンバーへ配布。ピープル/デリバリー/プロダクト/テクノロジーの各モジュールとマスタ管理には到達不能 |
 
-- メンバーが入力した todo / goals / questions は、既存の JSON エクスポート／インポート（§7）でマネージャ側に回収できる（専用フローは作らない）。
+- メンバーが入力した todo / daily / goals / questions は、既存の JSON エクスポート／インポート（§7）でマネージャ側に回収できる（専用フローは作らない）。
 - HOME/ダッシュボードは、この config（zones）を入力として生成する前提で設計する（別 Issue）。
 
 ---

@@ -56,9 +56,8 @@
    */
   function minToHHMM(min) {
     const t = Math.max(0, Math.round(min));
-    const h = Math.floor(t / 60), mm = t % 60;
     const p = (n) => String(n).padStart(2, "0");
-    return p(h) + ":" + mm.toString().padStart(2, "0");
+    return p(Math.floor(t / 60)) + ":" + p(t % 60);
   }
   /**
    * 所要時間を正の整数（分）へ正規化する。不正・0 以下は既定へ寄せる。
@@ -116,16 +115,25 @@
   }
 
   /**
-   * todo から「今日の候補」に引ける next タスクの一覧を返す。指定日に既に引き込み済みの
-   * todo は除外する。todo モジュール未搭載（配布サブセット等）なら空配列を返す。
-   * @param {string} date - 対象日（"YYYY-MM-DD"）
+   * 未完了のまま**いずれかの日に載っている** todo の id 集合を返す（重複引き込みの防止）。
+   * 同じ todo が複数日に載ると、実体（todo）は1つなのに完了同期が片方にしか反映されず
+   * 不整合になるため、日をまたいだ重複を許さない（繰り越し＝rolloverTo が正規の経路）。
+   * @returns {Object.<string, boolean>} todoId をキーに持つ集合
+   */
+  function activeTodoIds() {
+    const taken = {};
+    items().forEach((it) => { if (it.source === "todo" && it.todoId && !it.done) taken[it.todoId] = true; });
+    return taken;
+  }
+  /**
+   * todo から「今日の候補」に引ける next タスクの一覧を返す。未完了のまま既にどこかの日へ
+   * 引き込み済みの todo は除外する。todo モジュール未搭載（配布サブセット等）なら空配列を返す。
    * @returns {{id: string, title: string, projectName: string}[]} 引き込める next タスク
    */
-  function pullableTodos(date) {
+  function pullableTodos() {
     const todo = MK.logic && MK.logic.todo;
     if (!todo) return [];
-    const taken = {};
-    dayItems(date).forEach((it) => { if (it.source === "todo" && it.todoId) taken[it.todoId] = true; });
+    const taken = activeTodoIds();
     return todo.tasks()
       .filter((t) => t.status === "next" && !taken[t.id])
       .map((t) => ({ id: t.id, title: t.title, projectName: todo.projectNameOf(t.projectId) }));
@@ -133,7 +141,7 @@
   /**
    * todo の next タスクを「今日の候補」へ引き込み、指定日の末尾に追加して保存する。
    * 実体は todo が持ち、デイリーは todoId で参照しつつ表示用にタイトルをスナップショットする。
-   * 既に同日へ引き込み済み・next でない・todo 未搭載・該当なしの場合は何もしない。
+   * 未完了のまま既にいずれかの日へ引き込み済み・next でない・todo 未搭載・該当なしの場合は何もしない。
    * @param {string} date - 対象日（"YYYY-MM-DD"）
    * @param {string} todoId - 引き込む todo タスクのID
    * @param {number} [minutes] - 所要時間（分・既定 30）
@@ -145,7 +153,7 @@
     if (!todo) return null;
     const t = todo.tasks().find((x) => x.id === todoId);
     if (!t || t.status !== "next") return null;
-    if (dayItems(date).some((it) => it.source === "todo" && it.todoId === todoId)) return null;
+    if (activeTodoIds()[todoId]) return null; // 日をまたいだ重複引き込みも許さない
     const d = load();
     const now = MK.util.nowISO();
     const id = MK.util.uid("d");
@@ -255,7 +263,8 @@
       cur = e;
       return { item: it, start: minToHHMM(s), end: minToHHMM(e), startMin: s, endMin: e };
     });
-    return { rows, totalMin: cur - start, startMin: start, endMin: cur, endLabel: minToHHMM(cur), overflow: cur >= 24 * 60 };
+    // ちょうど 24:00 で終わる場合は「またいで」いないので overflow ではない（超過のみ警告）。
+    return { rows, totalMin: cur - start, startMin: start, endMin: cur, endLabel: minToHHMM(cur), overflow: cur > 24 * 60 };
   }
 
   // ---- HOME サマリー（spec §3.6） ----
@@ -288,6 +297,15 @@
    */
   function exportData() { return load(); }
   /**
+   * 取り込んだ項目を正規化する（外部 JSON は手書き・AI 生成もありうるため寛容に受けて寄せる）。
+   * minutes はプリセット外・不正値でも正の整数へ寄せ、done は真偽値へ寄せる。
+   * @param {DailyItem[]} list - 取り込む項目配列
+   * @returns {DailyItem[]} 正規化した項目配列
+   */
+  function normalizeItems(list) {
+    return (list || []).map((it) => Object.assign({}, it, { minutes: normMinutes(it && it.minutes), done: !!(it && it.done) }));
+  }
+  /**
    * 外部データを取り込む。merge は id 一致で上書きマージ、それ以外は全置換。
    * startTime は取り込みデータにあれば採用する（merge 時は無ければ現状維持）。
    * @param {DailyData} data - 取り込むデータ
@@ -296,13 +314,15 @@
    * ※ store へ保存する副作用あり。
    */
   function importData(data, mode) {
+    const incoming = normalizeItems(data && data.items);
+    const start = data && data.startTime ? minToHHMM(hhmmToMin(data.startTime)) : null;
     if (mode === "merge") {
       const d = load();
-      d.items = MK.util.mergeById(d.items, (data && data.items) || []);
-      if (data && data.startTime) d.startTime = data.startTime;
+      d.items = MK.util.mergeById(d.items, incoming);
+      if (start) d.startTime = start;
       save(d);
     } else {
-      save({ version: 1, startTime: (data && data.startTime) || DEFAULT_START, items: (data && data.items) || [] });
+      save({ version: 1, startTime: start || DEFAULT_START, items: incoming });
     }
   }
   /**

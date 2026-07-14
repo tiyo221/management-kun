@@ -53,18 +53,41 @@ test("daily: todo(next)から引ける・引いた項目の完了は todo と同
     ["レビュー", "next", "", "", "", ""],
     ["あとで", "inbox", "", "", "", ""],
   ]);
-  eq(D.pullableTodos(day).length, 2); // next のみ（inbox は対象外）
-  const cand = D.pullableTodos(day).find((c) => c.title === "設計する");
+  eq(D.pullableTodos().length, 2); // next のみ（inbox は対象外）
+  const cand = D.pullableTodos().find((c) => c.title === "設計する");
   const itemId = D.pullFromTodo(day, cand.id, 30);
   assert(itemId, "引き込めた");
-  eq(D.pullableTodos(day).length, 1);              // 引いた分は候補から外れる
-  eq(D.pullFromTodo(day, cand.id, 30), null);      // 二重引き込みは不可
+  eq(D.pullableTodos().length, 1);                 // 引いた分は候補から外れる
+  eq(D.pullFromTodo(day, cand.id, 30), null);      // 同じ日への二重引き込みは不可
   // デイリーで完了 → todo も done
   D.toggleDone(itemId, true);
   eq(T.tasks().find((t) => t.title === "設計する").status, "done");
   // 解除 → todo は next へ戻る（再び引ける）
   D.toggleDone(itemId, false);
   eq(T.tasks().find((t) => t.title === "設計する").status, "next");
+});
+
+test("daily: 同じ todo は日をまたいで二重に引けない（完了済みなら再び引ける）", (MK) => {
+  // 観点: 実体（todo）は1つなので、未完了のまま複数日に載ると完了同期が片方にしか効かず不整合になる。
+  //       未完了で載っている間は他日でも候補から外す。完了＝todo が done になれば next でなくなり候補から消える。
+  // 入力: next 1件を 7/15 へ引く → 7/16 へも引こうとする
+  // 期待: 7/16 への引き込みは null（候補にも出ない）。7/15 の項目を消せば再び引ける
+  const D = MK.logic.daily, T = MK.logic.todo;
+  const d1 = "2026-07-15", d2 = "2026-07-16";
+  T.applyCSV([
+    ["タイトル", "ステータス", "プロジェクト", "コンテキスト", "期限", "メモ"],
+    ["設計する", "next", "", "", "", ""],
+  ]);
+  const todoId = D.pullableTodos()[0].id;
+  const itemId = D.pullFromTodo(d1, todoId, 30);
+  assert(itemId, "7/15 へ引き込めた");
+  eq(D.pullableTodos().length, 0);            // 未完了で載っている間は候補に出ない
+  eq(D.pullFromTodo(d2, todoId, 30), null);   // 翌日への二重引き込みも不可
+  eq(D.dayItems(d2).length, 0);
+  // デイリーから外す（＝今日やらない）と、todo は next のまま残るので再び引ける
+  D.removeItem(itemId);
+  eq(D.pullableTodos().length, 1);
+  assert(D.pullFromTodo(d2, todoId, 30), "外した後は別日へ引ける");
 });
 
 test("daily: 未完了の残りを翌日へ繰り越す（完了は残す）", (MK) => {
@@ -120,4 +143,38 @@ test("daily: JSON エクスポート/インポート（merge・replace・startTi
   D.items().forEach((it) => (byId[it.id] = it));
   eq(byId["d_x"].title, "上書き");
   eq(byId["d_y"].title, "追加");
+});
+
+test("daily: 取り込みは不正な minutes / done / startTime を寛容に正規化する", (MK) => {
+  // 観点: 外部 JSON（手書き・AI 生成もありうる）を寛容に受けて寄せる。minutes が 0/負/NaN/欠落でも
+  //       正の整数へ、done は真偽値へ、startTime は不正なら既定へ寄せて時間割が壊れないようにする。
+  // 入力: minutes=0 / -5 / "abc" / 欠落、done="yes"、startTime="99:99"
+  // 期待: minutes は既定 30 へ、done は true へ、startTime は既定 09:00 へ。schedule が成立する
+  const D = MK.logic.daily;
+  const it = (id, minutes, done) => ({ id, date: "2026-07-15", title: id, minutes, done, source: "manual", todoId: null });
+  D.importData({ version: 1, startTime: "99:99", items: [
+    it("d_1", 0, false), it("d_2", -5, false), it("d_3", "abc", "yes"), { id: "d_4", date: "2026-07-15", title: "d_4", source: "manual", todoId: null },
+  ] }, "replace");
+  eq(D.startTime(), "09:00");                                  // 不正な開始時刻は既定へ
+  eq(D.items().map((x) => x.minutes), [30, 30, 30, 30]);       // 0/負/NaN/欠落 → 既定 30
+  eq(D.items().find((x) => x.id === "d_3").done, true);        // "yes" → true
+  const s = D.schedule("2026-07-15");
+  eq(s.endLabel, "11:00");                                     // 30分×4＝2時間、09:00 起点
+  eq(s.overflow, false);
+});
+
+test("daily: overflow はちょうど 24:00 では立たず、超過で立つ", (MK) => {
+  // 観点: 24:00 ちょうどに終わるのは「日をまたいで」いないので警告しない（境界値）。
+  // 入力: 23:00 起点で 60分 → ちょうど 24:00。さらに 15分 足すと超過
+  // 期待: 60分では overflow=false（終了 24:00）、75分では overflow=true（終了 24:15）
+  const D = MK.logic.daily;
+  const day = "2026-07-15";
+  D.setStartTime("23:00");
+  const id = D.addManual(day, "夜作業", 60);
+  eq(D.schedule(day).endLabel, "24:00");
+  eq(D.schedule(day).overflow, false); // ちょうど 24:00 はまたいでいない
+  D.setMinutes(id, 15);
+  D.addManual(day, "追加作業", 60);
+  eq(D.schedule(day).endLabel, "24:15");
+  eq(D.schedule(day).overflow, true);
 });
