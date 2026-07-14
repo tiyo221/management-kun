@@ -286,14 +286,23 @@
 
   /**
    * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
-   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   * @param {string} [today] - 基準日（"YYYY-MM-DD"。省略時は本日。テスト用）
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention: {label: string, severity: string}[]}}
    */
-  function summary() {
+  function summary(today) {
+    const t = today || MK.util.todayISO();
     const d = dashboardData();
+    const list = goals();
+    // 未着手＝未達成かつ完了ステップゼロの目標（始める一手につながる）
+    const notStarted = list.filter((g) => !isAchieved(g) && progress(g).done === 0).length;
+    // 期限超過＝未達成かつ deadline が過去（ISO 日付は辞書順＝時系列順）
+    const overdue = list.filter((g) => !isAchieved(g) && g.deadline && g.deadline < t).length;
+    const attention = [];
+    if (overdue > 0) attention.push({ label: "期限超過 " + overdue + "件", severity: "warn" });
     return { empty: d.total === 0, stats: [
       { label: "達成率", value: d.achieveRate + "%" },
-      { label: "目標数", value: d.total },
-    ] };
+      { label: "未着手", value: notStarted },
+    ], attention };
   }
 
   /**

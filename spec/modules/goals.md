@@ -12,6 +12,9 @@
 ## 共通マスタ関係
 **持たない。** Member も Project も参照しない（チーム目標管理に見せないため。[`spec.md`](../../spec.md) §1.4）。将来「チームの OKR/KPI 管理」が必要になっても goals には載せず、別概念の新モジュールとして検討する。
 
+## サマリー（HOME 表示）
+`summary(today?)` は `達成率 N%` / `未着手 M`（未達成かつ完了ステップゼロ＝始める一手）を返す純関数（[`spec.md`](../../spec.md) §3.6）。母数の目標数は出さない（方針①・Issue #202）。`attention` として `期限超過 K件`（未達成かつ deadline < 基準日・warn）を申告する（HOME の要対応帯・Issue #102）。stats の未着手と attention の期限超過は別事実のため二重表示に当たらない（方針③）。
+
 ## 固有データ
 - `goals[]`（goal / step）。`mk:module:goals:v1`。
 - モジュール内部 ID は既存方式（`g_` / `s_`）を踏襲（[`spec.md`](../../spec.md) §4.7）。

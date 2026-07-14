@@ -60,4 +60,4 @@ People / Project マスタは**使わない**（todo と同じく個人用途）
 なし（新規モジュール）。
 
 ## サマリー（HOME 表示）
-`summary()` は `未解決 N件` / `今週わかった M件`（月曜起点）を返す純関数（[`spec.md`](../../spec.md) §3.6）。`attention` として未解決件数（info）を申告する（HOME の要対応帯・Issue #102）。
+`summary(today?)` は `未解決 N件`（残っている学習バックログ）を返す純関数（[`spec.md`](../../spec.md) §3.6）。throughput 系の `今週わかった` は stats から撤去した（方針①・Issue #202。集計 `resolvedThisWeek(today?)` 自体は残す）。`attention` として `停滞 M件`（未解決かつ最終更新から `STALE_DAYS`=14 日以上・warn）を申告する（HOME の要対応帯・Issue #102。`staleCount(today?)`）。全体の未解決と長期分の部分集合である停滞は別事実のため二重表示に当たらない（方針③）。

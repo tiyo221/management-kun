@@ -38,6 +38,8 @@
     { key: "investigating", label: "調査中" },
     { key: "resolved", label: "わかった" },
   ];
+  // 停滞と見なす日数（最終更新からの経過日数の下限。既定 14 日・Issue #202）。
+  const STALE_DAYS = 14;
   // ラベル解決 / 正規化 / 件数集計の定型は共有ヘルパへ集約（Issue #188）。日本語ラベル→key の
   // 変換テーブル（モジュール固有語彙）は byLabel で維持する。
   const statusSet = MK.util.statusSet(STATUSES, {
@@ -275,14 +277,28 @@
    * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention: {label: string, severity: string}[]}}
    *   `empty` はデータ皆無（空状態表示）、`stats` は表示する指標、`attention` は要対応事項（HOME の帯・Issue #102）。
    */
-  function summary() {
+  function summary(today) {
     const c = counts();
     const attention = [];
-    if (c.open > 0) attention.push({ label: "未解決の質問 " + c.open + "件", severity: "info" });
+    const stale = staleCount(today);
+    if (stale > 0) attention.push({ label: "停滞 " + stale + "件", severity: "warn" });
     return { empty: c.all === 0, stats: [
       { label: "未解決", value: c.open },
-      { label: "今週わかった", value: resolvedThisWeek() },
     ], attention };
+  }
+
+  /**
+   * 停滞している未解決アイテム件数を数える。未解決（わかった以外）かつ、最終更新から
+   * STALE_DAYS 日以上経過したもの。updatedAt は UTC タイムスタンプなので現地日付に
+   * 変換してから基準日と比較する（resolvedThisWeek と同方針・TZ ズレ回避）。
+   * @param {string} [today] - 基準日（YYYY-MM-DD、現地）。省略時は現地の今日（テスト注入用・TESTING §1）
+   * @returns {number} 停滞件数
+   */
+  function staleCount(today) {
+    const cutoff = MK.util.addDays(today || MK.util.todayISO(), -STALE_DAYS);
+    return items().filter((it) =>
+      it.status !== "resolved" && it.updatedAt &&
+      MK.util.fmtDate(new Date(it.updatedAt)) <= cutoff).length;
   }
 
   /**
@@ -304,7 +320,7 @@
   MK.logic = MK.logic || {};
   MK.logic.questions = {
     STATUSES, normalizeStatus, load, save, items, counts, filtered, knowledge, isKnowledge,
-    addItem, updateItem, removeItem, resolve, resolvedThisWeek, summary,
+    addItem, updateItem, removeItem, resolve, resolvedThisWeek, staleCount, summary,
     searchItems, buildCSVRows, applyCSV, exportData, importData, loadSample,
   };
 })();
