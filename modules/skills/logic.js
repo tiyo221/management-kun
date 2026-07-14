@@ -269,15 +269,29 @@
   }
 
   /**
-   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
-   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6・方針①③・#203）。
+   * 母数（メンバー / スキル項目）を撤去し、行動指標へ差し替える。
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention: {label: string, severity: string}[]}}
+   *   `empty` はデータ皆無（空状態表示）、`stats` は行動指標、`attention` は要対応事項（HOME の帯）。
    */
   function summary() {
-    const m = members().length, s = skills().length;
-    return { empty: m === 0 && s === 0, stats: [
-      { label: "メンバー", value: m },
-      { label: "スキル項目", value: s },
-    ] };
+    const list = skills();
+    // 目標設定済み（目標レベル・必要人数の両方あり）を母数に、充足/不足を状態として捉える。
+    const targeted = list.filter((s) => s.targetLevel != null && s.requiredCount != null);
+    const covered = targeted.filter((s) => gapOf(s).state === "ok").length;
+    const short = targeted.filter((s) => gapOf(s).state === "short").length;
+    // 未評価: 目標設定済みスキル×メンバーで、評価が空欄（"-"・数値以外＝未入力）のセル数＝評価を埋める一手。
+    const ms = members();
+    let unrated = 0;
+    targeted.forEach((s) => ms.forEach((m) => { if (rating(m.id, s.id) === "") unrated++; }));
+    const attention = [];
+    // 不足スキル: gapOf が short（必要人数に達していない）＝要対応。stats へは二重表示しない（方針③・#203）。
+    if (short > 0) attention.push({ label: "不足スキル " + short + "件", severity: "warn" });
+    // 行動指標: カバー率（目標設定済みのうち充足の割合＝状態）／未評価（評価を埋める一手）。
+    return { empty: ms.length === 0 && list.length === 0, stats: [
+      { label: "カバー率", value: targeted.length ? Math.round((covered / targeted.length) * 100) + "%" : "—" },
+      { label: "未評価", value: unrated },
+    ], attention };
   }
 
   /**

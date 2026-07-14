@@ -63,17 +63,22 @@ test("attention: goals は未達成かつ期限超過を warn で申告する（
   assert(att[0].label.includes("1件"), "期限超過の件数を含む: " + att[0].label);
 });
 
-test("summary: skills は人もスキルも無ければ empty", (MK) => {
-  // 観点: skills の summary は人もスキルも無ければ empty、人が居れば非空でメンバー数を返す
-  // 入力: 空を確認 → 人を1人だけ登録（スキルは無し）
-  // 期待: 空は empty=true / 人追加後 empty=false・stats[0]=メンバー1
+test("summary: skills は空→empty、目標設定後はカバー率/未評価（母数は出さない）", (MK) => {
+  // 観点: 行動指標へ差し替え（母数 メンバー/スキル項目 を撤去・#203）。目標設定済みを母数にカバー率・未評価を返す
+  // 入力: 空を確認 → 人2人・目標設定済みスキル1（目標3・必要1）→ 1人だけ充足評価を入れる
+  // 期待: 空は empty=true / 評価後 empty=false・カバー率="100%"（充足1/1）・未評価1（もう1人が空欄）
   const S = MK.logic.skills;
   assertShape(S.summary());
   assert(S.summary().empty);
-  MK.people.resolveOrCreate("誰か");
+  const a = MK.people.resolveOrCreate("Aさん"), b = MK.people.resolveOrCreate("Bさん");
+  S.addSkill({ domain: "d", item: "i", targetLevel: 3, requiredCount: 1 });
+  const sk = S.skills()[0];
+  S.setRating(a, sk.id, "4"); // A は目標到達 → 必要人数1を充足
   const s = S.summary();
   assert(!s.empty);
-  eq(s.stats[0].value, 1);
+  eq(s.stats.length, 2);                       // 母数（メンバー/スキル項目）は撤去
+  eq(s.stats[0].label, "カバー率"); eq(s.stats[0].value, "100%");
+  eq(s.stats[1].label, "未評価"); eq(s.stats[1].value, 1);  // B が空欄
 });
 
 test("summary: wbs は葉タスクが無ければ empty", (MK) => {
@@ -171,6 +176,51 @@ test("summary/attention: releases は直近予定（＋あと何日）/日程未
   s.stats.forEach((x) => assert(x.label !== "予定" && x.label !== "遅延", "母数・遅延 stat は出さない（重複回避）"));
   eq(s.attention.length, 1);
   eq(s.attention[0].label, "遅延 1件"); eq(s.attention[0].severity, "warn");
+});
+
+test("summary/attention: skills はカバー率/未評価 stat と 不足スキル attention（母数なし・重複なし）", (MK) => {
+  // 観点: skills の summary は契約形を満たし、行動指標（カバー率・未評価）＋ attention（不足スキル・warn）を返す
+  // 入力: 人1・充足スキル1（目標3必要1・評価4で充足）＋不足スキル1（目標3必要2・評価は1人のみ＝不足）
+  // 期待: 空は empty=true。stats=カバー率/未評価（母数 メンバー/スキル項目 は出さない）、不足は attention のみ
+  const S = MK.logic.skills;
+  assertShape(S.summary());
+  assert(S.summary().empty, "空なら empty=true");
+  const a = MK.people.resolveOrCreate("Aさん");
+  S.addSkill({ domain: "d", item: "ok", targetLevel: 3, requiredCount: 1 });   // 充足
+  S.addSkill({ domain: "d", item: "short", targetLevel: 3, requiredCount: 2 }); // 不足
+  const skOk = S.skills()[0], skShort = S.skills()[1];
+  S.setRating(a, skOk.id, "4");    // ok は必要1を充足
+  S.setRating(a, skShort.id, "4"); // short は充足1だが必要2 → 不足
+  const s = S.summary();
+  assert(!s.empty);
+  eq(s.stats.length, 2, "stats は2件（母数は撤去）");
+  eq(s.stats[0].label, "カバー率"); eq(s.stats[0].value, "50%"); // 充足1/目標設定2
+  eq(s.stats[1].label, "未評価"); eq(s.stats[1].value, 0);       // A は両スキル評価済み
+  s.stats.forEach((x) => assert(x.label !== "メンバー" && x.label !== "スキル項目" && x.label !== "不足スキル", "母数・不足 stat は出さない（重複回避）"));
+  eq(s.attention.length, 1);
+  eq(s.attention[0].label, "不足スキル 1件"); eq(s.attention[0].severity, "warn");
+});
+
+test("summary/attention: oneonone は未完アクション/要フォロー stat と 期限切れアクション attention（累計なし・重複なし）", (MK) => {
+  // 観点: oneonone の summary は契約形を満たし、行動指標（未完アクション・要フォロー）＋ attention（期限切れ・warn）を返す
+  // 入力: 基準日 2026-08-05。m1=最終7/01（35日＝30日超）＋期限切れ未完1・期限内未完1、m2=最終7/20（16日＝30日以内）
+  // 期待: 空は empty=true。stats=未完アクション2/要フォロー1（累計 記録数 は出さない）、期限切れは attention のみ
+  const O = MK.logic.oneonone;
+  const base = "2026-08-05";
+  assertShape(O.summary(base));
+  assert(O.summary(base).empty, "空なら empty=true");
+  O.addEntry({ memberId: "m1", date: "2026-07-01", body: "b", actions: [
+    { text: "遅延", due: "2026-07-10" }, { text: "余裕", due: "2026-08-10" },
+  ] });
+  O.addEntry({ memberId: "m2", date: "2026-07-20", body: "b2" });
+  const s = O.summary(base);
+  assert(!s.empty);
+  eq(s.stats.length, 2, "stats は2件（累計 記録数 は撤去）");
+  eq(s.stats[0].label, "未完アクション"); eq(s.stats[0].value, 2);
+  eq(s.stats[1].label, "要フォロー"); eq(s.stats[1].value, 1);
+  s.stats.forEach((x) => assert(x.label !== "記録数" && x.label !== "期限切れアクション", "累計・期限切れ stat は出さない（重複回避）"));
+  eq(s.attention.length, 1);
+  eq(s.attention[0].label, "期限切れアクション 1件"); eq(s.attention[0].severity, "warn");
 });
 
 test("attention: wbs は期限超過タスクを error で申告する（未完かつ終了日<基準日・全PJ横断）", (MK) => {

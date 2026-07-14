@@ -327,17 +327,38 @@
     ] });
   }
 
+  // 要フォロー判定のしきい値（最終 1on1 からの経過日数。既定 30日）。
+  const FOLLOW_UP_DAYS = 30;
+
   /**
-   * HOME ダッシュボード用のサマリーを算出する（spec §3.6）。
-   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[]}}
-   *   `empty` はデータ皆無（空状態表示）、`stats` は表示する指標の配列。
+   * HOME ダッシュボード用のサマリーを算出する（spec §3.6・方針①③・#203）。
+   * 累計（記録数）を撤去し、行動指標へ差し替える。
+   * @param {string} [today] - 基準日（"YYYY-MM-DD"。省略時は本日。テスト用）
+   * @returns {{empty: boolean, stats: {label: string, value: (string|number)}[], attention: {label: string, severity: string}[]}}
+   *   `empty` はデータ皆無（空状態表示）、`stats` は行動指標、`attention` は要対応事項（HOME の帯）。
    */
-  function summary() {
+  function summary(today) {
+    const base = today || MK.util.todayISO();
     const all = entries();
+    // 要フォロー: 記録のあるメンバーのうち、最終 1on1 から FOLLOW_UP_DAYS 日を超えて経過した人数＝次を組む一手。
+    const seen = {};
+    const memberIds = [];
+    all.forEach((e) => { if (e.memberId && !seen[e.memberId]) { seen[e.memberId] = true; memberIds.push(e.memberId); } });
+    const followUp = memberIds.filter((mid) => {
+      const last = lastDateOf(mid);
+      return last && MK.util.daysBetween(last, base) > FOLLOW_UP_DAYS;
+    }).length;
+    // 期限切れアクション: 未完かつ due が基準日より前（ISO 日付は辞書順＝時系列順）。
+    let overdue = 0;
+    all.forEach((e) => (e.actions || []).forEach((a) => { if (!a.done && a.due && a.due < base) overdue++; }));
+    const attention = [];
+    // 期限切れは attention に集約する。未完アクション（全体）とは別事実（期限超過の部分集合）のため重複ではない（方針③・#203）。
+    if (overdue > 0) attention.push({ label: "期限切れアクション " + overdue + "件", severity: "warn" });
+    // 行動指標: 未完アクション（着手すべき件数）／要フォロー（間隔が空いたメンバー数）。累計（記録数）は撤去。
     return { empty: all.length === 0, stats: [
       { label: "未完アクション", value: openActionCount() },
-      { label: "記録数", value: all.length },
-    ] };
+      { label: "要フォロー", value: followUp },
+    ], attention };
   }
 
   /**
