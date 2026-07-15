@@ -94,8 +94,8 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 - CSV 入出力に対応（§4.6）。列: `氏名, 役割, 表示色, 備考, 有効`。`有効` は空/未指定は true、`false`/`0`/`no`/`無効` を false と解釈。氏名が空の行はスキップ。取込の全置換／upsert の現行状況は §4.4.1 C の「現行の例外」を正とする。
 
 ### Project マスタ — プロジェクト管理ドメイン … `mk:projects:v1`
-横断的な束ね概念。todo-kun の `project` 文字列、wbs の大項目、workload のタスク群を緩く束ねる。
-本バージョンの Project は**軽量マスタ（参照・色分け・束ね）に留める**。複数モジュールを1つのプロジェクト視点で集約する「プロジェクト・ダッシュボード（ハブ）」は、全モジュールが Project に結合し「モジュール独立」と相反するため**将来拡張**とする（§14）。
+横断的な束ね概念。todo の `project` 参照、wbs の対象別データ、アロケーションの器などを緩く束ねる。
+Project は**軽量マスタ（参照・色分け・束ね）に留める**。複数モジュールを1つのプロジェクト視点で集約するビューはマスタ側に作らず、`dashboard` モジュール（project-scoped・[`modules/dashboard.md`](modules/dashboard.md)）に一本化する（判断記録は spec.md §9.6）。
 
 | フィールド | 型 | 説明 |
 |---|---|---|
@@ -110,7 +110,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 - CSV 入出力に対応（§4.6）。列: `プロジェクト名, 表示色, 状態, 備考`。`状態` は `archived`/`アーカイブ` を archived、それ以外は既定 `active`。プロジェクト名が空の行はスキップ。取込の全置換／upsert の現行状況は §4.4.1 C の「現行の例外」を正とする。
 
 ### アロケーションマスタ — 計画（人×器×期間×割当%） … `mk:allocations:v1`
-マネージャがトップダウンで planning する**共有された計画事実**（§3.7.5）。People / Projects と同格の**中立な共有マスタ**として独立させ、特定モジュールに属させない（Issue #45 で workload 内部から昇格）。参照・編集は `ctx.allocations` 経由（§3.5）で、直接 localStorage を触らない。編集（planning）はリソース（resource・旧 staffing）が担う。
+マネージャがトップダウンで planning する**共有された計画事実**（§3.7.5）。People / Projects と同格の**中立な共有マスタ**として独立させ、特定モジュールに属させない。参照・編集は `ctx.allocations` 経由（§3.5）で、直接 localStorage を触らない。編集（planning）はリソース（resource）が担う。
 
 | フィールド | 型 | 説明 |
 |---|---|---|
@@ -146,7 +146,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 - ※ `targetId` 参照で成立するため、共通契約の `name` 必須・`resolve`/CSV は当てはまらない。編集は resource UI と JSON 入出力を正とし、CSV 取込対象外。
 
 ### Product マスタ — プロダクト（成果物）… `mk:products:v1`
-プロダクト領域（§1.4・主語＝作るもの／成果物）の横断マスタ。People / Project とは別ドメインの独立ストア（`mk:products`）で、シェルレベルの「マスタ」グループに `master-products`（📦 プロダクト）として置く（§3.6 / §6.4）。扱うプロダクト自体の台帳であると同時に、§3.7 の **Product スコープ次元のマスタ**（`dimensions[].master === "products"`）を兼ねる。マスタ自体は Issue #37 で先行追加し、次元としての配線（`MK_CONFIG.dimensions` への追加）は Issue #54 で完了した（§3.7.6・§9.3 ガードレール準拠。product-scoped モジュールはまだ無い）。
+プロダクト領域（§1.4・主語＝作るもの／成果物）の横断マスタ。People / Project とは別ドメインの独立ストア（`mk:products`）で、シェルレベルの「マスタ」グループに `master-products`（📦 プロダクト）として置く（§3.6 / §6.4）。扱うプロダクト自体の台帳であると同時に、§3.7 の **Product スコープ次元のマスタ**（`dimensions[].master === "products"`）を兼ねる（§3.7.6。product-scoped モジュールはまだ無い）。
 
 | フィールド | 型 | 説明 |
 |---|---|---|
