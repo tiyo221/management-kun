@@ -114,8 +114,20 @@
       cb, time, grow, minSel,
       ui.button("↑", { variant: "btn-ghost", onClick: () => { L().moveItem(it.id, -1); render(); } }),
       ui.button("↓", { variant: "btn-ghost", onClick: () => { L().moveItem(it.id, 1); render(); } }),
-      ui.button("✕", { variant: "btn-ghost", onClick: () => { L().removeItem(it.id); render(); } }),
+      ui.button("✕", { variant: "btn-ghost", title: "デイリーから外す", onClick: () => removeWithConfirm(it) }),
     ]);
+  }
+
+  // 削除は「手書き項目のときだけ」確認する。手書きはデイリーが唯一の実体なので消すと復旧できない
+  // （CONVENTIONS §6）。todo 由来は todo に実体が残る＝「今日やらない」の取り消しが容易なので、
+  // 日々の組み替えを妨げないよう確認を挟まない。
+  function removeWithConfirm(it) {
+    if (it.source !== "manual") { L().removeItem(it.id); render(); return; }
+    MK.ui.confirm("「" + (it.title || "無題") + "」を削除しますか？（デイリーにしかない項目です）").then((ok) => {
+      if (!ok) return;
+      L().removeItem(it.id);
+      render();
+    });
   }
 
   // 合計・終了時刻・はみ出し警告＋「残りを明日へ送る」（その日に項目があるときだけ出す）
@@ -143,7 +155,7 @@
         });
       },
     });
-    if (!remaining) btn.disabled = true; // 未完了ゼロなら押せない（不活性ボタンにしない）
+    if (!remaining) btn.disabled = true; // 未完了ゼロなら押しても意味がないので無効化する
     bar.appendChild(btn);
     return bar;
   }

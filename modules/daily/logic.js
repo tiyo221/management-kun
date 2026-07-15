@@ -68,6 +68,27 @@
     const n = Math.round(Number(v));
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_MIN;
   }
+  /**
+   * "YYYY-MM-DD" として実在する日付かを判定する。書式だけでなく暦としての妥当性も見る
+   * （"2026-02-31" のような日は addDays が生成せず、どの日の器からも到達できない項目になるため）。
+   * @param {*} v - 日付候補
+   * @returns {boolean} 実在する日付なら true
+   */
+  function isValidDate(v) {
+    const s = String(v == null ? "" : v);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+    const d = new Date(s + "T00:00:00");
+    return !isNaN(d.getTime()) && MK.util.fmtDate(d) === s; // 繰り上がった日付は元の文字列と一致しない
+  }
+  /**
+   * "HH:MM" として妥当な時刻かを判定する（不正なら呼び出し側が既定へ寄せる／現状維持にする）。
+   * @param {*} v - 時刻候補
+   * @returns {boolean} 妥当なら true
+   */
+  function isValidTime(v) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(v == null ? "" : v).trim());
+    return !!m && Number(m[1]) <= 23 && Number(m[2]) <= 59;
+  }
 
   // ---- 参照 ----
   /**
@@ -88,11 +109,36 @@
    */
   function setStartTime(hhmm) { const d = load(); d.startTime = minToHHMM(hhmmToMin(hhmm)); save(d); }
   /**
-   * 指定日の項目を配列順（＝時間割の積み上げ順）で返す。
+   * 項目の完了状態を解決する。`source:"todo"` の項目は **todo の状態が正**（実体は todo が持ち、
+   * デイリーの `done` は表示用スナップショット）。これにより ToDo 画面側で完了しても
+   * デイリーへ反映され、「今日の残り」に居座って毎日繰り越され続ける不整合を防ぐ。
+   * todo 未搭載（配布サブセット）・todo 実体が消えている場合はスナップショットへフォールバックする。
+   * @param {DailyItem} it - 対象項目
+   * @returns {boolean} 解決後の完了状態
+   */
+  function resolveDone(it) {
+    if (!it || it.source !== "todo" || !it.todoId) return !!(it && it.done);
+    const todo = MK.logic && MK.logic.todo;
+    if (!todo) return !!it.done;
+    const t = todo.tasks().find((x) => x.id === it.todoId);
+    return t ? t.status === "done" : !!it.done;
+  }
+  /**
+   * 完了状態を todo と揃えた全項目を返す（読み取り用。保存はしない）。
+   * @returns {DailyItem[]} 完了状態を解決した項目一覧
+   */
+  function resolvedItems() {
+    return items().map((it) => {
+      const done = resolveDone(it);
+      return done === !!it.done ? it : Object.assign({}, it, { done });
+    });
+  }
+  /**
+   * 指定日の項目を配列順（＝時間割の積み上げ順）で返す。完了状態は todo と揃えて解決する。
    * @param {string} date - 対象日（"YYYY-MM-DD"）
    * @returns {DailyItem[]} その日の項目一覧
    */
-  function dayItems(date) { return items().filter((it) => it.date === date); }
+  function dayItems(date) { return resolvedItems().filter((it) => it.date === date); }
 
   // ---- CRUD ----
   /**
@@ -122,7 +168,7 @@
    */
   function activeTodoIds() {
     const taken = {};
-    items().forEach((it) => { if (it.source === "todo" && it.todoId && !it.done) taken[it.todoId] = true; });
+    resolvedItems().forEach((it) => { if (it.source === "todo" && it.todoId && !it.done) taken[it.todoId] = true; });
     return taken;
   }
   /**
@@ -239,9 +285,11 @@
   function rolloverTo(fromDate, toDate) {
     const d = load();
     const now = MK.util.nowISO();
-    const moved = d.items.filter((it) => it.date === fromDate && !it.done);
+    // 完了判定は todo と揃えた解決値で行う（todo 側で完了した項目を翌日へ送り続けない）。
+    const pending = (it) => it.date === fromDate && !resolveDone(it);
+    const moved = d.items.filter(pending);
     if (!moved.length) return 0;
-    d.items = d.items.filter((it) => !(it.date === fromDate && !it.done)); // いったん取り除いて
+    d.items = d.items.filter((it) => !pending(it)); // いったん取り除いて
     moved.forEach((it) => { it.date = toDate; it.updatedAt = now; d.items.push(it); }); // 末尾へ付け直す
     save(d);
     return moved.length;
@@ -276,7 +324,7 @@
    */
   function summary(today) {
     const t = today || MK.util.todayISO();
-    const all = items();
+    const all = resolvedItems(); // 完了は todo と揃えた解決値で数える
     const todays = all.filter((it) => it.date === t);
     const remaining = todays.filter((it) => !it.done).length;
     const stale = all.filter((it) => it.date < t && !it.done).length; // 過去日で未処理＝繰り越し/整理待ち
@@ -308,12 +356,15 @@
     const today = MK.util.todayISO();
     return (list || []).map((it) => {
       const src = it || {};
-      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(src.date || "")) ? src.date : today;
+      const source = src.source === "todo" ? "todo" : "manual"; // 未知値は手書き扱い（todo 実体を騙らせない）
       return Object.assign({}, src, {
         id: src.id ? src.id : MK.util.uid("d"),
-        date,
+        date: isValidDate(src.date) ? src.date : today,
+        title: String(src.title == null ? "" : src.title),
         minutes: normMinutes(src.minutes),
         done: !!src.done,
+        source,
+        todoId: source === "todo" && src.todoId ? src.todoId : null, // 手書きに todoId を残さない
       });
     });
   }
@@ -327,7 +378,8 @@
    */
   function importData(data, mode) {
     const incoming = normalizeItems(data && data.items);
-    const start = data && data.startTime ? minToHHMM(hhmmToMin(data.startTime)) : null;
+    // 妥当な startTime のときだけ採用する（不正値で現在の設定を既定へ書き戻さない）。
+    const start = data && isValidTime(data.startTime) ? minToHHMM(hhmmToMin(data.startTime)) : null;
     if (mode === "merge") {
       const d = load();
       d.items = MK.util.mergeById(d.items, incoming);
@@ -356,7 +408,7 @@
 
   MK.logic = MK.logic || {};
   MK.logic.daily = {
-    load, save, items, dayItems, startTime, setStartTime,
+    load, save, items, resolvedItems, resolveDone, dayItems, startTime, setStartTime,
     addManual, pullableTodos, pullFromTodo,
     updateItem, setMinutes, toggleDone, removeItem, moveItem, rolloverTo,
     schedule, hhmmToMin, minToHHMM,
