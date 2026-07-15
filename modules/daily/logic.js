@@ -117,23 +117,40 @@
    * @returns {boolean} 解決後の完了状態
    */
   function resolveDone(it) {
-    if (!it || it.source !== "todo" || !it.todoId) return !!(it && it.done);
-    const todo = MK.logic && MK.logic.todo;
-    if (!todo) return !!it.done;
-    const t = todo.tasks().find((x) => x.id === it.todoId);
-    return t ? t.status === "done" : !!it.done;
+    const t = todoOf(it);
+    return t ? t.status === "done" : !!(it && it.done);
   }
   /**
-   * 項目配列の完了状態を todo と揃えて解決した配列を返す（保存はしない）。
-   * @param {DailyItem[]} list - 対象項目
-   * @returns {DailyItem[]} 完了状態を解決した項目一覧
+   * 項目の由来 todo タスクを引く。todo 由来でない・todo 未搭載・実体が消えている場合は null。
+   * @param {DailyItem} it - 対象項目
+   * @returns {Object|null} 由来の todo タスク（無ければ null）
    */
-  function resolveAll(list) {
-    return list.map((it) => {
-      const done = resolveDone(it);
-      return done === !!it.done ? it : Object.assign({}, it, { done });
-    });
+  function todoOf(it) {
+    if (!it || it.source !== "todo" || !it.todoId) return null;
+    const todo = MK.logic && MK.logic.todo;
+    if (!todo) return null;
+    return todo.tasks().find((x) => x.id === it.todoId) || null;
   }
+  /**
+   * 項目1件を todo と揃えて解決する（保存はしない）。`done` と `title` の両方が対象＝
+   * todo 由来項目は **todo が正**（ToDo 側でタスク名を変えたらデイリーの表示も追従する。
+   * done だけ解決して title を据え置くと「実体は todo が持つ」の宣言と食い違うため）。
+   * デイリーの `done` / `title` は todo 不在時のためのスナップショット。
+   * @param {DailyItem} it - 対象項目
+   * @returns {DailyItem} 解決後の項目（変化が無ければ同一参照）
+   */
+  function resolveItem(it) {
+    const t = todoOf(it);
+    if (!t) return it;
+    const done = t.status === "done";
+    return done === !!it.done && t.title === it.title ? it : Object.assign({}, it, { done, title: t.title });
+  }
+  /**
+   * 項目配列を todo と揃えて解決した配列を返す（保存はしない）。
+   * @param {DailyItem[]} list - 対象項目
+   * @returns {DailyItem[]} 解決した項目一覧
+   */
+  function resolveAll(list) { return list.map(resolveItem); }
   /**
    * 完了状態を todo と揃えた全項目を返す（読み取り用。保存はしない）。
    * @returns {DailyItem[]} 完了状態を解決した項目一覧
@@ -175,7 +192,7 @@
    * @returns {Object.<string, boolean>} todoId をキーに持つ集合
    */
   function activeTodoIds() {
-    const taken = {};
+    const taken = Object.create(null); // プロトタイプ継承キー（"constructor" 等）を誤検出しない
     resolvedItems().forEach((it) => { if (it.source === "todo" && it.todoId && !it.done) taken[it.todoId] = true; });
     return taken;
   }
@@ -218,6 +235,9 @@
 
   /**
    * 指定項目を部分更新して保存する（updatedAt を現在時刻で更新）。該当なしなら何もしない。
+   * **内部専用**（公開しない）。無検証の Object.assign なので id / date / source / todoId まで
+   * 書き換えられてしまい、正規化を通す setMinutes / toggleDone と非対称になるため。
+   * 外からの更新は用途別の setter（setMinutes / toggleDone）を使う。
    * @param {string} id - 対象項目ID
    * @param {Partial<DailyItem>} patch - 上書きするフィールド
    * @returns {void}
@@ -292,7 +312,10 @@
    * @returns {number} 繰り越した件数
    * ※ store へ保存する副作用あり。
    */
-  function rolloverTo(fromDate, toDate) { return rolloverWhere((it) => it.date === fromDate, toDate); }
+  function rolloverTo(fromDate, toDate) {
+    if (fromDate === toDate) return 0; // 同日への繰り越しは無意味（その日の未完了が末尾へ並び替わるだけ）
+    return rolloverWhere((it) => it.date === fromDate, toDate);
+  }
   /**
    * 指定日より前に取り残された未完了項目を、まとめて toDate の末尾へ繰り越して保存する。
    * 夜の締めを数日忘れても、日を遡って1日ずつ繰り越し直さずに拾い直せるようにするための動線
@@ -313,10 +336,14 @@
   function rolloverWhere(matches, toDate) {
     const d = load();
     const now = MK.util.nowISO();
-    // 締め（＝書き込み経路）でスナップショットを解決値へ治癒させる。読み取り時の resolveDone は
+    // 締め（＝書き込み経路）でスナップショットを解決値へ治癒させる。読み取り時の解決は
     // 表示を揃えるだけで保存値は古いままなので、後から todo 実体が消えるとフォールバックが
-    // 古い false を拾って完了済み項目が未完了として復活してしまう。
-    d.items.forEach((it) => { it.done = resolveDone(it); });
+    // 古い値を拾ってしまう（完了済み項目が未完了として復活する・旧タイトルへ戻る）。
+    d.items.forEach((it) => {
+      const t = todoOf(it);
+      it.done = t ? t.status === "done" : !!it.done;
+      if (t) it.title = t.title;
+    });
     const pending = (it) => !it.done && matches(it);
     const moved = d.items.filter(pending);
     if (!moved.length) { save(d); return 0; } // 治癒結果は繰り越しが無くても残す
@@ -405,7 +432,9 @@
   function normalizeItems(list) {
     const today = MK.util.todayISO();
     const now = MK.util.nowISO();
-    const seen = {}; // id の重複を検出して再採番する（下記）
+    // id の重複を検出して再採番する（下記）。素の {} だと "constructor" / "toString" 等の
+    // プロトタイプ継承キーが真になり、重複でないのに再採番してしまう（外部 JSON は寛容に受ける前提）。
+    const seen = Object.create(null);
     return (list || []).map((it) => {
       const src = it || {};
       const source = src.source === "todo" ? "todo" : "manual"; // 未知値は手書き扱い（todo 実体を騙らせない）
@@ -478,7 +507,7 @@
   MK.logic.daily = {
     load, save, items, resolvedItems, resolveDone, dayItems, startTime, setStartTime,
     addManual, pullableTodos, pullFromTodo,
-    updateItem, setMinutes, toggleDone, removeItem, moveItem, rolloverTo, rolloverStaleTo, staleCount,
+    setMinutes, toggleDone, removeItem, moveItem, rolloverTo, rolloverStaleTo, staleCount,
     schedule, hhmmToMin, minToHHMM,
     summary, exportData, importData, loadSample,
   };
