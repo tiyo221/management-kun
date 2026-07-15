@@ -326,13 +326,21 @@
     return moved.length;
   }
   /**
+   * 「取り残し」＝基準日より前に残った未完了、の判定（staleCount と summary で共有する。
+   * 定義が2か所に散ると手動同期になるため）。完了状態は解決済みの項目を渡す前提。
+   * @param {DailyItem} it - 解決済みの項目
+   * @param {string} t - 基準日（"YYYY-MM-DD"）
+   * @returns {boolean} 取り残しなら true
+   */
+  function isStale(it, t) { return it.date < t && !it.done; } // ISO 日付は辞書順＝時系列順
+  /**
    * 指定日より前に取り残された未完了項目の件数を返す（HOME の要対応・まとめ繰り越しの導線表示用）。
    * @param {string} [today] - 基準日（"YYYY-MM-DD"・省略時は本日）
    * @returns {number} 取り残された未完了の件数
    */
   function staleCount(today) {
     const t = today || MK.util.todayISO();
-    return resolvedItems().filter((it) => it.date < t && !it.done).length;
+    return resolvedItems().filter((it) => isStale(it, t)).length;
   }
 
   /**
@@ -367,7 +375,7 @@
     const all = resolvedItems(); // 完了は todo と揃えた解決値で数える
     const todays = all.filter((it) => it.date === t);
     const remaining = todays.filter((it) => !it.done).length;
-    const stale = all.filter((it) => it.date < t && !it.done).length; // 過去日で未処理＝まとめ繰り越し待ち
+    const stale = all.filter((it) => isStale(it, t)).length; // 過去日で未処理＝まとめ繰り越し待ち（all を使い回す）
     const sched = schedule(t);
     const attention = [];
     if (stale > 0) attention.push({ label: "前日までの未処理 " + stale + "件", severity: "warn" });
@@ -401,10 +409,16 @@
     return (list || []).map((it) => {
       const src = it || {};
       const source = src.source === "todo" ? "todo" : "manual"; // 未知値は手書き扱い（todo 実体を騙らせない）
-      // id は欠落だけでなく**重複**も潰す。重複したまま通すと、id 一致で引く
-      // moveItem/removeItem/toggleDone が先頭にしかヒットせず（2行目を編集すると1行目が変わる）、
-      // removeItem は両方消す。merge は mergeById が畳むので、replace 経路にも同じ保証を与える。
-      const id = src.id && !seen[src.id] ? src.id : MK.util.uid("d");
+      // id は欠落・重複・整数風のいずれも採番し直す。
+      // - 重複を通すと、id 一致で引く moveItem/removeItem/toggleDone が先頭にしかヒットせず
+      //   （2行目を編集すると1行目が変わる）、removeItem は両方消す。merge は mergeById が畳むので
+      //   replace 経路にも同じ保証を与える。
+      // - 整数風（"1" や 1）を通すと、mergeById が返す Object.keys が整数風キーを先頭に列挙する
+      //   ため、merge 取込でその項目がその日の先頭＝朝イチへ黙って繰り上がる（配列順＝時刻のため）。
+      //   文字列化しても "1" は整数風のままなので、採番し直すしかない（spec の id は d_<epoch>_<rand>）。
+      const raw = src.id == null ? "" : String(src.id);
+      const usable = raw && !seen[raw] && !/^(0|[1-9]\d*)$/.test(raw);
+      const id = usable ? raw : MK.util.uid("d");
       seen[id] = true;
       return Object.assign({}, src, {
         id,

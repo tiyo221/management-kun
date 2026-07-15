@@ -32,6 +32,9 @@
     const d = new Date(iso + "T00:00:00");
     return (d.getMonth() + 1) + "/" + d.getDate() + "（" + WEEK[d.getDay()] + "）";
   }
+  // 閲覧中の日の呼び名。本日なら「今日」、それ以外は日付ラベル。文面と実際の書き込み先を
+  // 一致させるために使う（◀/▶ で別の日を見ているのに「今日の候補」と言わない）。
+  function dayWord() { return date === MK.util.todayISO() ? "今日" : dateLabel(date); }
 
   function render() {
     if (!root) return;
@@ -89,7 +92,7 @@
 
   // 追加行（手書きで候補を足す／todo の next から引く）
   function addBar() {
-    const input = ui.input({ placeholder: "今日の候補を入力して Enter", onEnter: (v) => { if (L().addManual(date, v, Number(newMin))) render(); } });
+    const input = ui.input({ placeholder: dayWord() + "の候補を入力して Enter", onEnter: (v) => { if (L().addManual(date, v, Number(newMin))) render(); } });
     const minSel = ui.select(MIN_OPTS, newMin, (v) => { newMin = v; });
     minSel.style.maxWidth = "110px";
     return ui.toolbar([
@@ -105,7 +108,7 @@
     const host = ui.card([], { flush: true });
     if (!sched.rows.length) {
       host.appendChild(ui.emptyState({
-        title: "今日の候補がまだありません",
+        title: dayWord() + "の候補がまだありません",
         hint: "上でやることを書いて追加するか、「ToDo から引く」で next のタスクを持ってきましょう。並べ替えると時間割が組み上がります。",
       }));
       return host;
@@ -203,7 +206,7 @@
           closeModal();
           render();
           if (!added) { MK.ui.toast("「" + c.title + "」は引き込めませんでした", "error"); return; }
-          MK.ui.toast("「" + c.title + "」を今日の候補に追加しました", "success");
+          MK.ui.toast("「" + c.title + "」を" + dayWord() + "の候補に追加しました", "success");
         });
         list.appendChild(row);
       });
