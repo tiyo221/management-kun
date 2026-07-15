@@ -37,8 +37,10 @@
     if (!root) return;
     if (!date) date = MK.util.todayISO();
     root.innerHTML = "";
+    // 時間割は1描画につき1回だけ算出して、リストとフッタで使い回す（走査の重複を避ける）。
+    const sched = L().schedule(date);
     root.appendChild(ui.sectionTitle("デイリー"));
-    root.appendChild(ui.stack([dayBar(), addBar(), listCard(), footer()]));
+    root.appendChild(ui.stack([dayBar(), addBar(), listCard(sched), footer(sched)]));
   }
 
   // 日ナビ（◀ / 日付 / ▶ / 今日）＋ 開始時刻
@@ -78,9 +80,8 @@
   }
 
   // 時間割（自動積み上げ）。並び順がそのまま時刻になる。
-  function listCard() {
+  function listCard(sched) {
     const host = ui.card([], { flush: true });
-    const sched = L().schedule(date);
     if (!sched.rows.length) {
       host.appendChild(ui.emptyState({
         title: "今日の候補がまだありません",
@@ -131,11 +132,9 @@
   }
 
   // 合計・終了時刻・はみ出し警告＋「残りを明日へ送る」（その日に項目があるときだけ出す）
-  function footer() {
-    const rows = L().dayItems(date);
-    if (!rows.length) return null;
-    const sched = L().schedule(date);
-    const remaining = rows.filter((it) => !it.done).length;
+  function footer(sched) {
+    if (!sched.rows.length) return null;
+    const remaining = sched.rows.filter((r) => !r.item.done).length;
     const bar = ui.toolbar([
       el("div", { class: "grow sub" }, [
         "合計 " + fmtDur(sched.totalMin) + " ／ 終了 " + sched.endLabel,
@@ -187,7 +186,11 @@
         });
         list.appendChild(row);
       });
-      body = list;
+      // どの所要時間で入るかを明示する（追加行の選択値を暗黙に使うため、気づけないと混乱する）。
+      body = ui.stack([
+        el("div", { class: "sub", text: "所要時間 " + fmtDur(Number(newMin)) + " で追加します（追加後に各行で変更できます）" }),
+        list,
+      ]);
     }
     _modal = MK.ui.modal({
       title: "ToDo（Next）から引く",

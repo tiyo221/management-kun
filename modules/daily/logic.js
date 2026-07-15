@@ -124,21 +124,28 @@
     return t ? t.status === "done" : !!it.done;
   }
   /**
-   * 完了状態を todo と揃えた全項目を返す（読み取り用。保存はしない）。
+   * 項目配列の完了状態を todo と揃えて解決した配列を返す（保存はしない）。
+   * @param {DailyItem[]} list - 対象項目
    * @returns {DailyItem[]} 完了状態を解決した項目一覧
    */
-  function resolvedItems() {
-    return items().map((it) => {
+  function resolveAll(list) {
+    return list.map((it) => {
       const done = resolveDone(it);
       return done === !!it.done ? it : Object.assign({}, it, { done });
     });
   }
   /**
+   * 完了状態を todo と揃えた全項目を返す（読み取り用。保存はしない）。
+   * @returns {DailyItem[]} 完了状態を解決した項目一覧
+   */
+  function resolvedItems() { return resolveAll(items()); }
+  /**
    * 指定日の項目を配列順（＝時間割の積み上げ順）で返す。完了状態は todo と揃えて解決する。
+   * 解決は todo の走査を伴うため、先に date で絞ってからその日ぶんだけ解決する。
    * @param {string} date - 対象日（"YYYY-MM-DD"）
    * @returns {DailyItem[]} その日の項目一覧
    */
-  function dayItems(date) { return resolvedItems().filter((it) => it.date === date); }
+  function dayItems(date) { return resolveAll(items().filter((it) => it.date === date)); }
 
   // ---- CRUD ----
   /**
@@ -162,8 +169,9 @@
 
   /**
    * 未完了のまま**いずれかの日に載っている** todo の id 集合を返す（重複引き込みの防止）。
-   * 同じ todo が複数日に載ると、実体（todo）は1つなのに完了同期が片方にしか反映されず
-   * 不整合になるため、日をまたいだ重複を許さない（繰り越し＝rolloverTo が正規の経路）。
+   * 実体（todo）は1つなので、同じ todo が複数の日に載ると同じ仕事を二重に計上することになる
+   * （両日で時間を確保し、両日の「残り」に数えられる）。日を移すのは繰り越し＝rolloverTo が
+   * 正規の経路。なお完了状態自体は resolveDone が todo から解決するので表示は食い違わない。
    * @returns {Object.<string, boolean>} todoId をキーに持つ集合
    */
   function activeTodoIds() {
@@ -285,10 +293,13 @@
   function rolloverTo(fromDate, toDate) {
     const d = load();
     const now = MK.util.nowISO();
-    // 完了判定は todo と揃えた解決値で行う（todo 側で完了した項目を翌日へ送り続けない）。
-    const pending = (it) => it.date === fromDate && !resolveDone(it);
+    // 夕方の締め（＝書き込み経路）でスナップショットを解決値へ治癒させる。読み取り時の
+    // resolveDone は表示を揃えるだけで保存値は古いままなので、後から todo 実体が消えると
+    // フォールバックが古い false を拾って完了済み項目が未完了として復活してしまう。
+    d.items.forEach((it) => { it.done = resolveDone(it); });
+    const pending = (it) => it.date === fromDate && !it.done;
     const moved = d.items.filter(pending);
-    if (!moved.length) return 0;
+    if (!moved.length) { save(d); return 0; } // 治癒結果は繰り越しが無くても残す
     d.items = d.items.filter((it) => !pending(it)); // いったん取り除いて
     moved.forEach((it) => { it.date = toDate; it.updatedAt = now; d.items.push(it); }); // 末尾へ付け直す
     save(d);
@@ -354,6 +365,7 @@
    */
   function normalizeItems(list) {
     const today = MK.util.todayISO();
+    const now = MK.util.nowISO();
     return (list || []).map((it) => {
       const src = it || {};
       const source = src.source === "todo" ? "todo" : "manual"; // 未知値は手書き扱い（todo 実体を騙らせない）
@@ -365,6 +377,9 @@
         done: !!src.done,
         source,
         todoId: source === "todo" && src.todoId ? src.todoId : null, // 手書きに todoId を残さない
+        // typedef / spec が必須と宣言しているフィールドを欠落させない（取込時刻で補完する）。
+        createdAt: src.createdAt || now,
+        updatedAt: src.updatedAt || now,
       });
     });
   }
@@ -386,7 +401,9 @@
       if (start) d.startTime = start;
       save(d);
     } else {
-      save({ version: 1, startTime: start || DEFAULT_START, items: incoming });
+      // replace が置き換えるのは項目（items）。開始起点は利用者の設定なので、取り込みデータに
+      // 妥当な値が無ければ現状維持に倒す（merge と同じ非対称を作らない）。
+      save({ version: 1, startTime: start || startTime(), items: incoming });
     }
   }
   /**
