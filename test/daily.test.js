@@ -133,6 +133,29 @@ test("daily: 未完了の残りを翌日へ繰り越す（完了は残す）", (
   eq(D.dayItems(d2).map((it) => it.title), ["翌日の既存", "残り1", "残り2"]);
 });
 
+test("daily: 取り残しをまとめて今日へ送る（staleCount / rolloverStaleTo）", (MK) => {
+  // 観点: 締めを数日忘れると未処理が過去日に散らばる。HOME の要対応をクリックすると本日が開くので、
+  //       日を遡らずまとめて拾い直せる必要がある。過去日の未完了だけを今日へ寄せ、完了と未来日は動かさない。
+  // 入力: 7/12 に未完1・完了1、7/13 に未完2、今日 7/15 に既存1、未来 7/16 に1
+  // 期待: staleCount=3、まとめ送りで3件が今日の末尾へ（既存の後ろ）。完了と未来日はそのまま
+  const D = MK.logic.daily;
+  const today = "2026-07-15";
+  D.addManual("2026-07-12", "12日の残り", 30);
+  const doneId = D.addManual("2026-07-12", "12日に済んだ", 30);
+  D.toggleDone(doneId, true);
+  D.addManual("2026-07-13", "13日の残りA", 30);
+  D.addManual("2026-07-13", "13日の残りB", 30);
+  D.addManual(today, "今日の既存", 30);
+  D.addManual("2026-07-16", "明日の予定", 30);
+  eq(D.staleCount(today), 3);                       // 過去日の未完了のみ（完了は数えない）
+  eq(D.rolloverStaleTo(today), 3);
+  eq(D.staleCount(today), 0);
+  // 今日は既存が先頭、拾い直した3件が後ろに日付順で付く
+  eq(D.dayItems(today).map((it) => it.title), ["今日の既存", "12日の残り", "13日の残りA", "13日の残りB"]);
+  eq(D.dayItems("2026-07-12").map((it) => it.title), ["12日に済んだ"]); // 完了は履歴として残る
+  eq(D.dayItems("2026-07-16").map((it) => it.title), ["明日の予定"]);   // 未来日は動かさない
+});
+
 test("daily: summary（今日の残り・予定終了・要対応）", (MK) => {
   // 観点: 母数でなく「今日の残り」を出し、予定終了時刻を state として持つ。前日未処理は attention。
   // 入力: 基準日 7/15。7/15 に未完2件（各60分・開始09:00）、7/14 に未処理1件

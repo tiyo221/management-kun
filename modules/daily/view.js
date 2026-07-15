@@ -40,7 +40,28 @@
     // 時間割は1描画につき1回だけ算出して、リストとフッタで使い回す（走査の重複を避ける）。
     const sched = L().schedule(date);
     root.appendChild(ui.sectionTitle("デイリー"));
-    root.appendChild(ui.stack([dayBar(), addBar(), listCard(sched), footer(sched)]));
+    root.appendChild(ui.stack([dayBar(), staleBar(), addBar(), listCard(sched), footer(sched)]));
+  }
+
+  // 取り残しの拾い直し導線。夜の締めを数日忘れても、日を遡って1日ずつ繰り越し直さずに済むようにする
+  // （HOME の要対応「前日までの未処理 N件」をクリックすると本日が開くので、その解消手段をここに置く）。
+  // 過去日を閲覧中は出さない（「今日へ送る」の意味が分かりにくくなるため）。
+  function staleBar() {
+    const today = MK.util.todayISO();
+    if (date !== today) return null;
+    const n = L().staleCount(today);
+    if (!n) return null;
+    return ui.toolbar([
+      el("div", { class: "grow sub", text: "⚠ 前日までの未処理が " + n + " 件あります" }),
+      ui.button("まとめて今日へ送る", {
+        onClick: () => MK.ui.confirm("前日までの未処理 " + n + " 件を今日（" + dateLabel(today) + "）へまとめて送りますか？").then((ok) => {
+          if (!ok) return;
+          const moved = L().rolloverStaleTo(today);
+          render();
+          MK.ui.toast(moved + " 件を今日へ送りました", "success");
+        }),
+      }),
+    ]);
   }
 
   // 日ナビ（◀ / 日付 / ▶ / 今日）＋ 開始時刻

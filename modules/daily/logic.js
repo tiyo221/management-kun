@@ -292,20 +292,47 @@
    * @returns {number} 繰り越した件数
    * ※ store へ保存する副作用あり。
    */
-  function rolloverTo(fromDate, toDate) {
+  function rolloverTo(fromDate, toDate) { return rolloverWhere((it) => it.date === fromDate, toDate); }
+  /**
+   * 指定日より前に取り残された未完了項目を、まとめて toDate の末尾へ繰り越して保存する。
+   * 夜の締めを数日忘れても、日を遡って1日ずつ繰り越し直さずに拾い直せるようにするための動線
+   * （HOME の要対応「前日までの未処理 N件」の解消手段）。
+   * @param {string} toDate - 繰り越し先の日（"YYYY-MM-DD"。通常は本日）
+   * @returns {number} 繰り越した件数
+   * ※ store へ保存する副作用あり。
+   */
+  function rolloverStaleTo(toDate) { return rolloverWhere((it) => it.date < toDate, toDate); }
+  /**
+   * 繰り越しの共通実装。`matches` に合う未完了項目を toDate の末尾へ移して件数を返す。
+   * 併せてスナップショットを解決値へ治癒させる（書き込み経路のため。resolveDone の項参照）。
+   * @param {function(DailyItem): boolean} matches - 繰り越し対象の判定
+   * @param {string} toDate - 繰り越し先の日（"YYYY-MM-DD"）
+   * @returns {number} 繰り越した件数
+   * ※ store へ保存する副作用あり。
+   */
+  function rolloverWhere(matches, toDate) {
     const d = load();
     const now = MK.util.nowISO();
-    // 夕方の締め（＝書き込み経路）でスナップショットを解決値へ治癒させる。読み取り時の
-    // resolveDone は表示を揃えるだけで保存値は古いままなので、後から todo 実体が消えると
-    // フォールバックが古い false を拾って完了済み項目が未完了として復活してしまう。
+    // 締め（＝書き込み経路）でスナップショットを解決値へ治癒させる。読み取り時の resolveDone は
+    // 表示を揃えるだけで保存値は古いままなので、後から todo 実体が消えるとフォールバックが
+    // 古い false を拾って完了済み項目が未完了として復活してしまう。
     d.items.forEach((it) => { it.done = resolveDone(it); });
-    const pending = (it) => it.date === fromDate && !it.done;
+    const pending = (it) => !it.done && matches(it);
     const moved = d.items.filter(pending);
     if (!moved.length) { save(d); return 0; } // 治癒結果は繰り越しが無くても残す
     d.items = d.items.filter((it) => !pending(it)); // いったん取り除いて
     moved.forEach((it) => { it.date = toDate; it.updatedAt = now; d.items.push(it); }); // 末尾へ付け直す
     save(d);
     return moved.length;
+  }
+  /**
+   * 指定日より前に取り残された未完了項目の件数を返す（HOME の要対応・まとめ繰り越しの導線表示用）。
+   * @param {string} [today] - 基準日（"YYYY-MM-DD"・省略時は本日）
+   * @returns {number} 取り残された未完了の件数
+   */
+  function staleCount(today) {
+    const t = today || MK.util.todayISO();
+    return resolvedItems().filter((it) => it.date < t && !it.done).length;
   }
 
   /**
@@ -340,7 +367,7 @@
     const all = resolvedItems(); // 完了は todo と揃えた解決値で数える
     const todays = all.filter((it) => it.date === t);
     const remaining = todays.filter((it) => !it.done).length;
-    const stale = all.filter((it) => it.date < t && !it.done).length; // 過去日で未処理＝繰り越し/整理待ち
+    const stale = all.filter((it) => it.date < t && !it.done).length; // 過去日で未処理＝まとめ繰り越し待ち
     const sched = schedule(t);
     const attention = [];
     if (stale > 0) attention.push({ label: "前日までの未処理 " + stale + "件", severity: "warn" });
@@ -437,7 +464,7 @@
   MK.logic.daily = {
     load, save, items, resolvedItems, resolveDone, dayItems, startTime, setStartTime,
     addManual, pullableTodos, pullFromTodo,
-    updateItem, setMinutes, toggleDone, removeItem, moveItem, rolloverTo,
+    updateItem, setMinutes, toggleDone, removeItem, moveItem, rolloverTo, rolloverStaleTo, staleCount,
     schedule, hhmmToMin, minToHHMM,
     summary, exportData, importData, loadSample,
   };
