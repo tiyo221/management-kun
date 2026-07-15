@@ -37,7 +37,7 @@
   </div>
 </div>
 
-<!-- 配布プロファイル（メンバー配布用・個人ツールのみ）。自分ゾーン（todo/goals/questions）だけを積む。
+<!-- 配布プロファイル（メンバー配布用・個人ツールのみ）。自分ゾーン（todo/daily/goals/questions）だけを積む。
      チーム系モジュール（skills/resource/wbs）とマスタ管理は zones に載せないためナビにも
      現れず、画面から到達できない。かつ当該 <script> も読み込まないので、コードもデータ
      （localStorage）も物理的に存在しない ＝ 見た目・実データの両面で分離される（spec §1.5）。 -->
@@ -45,7 +45,7 @@
 window.MK_CONFIG = {
   profile: "member",
   zones: [
-    { label: "自分", modules: ["todo", "goals", "questions"] },
+    { label: "自分", modules: ["todo", "daily", "goals", "questions"] },
   ],
   // masters を持たないためマスタグループはナビに現れず到達不能（spec §1.5 / §3.6）。
 };
