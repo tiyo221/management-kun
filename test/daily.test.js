@@ -272,6 +272,43 @@ test("daily: replace で startTime 欠落なら現状維持（設定を黙って
   eq(D.startTime(), "07:45"); // 妥当値は採用
 });
 
+test("daily: 取り込みは id 重複を再採番する（replace でも一意を保証）", (MK) => {
+  // 観点: id 欠落だけでなく重複も潰さないと、id 一致で引く moveItem/removeItem/toggleDone が
+  //       先頭にしかヒットせず「2行目を編集すると1行目が変わる」「1行消すと2行消える」になる。
+  //       merge は mergeById が畳むので、replace 経路にも同じ保証を与える。
+  // 入力: 同じ id "d_x" を持つ2件を replace
+  // 期待: 2件とも残り id は一意。2件目の編集が1件目に影響せず、1件削除で1件残る
+  const D = MK.logic.daily;
+  const day = "2026-07-15";
+  const it = (id, title, minutes) => ({ id, date: day, title, minutes, done: false, source: "manual", todoId: null });
+  D.importData({ version: 1, items: [it("d_x", "一件目", 90), it("d_x", "二件目", 60)] }, "replace");
+  eq(D.items().length, 2);
+  const ids = D.items().map((x) => x.id);
+  assert(ids[0] !== ids[1], "id が一意になる");
+  // 2件目だけを編集しても1件目は変わらない
+  const second = D.dayItems(day)[1];
+  D.setMinutes(second.id, 15);
+  eq(D.dayItems(day).map((x) => [x.title, x.minutes]), [["一件目", 90], ["二件目", 15]]);
+  // 1件削除で1件だけ消える
+  D.removeItem(second.id);
+  eq(D.dayItems(day).map((x) => x.title), ["一件目"]);
+});
+
+test("daily: 日またぎ警告は未完了が残っているときだけ出す", (MK) => {
+  // 観点: 時間割の合計・終了時刻は1日の計画として完了分も含むが、全部終わった夜まで
+  //       「日をまたぎます」と警告し続けるのは行動につながらないノイズ。
+  // 入力: 23:00 起点で 120分（終了 25:00＝はみ出し）。未完のうちは警告、完了させたら消える
+  // 期待: 未完時は attention にあり、完了後は消える（endLabel/overflow 自体は変わらない）
+  const D = MK.logic.daily;
+  const day = "2026-07-15";
+  D.setStartTime("23:00");
+  const id = D.addManual(day, "夜作業", 120);
+  assert(D.summary(day).attention.some((a) => a.label === "今日の予定が日をまたぎます"), "未完のうちは警告する");
+  D.toggleDone(id, true);
+  eq(D.schedule(day).overflow, true); // 時間割としてのはみ出し自体は変わらない
+  assert(!D.summary(day).attention.some((a) => a.label === "今日の予定が日をまたぎます"), "全部終わったら警告しない");
+});
+
 test("daily: 取り込みは createdAt / updatedAt を補完する", (MK) => {
   // 観点: typedef と spec が必須と宣言しているので、取り込みデータに無くても欠落させない。
   // 入力: createdAt/updatedAt を持たない項目、および既存値を持つ項目

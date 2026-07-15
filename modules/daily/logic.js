@@ -279,6 +279,8 @@
     // 同日内の隣接項目とマスタ配列上の位置を入れ替える（他日の項目が挟まっても正しく動く）。
     const a = d.items.indexOf(sameDay[pos]), b = d.items.indexOf(sameDay[target]);
     const tmp = d.items[a]; d.items[a] = d.items[b]; d.items[b] = tmp;
+    const now = MK.util.nowISO(); // 並び順＝時刻の変更も更新（updateItem / rolloverTo と揃える）
+    d.items[a].updatedAt = now; d.items[b].updatedAt = now;
     save(d);
   }
 
@@ -342,7 +344,9 @@
     const sched = schedule(t);
     const attention = [];
     if (stale > 0) attention.push({ label: "前日までの未処理 " + stale + "件", severity: "warn" });
-    if (sched.overflow) attention.push({ label: "今日の予定が日をまたぎます", severity: "warn" });
+    // はみ出しは「まだやることが残っている」ときだけ警告する。時間割の合計・終了時刻は1日の
+    // 計画として完了分も含むが、全部終わった夜まで警告し続けるのは行動につながらないノイズ。
+    if (sched.overflow && remaining > 0) attention.push({ label: "今日の予定が日をまたぎます", severity: "warn" });
     return { empty: all.length === 0, stats: [
       { label: "今日の残り", value: remaining },
       { label: "予定終了", value: todays.length ? sched.endLabel : "—" },
@@ -366,11 +370,17 @@
   function normalizeItems(list) {
     const today = MK.util.todayISO();
     const now = MK.util.nowISO();
+    const seen = {}; // id の重複を検出して再採番する（下記）
     return (list || []).map((it) => {
       const src = it || {};
       const source = src.source === "todo" ? "todo" : "manual"; // 未知値は手書き扱い（todo 実体を騙らせない）
+      // id は欠落だけでなく**重複**も潰す。重複したまま通すと、id 一致で引く
+      // moveItem/removeItem/toggleDone が先頭にしかヒットせず（2行目を編集すると1行目が変わる）、
+      // removeItem は両方消す。merge は mergeById が畳むので、replace 経路にも同じ保証を与える。
+      const id = src.id && !seen[src.id] ? src.id : MK.util.uid("d");
+      seen[id] = true;
       return Object.assign({}, src, {
-        id: src.id ? src.id : MK.util.uid("d"),
+        id,
         date: isValidDate(src.date) ? src.date : today,
         title: String(src.title == null ? "" : src.title),
         minutes: normMinutes(src.minutes),
