@@ -373,13 +373,12 @@
   /**
    * 指定日の時間割（各項目の開始・終了時刻）を積み上げで算出する純関数。
    * @param {string} date - 対象日（"YYYY-MM-DD"）
-   * @param {string} [startOverride] - 開始起点の上書き（"HH:MM"・省略時は保存値）
    * @returns {{rows: {item: DailyItem, start: string, end: string, startMin: number, endMin: number}[],
    *           totalMin: number, startMin: number, endMin: number, endLabel: string, overflow: boolean}}
    *   rows＝各項目の時刻付き、totalMin＝所要合計、endLabel＝終了時刻、overflow＝24時以降にはみ出すか
    */
-  function schedule(date, startOverride) {
-    const start = hhmmToMin(startOverride || startTime());
+  function schedule(date) {
+    const start = hhmmToMin(startTime());
     let cur = start;
     const rows = dayItems(date).map((it) => {
       const s = cur, e = cur + normMinutes(it.minutes);
@@ -504,11 +503,12 @@
   }
 
   MK.logic = MK.logic || {};
+  // 公開するのは view / テストが実際に使うものだけ（YAGNI・CODING.md）。解決器（resolveItem 等）や
+  // 時刻ヘルパ（hhmmToMin / minToHHMM）は内部専用に留める。load/save は他モジュールの慣例に合わせる。
   MK.logic.daily = {
-    load, save, items, resolvedItems, resolveDone, dayItems, startTime, setStartTime,
+    load, save, items, dayItems, startTime, setStartTime,
     addManual, pullableTodos, pullFromTodo,
     setMinutes, toggleDone, removeItem, moveItem, rolloverTo, rolloverStaleTo, staleCount,
-    schedule, hhmmToMin, minToHHMM,
-    summary, exportData, importData, loadSample,
+    schedule, summary, exportData, importData, loadSample,
   };
 })();

@@ -399,6 +399,13 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .progress { height: 8px; background: var(--color-hairline); border-radius: var(--rounded-full); overflow: hidden; }
 .progress > i { display: block; height: 100%; background: var(--color-primary); border-radius: var(--rounded-full); transition: width .25s; }
 
+/* ---- daily: 時間割の行（Issue #213）----
+   チェック＋時刻＋タイトル＋所要時間＋↑↓✕ と要素が多く、狭幅（375px）では1行に収まらない。
+   既定の .mk-row は折り返さず .grow が min-width:0 で 0 まで潰れるため、タイトルが消える。
+   折り返しを許し、タイトルに下限幅を与えて操作系を次の行へ逃がす。 */
+.mk-daily-row { flex-wrap: wrap; }
+.mk-daily-row .grow { min-width: 160px; }
+
 /* ---- goals: ロードマップ ---- */
 .mk-goals-layout { display: flex; gap: var(--space-xl); align-items: flex-start; flex-wrap: wrap; }
 .mk-goals-side { width: 260px; flex: 0 0 260px; display: flex; flex-direction: column; gap: var(--space-xs); }

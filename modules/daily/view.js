@@ -135,7 +135,7 @@
     const minSel = ui.select(minOptsFor(it.minutes), String(it.minutes), (v) => { L().setMinutes(it.id, Number(v)); render(); });
     minSel.style.maxWidth = "110px";
 
-    return el("li", { class: "mk-row" }, [
+    return el("li", { class: "mk-row mk-daily-row" }, [
       cb, time, grow, minSel,
       ui.button("↑", { variant: "btn-ghost", onClick: () => { L().moveItem(it.id, -1); render(); } }),
       ui.button("↓", { variant: "btn-ghost", onClick: () => { L().moveItem(it.id, 1); render(); } }),
