@@ -1,4 +1,4 @@
-/* dashboard（プロジェクト・ダッシュボード＝横断集約ビュー）の集約ロジック spec §9.2 / Issue #78 */
+/* dashboard（プロジェクト・ダッシュボード＝横断集約ビュー）の集約ロジック Issue #78 */
 "use strict";
 
 // wbs は対象別 namespace（§3.7.4）。dashboard.wbsSummary は wbs.exportData(projectId) を読むだけで

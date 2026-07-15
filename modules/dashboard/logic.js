@@ -1,5 +1,5 @@
 /* モジュール dashboard（プロジェクト・ダッシュボード＝横断集約ビュー）— ロジック（集約計算）。DOM/UI に触れない。CONVENTIONS §1
-   1つの Project を主語に、マスタ共有している各領域の情報を読み取り専用で集約する（spec §9.2 / §14 / Issue #78）。
+   1つの Project を主語に、マスタ共有している各領域の情報を読み取り専用で集約する（Issue #78）。
    データ源は共有マスタ（MK.projects / MK.allocations / MK.products）と、project-scoped モジュール（wbs）の
    対象別データ。自前の永続データは持たず、編集は各モジュール側で行う（重複実装しない）。 */
 (function () {
