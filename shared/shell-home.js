@@ -1,7 +1,7 @@
 /* シェル：HOME（玄関ダッシュボード。spec §3.6 / Issue #100）。shell-core・shell-nav の後に読む（Issue #140）。
    HOME は HOME 固有の価値だけに絞る: 要対応バー（attention）＋ピン留めモジュールのフルカードのみ。
    モジュール一覧の常設表示は常設ランチャーであるサイドバー（shell-nav）に一本化した（Issue #169）。
-   配布プロファイル（member.html）でも同じ2層構成で動く。
+   配布サブセット（MK_CONFIG.zones を絞ったエントリ・spec §1.5）でも同じ2層構成で動く。
    core が S へ載せた定数・ヘルパを分割代入で受け取る（core は先に読まれるので参照可）。 */
 (function () {
   "use strict";
