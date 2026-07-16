@@ -21,8 +21,21 @@
    * @property {string} title - タスク名
    * @property {number} minutes - 所要時間（分・正の整数）
    * @property {boolean} done - 完了フラグ
-   * @property {"todo"|"manual"} source - 由来（"todo"＝todo から引いた／"manual"＝デイリー限定の手書き）
+   * @property {"todo"|"manual"|"routine"} source - 由来（"todo"＝todo から引いた／"manual"＝手書き／"routine"＝ルーチン定義から自動投入）
    * @property {string|null} todoId - 由来 todo のタスクID（source="todo" のみ・完了同期に使う）
+   * @property {string|null} [routineId] - 由来ルーチンID（source="routine" のみ・投入元をたどる。完了同期はしない）
+   * @property {string} createdAt - 作成日時（ISO 8601）
+   * @property {string} updatedAt - 更新日時（ISO 8601）
+   */
+
+  /**
+   * ルーチン定義1件（毎日決まった定型業務。該当曜日の日を開くと items へ自動投入される）。
+   * 投入された項目は投入時スナップショットで独立するため、定義の変更・削除は投入済み項目へ遡及しない。
+   * @typedef {Object} RoutineDef
+   * @property {string} id - ルーチンID（"r" プレフィックス）
+   * @property {string} title - タスク名
+   * @property {number} minutes - 所要時間（分・正の整数）
+   * @property {number[]} days - 適用曜日（0=日〜6=土。空・不正なら毎日扱い）
    * @property {string} createdAt - 作成日時（ISO 8601）
    * @property {string} updatedAt - 更新日時（ISO 8601）
    */
@@ -33,6 +46,9 @@
    * @property {number} version - スキーマバージョン
    * @property {string} [startTime] - 時間割の開始起点（"HH:MM"・未設定なら DEFAULT_START）
    * @property {DailyItem[]} items - 全日ぶんの項目（date で日ごとに絞る）
+   * @property {RoutineDef[]} [routines] - ルーチン定義（自動投入の元。無ければ空扱い）
+   * @property {Object.<string, boolean>} [injected] - 投入済みの記録（キー "date|routineId"）。
+   *   同一ルーチン×同一日に1回だけ投入し、✕で外しても同日には復活させないための台帳。
    */
 
   // ---- 時刻ヘルパ（"HH:MM" ↔ 0時からの分。DOM 非依存の純関数） ----
@@ -67,6 +83,22 @@
   function normMinutes(v) {
     const n = Math.round(Number(v));
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_MIN;
+  }
+  /**
+   * 適用曜日の配列を 0〜6（0=日〜6=土）の重複なし昇順へ正規化する。空・不正は「毎日」（全曜日）へ寄せる
+   * （外部 JSON は手書き・AI 生成もありうるため寛容に受ける。曜日が壊れていても投入が止まらないようにする）。
+   * @param {*} v - 適用曜日候補
+   * @returns {number[]} 0〜6 の重複なし昇順（空なら全曜日）
+   */
+  function normDays(v) {
+    if (!Array.isArray(v)) return [0, 1, 2, 3, 4, 5, 6];
+    const out = [];
+    v.forEach((x) => {
+      const n = Math.trunc(Number(x));
+      if (Number.isInteger(n) && n >= 0 && n <= 6 && out.indexOf(n) < 0) out.push(n);
+    });
+    out.sort((a, b) => a - b);
+    return out.length ? out : [0, 1, 2, 3, 4, 5, 6];
   }
   /**
    * "YYYY-MM-DD" として実在する日付かを判定する。書式だけでなく暦としての妥当性も見る
@@ -304,6 +336,92 @@
     save(d);
   }
 
+  // ---- ルーチン（定型業務の定義と自動投入） ----
+  /**
+   * ルーチン定義の一覧を返す。
+   * @returns {RoutineDef[]} ルーチン定義一覧
+   */
+  function routines() { return load().routines || []; }
+  /**
+   * ルーチン定義を1件追加して保存する。
+   * @param {string} title - タスク名（前後空白は trim・空なら追加しない）
+   * @param {number} [minutes] - 所要時間（分・既定 30）
+   * @param {number[]} [days] - 適用曜日（0=日〜6=土。空・不正なら毎日）
+   * @returns {string|null} 追加したルーチンID（空タイトルなら null）
+   * ※ store へ保存する副作用あり。
+   */
+  function addRoutine(title, minutes, days) {
+    const t = String(title || "").trim();
+    if (!t) return null;
+    const d = load();
+    if (!Array.isArray(d.routines)) d.routines = [];
+    const now = MK.util.nowISO();
+    const id = MK.util.uid("r");
+    d.routines.push({ id, title: t, minutes: normMinutes(minutes), days: normDays(days), createdAt: now, updatedAt: now });
+    save(d);
+    return id;
+  }
+  /**
+   * ルーチン定義を部分更新して保存する（title / minutes / days のみ・正規化を通す）。該当なしなら何もしない。
+   * 定義変更は投入済み項目へ遡及しない（項目は投入時スナップショット）。
+   * @param {string} id - 対象ルーチンID
+   * @param {{title?: string, minutes?: number, days?: number[]}} patch - 上書きするフィールド
+   * @returns {void}
+   * ※ store へ保存する副作用あり。
+   */
+  function updateRoutine(id, patch) {
+    const d = load();
+    const r = (d.routines || []).find((x) => x.id === id);
+    if (!r) return;
+    const p = patch || {};
+    if (p.title != null) { const t = String(p.title).trim(); if (t) r.title = t; } // 空へは上書きしない
+    if (p.minutes != null) r.minutes = normMinutes(p.minutes);
+    if (p.days != null) r.days = normDays(p.days);
+    r.updatedAt = MK.util.nowISO();
+    save(d);
+  }
+  /**
+   * ルーチン定義を削除して保存する（投入済み項目には手を触れない＝スナップショットとして残る）。
+   * @param {string} id - 対象ルーチンID
+   * @returns {void}
+   * ※ store へ保存する副作用あり。
+   */
+  function removeRoutine(id) {
+    const d = load();
+    d.routines = (d.routines || []).filter((x) => x.id !== id);
+    save(d);
+  }
+  /**
+   * 指定日にその曜日のルーチンを自動投入する（その日を開いたときに呼ぶ・ボタン/確認なし）。
+   * 冪等: 同一ルーチン×同一日は台帳（injected）で1回だけに絞り、✕で外しても同日には復活させない。
+   * 過去日には投入しない（今日以降のみ）。開かなかった過去日をあとから閲覧したとき、未完了ルーチンが
+   * 遡って湧いて「前日までの未処理」のノイズになるのを防ぐ。投入される項目は投入時スナップショット。
+   * @param {string} date - 対象日（"YYYY-MM-DD"）
+   * @returns {number} 新たに投入した件数
+   * ※ store へ保存する副作用あり（投入があったときのみ）。
+   */
+  function ensureDayInjected(date) {
+    const today = MK.util.todayISO();
+    if (!isValidDate(date) || date < today) return 0; // 過去日には投入しない（今日以降のみ）
+    const d = load();
+    const routs = d.routines || [];
+    if (!routs.length) return 0;
+    const dow = new Date(date + "T00:00:00").getDay(); // 0=日〜6=土（normDays / view の WEEK と同じ並び）
+    const injected = d.injected && typeof d.injected === "object" ? d.injected : (d.injected = {});
+    const now = MK.util.nowISO();
+    let added = 0;
+    routs.forEach((r) => {
+      if (!Array.isArray(r.days) || r.days.indexOf(dow) < 0) return;
+      const key = date + "|" + r.id;
+      if (injected[key]) return; // 投入済み（外した後も再投入しない）
+      injected[key] = true;
+      d.items.push({ id: MK.util.uid("d"), date, title: String(r.title == null ? "" : r.title), minutes: normMinutes(r.minutes), done: false, source: "routine", todoId: null, routineId: r.id, createdAt: now, updatedAt: now });
+      added += 1;
+    });
+    if (added) save(d);
+    return added;
+  }
+
   /**
    * 指定日の未完了項目を翌日（toDate）の末尾へ繰り越して保存する（夕方の締め）。
    * 完了済みはその日に履歴として残す。移した項目は todoId 等の紐付けを保ったまま toDate に付く。
@@ -344,7 +462,9 @@
       it.done = t ? t.status === "done" : !!it.done;
       if (t) it.title = t.title;
     });
-    const pending = (it) => !it.done && matches(it);
+    // ルーチン由来は繰り越さない。翌日は翌日ぶんが自動投入されるため、送ると同じ定型業務が二重に載る。
+    // 未完了はその日に残して終わり（spec/modules/daily.md「繰り越し対象外」）。
+    const pending = (it) => !it.done && it.source !== "routine" && matches(it);
     const moved = d.items.filter(pending);
     if (!moved.length) { save(d); return 0; } // 治癒結果は繰り越しが無くても残す
     d.items = d.items.filter((it) => !pending(it)); // いったん取り除いて
@@ -359,7 +479,9 @@
    * @param {string} t - 基準日（"YYYY-MM-DD"）
    * @returns {boolean} 取り残しなら true
    */
-  function isStale(it, t) { return it.date < t && !it.done; } // ISO 日付は辞書順＝時系列順
+  // ルーチン由来は繰り越し対象外なので「前日までの未処理」にも数えない（拾い直しできない未完了を
+  // 警告に出しても行動につながらないノイズになる。rolloverStaleTo の除外と定義を揃える）。
+  function isStale(it, t) { return it.date < t && !it.done && it.source !== "routine"; } // ISO 日付は辞書順＝時系列順
   /**
    * 指定日より前に取り残された未完了項目の件数を返す（HOME の要対応・まとめ繰り越しの導線表示用）。
    * @param {string} [today] - 基準日（"YYYY-MM-DD"・省略時は本日）
@@ -436,7 +558,8 @@
     const seen = Object.create(null);
     return (list || []).map((it) => {
       const src = it || {};
-      const source = src.source === "todo" ? "todo" : "manual"; // 未知値は手書き扱い（todo 実体を騙らせない）
+      // 既知の source（todo / routine）だけ通し、未知値は手書き扱い（todo/routine 実体を騙らせない）。
+      const source = src.source === "todo" ? "todo" : src.source === "routine" ? "routine" : "manual";
       // id は欠落・重複・整数風のいずれも採番し直す。
       // - 重複を通すと、id 一致で引く moveItem/removeItem/toggleDone が先頭にしかヒットせず
       //   （2行目を編集すると1行目が変わる）、removeItem は両方消す。merge は mergeById が畳むので
@@ -455,7 +578,8 @@
         minutes: normMinutes(src.minutes),
         done: !!src.done,
         source,
-        todoId: source === "todo" && src.todoId ? src.todoId : null, // 手書きに todoId を残さない
+        todoId: source === "todo" && src.todoId ? src.todoId : null, // 手書き/ルーチンに todoId を残さない
+        routineId: source === "routine" && src.routineId ? src.routineId : null, // 由来がルーチンのときだけ保持
         // typedef / spec が必須と宣言しているフィールドを欠落させない（取込時刻で補完する）。
         createdAt: src.createdAt || now,
         updatedAt: src.updatedAt || now,
@@ -463,8 +587,34 @@
     });
   }
   /**
+   * 取り込んだルーチン定義を正規化する（items と同じ寛容方針）。id 欠落・重複・整数風は採番し直し、
+   * minutes は正の整数、days は不正・空なら毎日扱いへ寄せる。
+   * @param {RoutineDef[]} list - 取り込むルーチン定義配列
+   * @returns {RoutineDef[]} 正規化したルーチン定義配列
+   */
+  function normalizeRoutines(list) {
+    const now = MK.util.nowISO();
+    const seen = Object.create(null);
+    return (list || []).map((r) => {
+      const src = r || {};
+      const raw = src.id == null ? "" : String(src.id);
+      const usable = raw && !seen[raw] && !/^(0|[1-9]\d*)$/.test(raw); // items と同じ理由で整数風 id も採番し直す
+      const id = usable ? raw : MK.util.uid("r");
+      seen[id] = true;
+      return {
+        id,
+        title: String(src.title == null ? "" : src.title),
+        minutes: normMinutes(src.minutes),
+        days: normDays(src.days),
+        createdAt: src.createdAt || now,
+        updatedAt: src.updatedAt || now,
+      };
+    });
+  }
+  /**
    * 外部データを取り込む。merge は id 一致で上書きマージ、それ以外は全置換。
-   * startTime は取り込みデータにあれば採用する（merge 時は無ければ現状維持）。
+   * startTime は取り込みデータにあれば採用する（merge 時は無ければ現状維持）。routines も同じ方式で寄せる。
+   * 投入台帳（injected）は round-trip で失わないよう引き継ぐ（無ければ現状維持／空）。
    * @param {DailyData} data - 取り込むデータ
    * @param {"merge"|"replace"} mode - 取り込みモード（"merge" 以外は全置換扱い）
    * @returns {void}
@@ -472,17 +622,21 @@
    */
   function importData(data, mode) {
     const incoming = normalizeItems(data && data.items);
+    const incomingRoutines = normalizeRoutines(data && data.routines);
     // 妥当な startTime のときだけ採用する（不正値で現在の設定を既定へ書き戻さない）。
     const start = data && isValidTime(data.startTime) ? minToHHMM(hhmmToMin(data.startTime)) : null;
+    const incomingInjected = data && data.injected && typeof data.injected === "object" ? data.injected : null;
     if (mode === "merge") {
       const d = load();
       d.items = MK.util.mergeById(d.items, incoming);
+      d.routines = MK.util.mergeById(d.routines || [], incomingRoutines);
+      if (incomingInjected) d.injected = Object.assign(d.injected || {}, incomingInjected);
       if (start) d.startTime = start;
       save(d);
     } else {
-      // replace が置き換えるのは項目（items）。開始起点は利用者の設定なので、取り込みデータに
-      // 妥当な値が無ければ現状維持に倒す（merge と同じ非対称を作らない）。
-      save({ version: 1, startTime: start || startTime(), items: incoming });
+      // replace が置き換えるのは項目（items）・ルーチン（routines）・投入台帳（injected）。
+      // 開始起点は利用者の設定なので、取り込みデータに妥当な値が無ければ現状維持に倒す（merge と同じ非対称を作らない）。
+      save({ version: 1, startTime: start || startTime(), items: incoming, routines: incomingRoutines, injected: incomingInjected || {} });
     }
   }
   /**
@@ -494,8 +648,11 @@
     const today = MK.util.todayISO();
     const now = MK.util.nowISO();
     const mk = (title, minutes, done) => ({ id: MK.util.uid("d"), date: today, title, minutes, done: !!done, source: "manual", todoId: null, createdAt: now, updatedAt: now });
-    save({ version: 1, startTime: DEFAULT_START, items: [
-      mk("メールと通知をさばく", 30, true),
+    const rt = (title, minutes, days) => ({ id: MK.util.uid("r"), title, minutes, days, createdAt: now, updatedAt: now });
+    save({ version: 1, startTime: DEFAULT_START, routines: [
+      rt("朝会", 15, [1, 2, 3, 4, 5]),   // 平日（月〜金）
+      rt("メールと通知をさばく", 30, [0, 1, 2, 3, 4, 5, 6]), // 毎日
+    ], injected: {}, items: [
       mk("企画書のドラフトを書く", 90, false),
       mk("チームの進捗を確認", 30, false),
       mk("設計レビュー", 60, false),
@@ -508,6 +665,7 @@
   MK.logic.daily = {
     load, save, items, dayItems, startTime, setStartTime,
     addManual, pullableTodos, pullFromTodo,
+    routines, addRoutine, updateRoutine, removeRoutine, ensureDayInjected,
     setMinutes, toggleDone, removeItem, moveItem, rolloverTo, rolloverStaleTo, staleCount,
     schedule, summary, exportData, importData, loadSample,
   };
