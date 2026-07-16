@@ -586,3 +586,115 @@ test("daily: overflow はちょうど 24:00 では立たず、超過で立つ", 
   eq(D.schedule(day).endLabel, "24:15");
   eq(D.schedule(day).overflow, true);
 });
+
+test("daily: ピンは下限アンカー（手前に空き・ピン時刻に固定・合計は空きを含めない）", (MK) => {
+  // 観点: at を持つ項目は開始を max(積み上がり位置, at) にする（L1）。前が余ればピン手前に空き時間、
+  //       ちょうど積み上がりと一致すればギャップ無し。totalMin は空き時間を含めない所要合計。
+  // 入力: 開始 09:00、A(30)→朝会(15・固定10:00)→B(30)
+  // 期待: A 09:00-09:30 / 朝会 10:00-10:15（09:30〜10:00 が空き gap）/ B 10:15-10:45。合計75分・終了10:45
+  const D = MK.logic.daily;
+  const day = "2026-07-15";
+  D.setStartTime("09:00");
+  D.addManual(day, "A", 30);
+  D.addManual(day, "朝会", 15, "10:00");
+  D.addManual(day, "B", 30);
+  const s = D.schedule(day);
+  eq(s.rows.map((r) => r.start), ["09:00", "10:00", "10:15"]);
+  eq(s.rows.map((r) => r.end), ["09:30", "10:15", "10:45"]);
+  eq(s.rows[1].pinned, true);
+  eq(s.rows[1].gap, true);         // 09:30〜10:00 が空く
+  eq(s.rows[0].gap, false);
+  eq(s.rows[2].pinned, false);
+  eq(s.hasConflict, false);
+  eq(s.totalMin, 75);              // 30+15+30（空き30分は数えない）
+  eq(s.endLabel, "10:45");
+});
+
+test("daily: ピンに間に合わないと食い込み（conflict）で印がつく", (MK) => {
+  // 観点: 前の項目がピン時刻を過ぎるまで埋めていると、時刻は戻せないので積み上がり位置のまま置き、
+  //       conflict の印をつける（hasConflict も立つ）。gap にはしない。
+  // 入力: 開始 09:00、長い作業(90)→朝会(15・固定10:00)
+  // 期待: 朝会は 10:30 開始（09:00+90分=10:30）で conflict=true、hasConflict=true
+  const D = MK.logic.daily;
+  const day = "2026-07-15";
+  D.setStartTime("09:00");
+  D.addManual(day, "長い作業", 90);
+  D.addManual(day, "朝会", 15, "10:00");
+  const s = D.schedule(day);
+  eq(s.rows[1].start, "10:30");    // 時刻は戻せない＝積み上がり位置のまま
+  eq(s.rows[1].conflict, true);
+  eq(s.rows[1].gap, false);
+  eq(s.hasConflict, true);
+});
+
+test("daily: setAt でピンを設定・解除できる（ちょうど一致はギャップ無し）", (MK) => {
+  // 観点: setAt が項目のピンを設定/解除する。積み上がりとちょうど一致する固定はギャップにしない。空で解除。
+  // 入力: 開始 09:00、A(30)→B(30)。B を 09:30→10:00→解除
+  // 期待: 09:30 は gap なし、10:00 は gap あり、解除で流動（09:30）へ戻る
+  const D = MK.logic.daily;
+  const day = "2026-07-15";
+  D.setStartTime("09:00");
+  D.addManual(day, "A", 30);
+  const bId = D.addManual(day, "B", 30);
+  D.setAt(bId, "09:30");           // 積み上がり位置とちょうど一致
+  let s = D.schedule(day);
+  eq(s.rows[1].start, "09:30");
+  eq(s.rows[1].pinned, true);
+  eq(s.rows[1].gap, false);        // ちょうど一致はギャップにしない
+  D.setAt(bId, "10:00");           // 手前に空き
+  s = D.schedule(day);
+  eq(s.rows[1].start, "10:00");
+  eq(s.rows[1].gap, true);
+  D.setAt(bId, "");                // 解除で流動へ
+  s = D.schedule(day);
+  eq(s.rows[1].start, "09:30");
+  eq(s.rows[1].pinned, false);
+});
+
+test("daily: ルーチンの固定時刻は投入時に項目へスナップショットされる", (MK) => {
+  // 観点: addRoutine が at を受け取り、ensureDayInjected が項目へ at をスナップショットする。
+  //       定義の at を後から変えても投入済み項目へは遡及しない（既存のスナップショット方針）。
+  // 入力: 今日の曜日に固定10:00 の朝会を登録→投入→定義を11:00へ変更
+  // 期待: 投入項目の at=10:00・schedule で10:00開始。定義変更後も投入済みは10:00 のまま
+  const D = MK.logic.daily;
+  const today = MK.util.todayISO();
+  const dow = new Date(today + "T00:00:00").getDay();
+  D.setStartTime("09:00");
+  const rid = D.addRoutine("朝会", 15, [dow], "10:00");
+  D.ensureDayInjected(today);
+  const it = D.dayItems(today)[0];
+  eq(it.source, "routine");
+  eq(it.routineId, rid);
+  eq(it.at, "10:00");                          // 固定時刻がスナップショットされる
+  eq(D.schedule(today).rows[0].start, "10:00");
+  D.updateRoutine(rid, { at: "11:00" });        // 定義を変更
+  eq(D.dayItems(today)[0].at, "10:00");         // 投入済みには遡及しない
+});
+
+test("daily: 取り込みは at を正規化する（妥当は HH:MM・不正/欠落は流動・往復する）", (MK) => {
+  // 観点: importData の正規化に at を含める。妥当な "HH:MM" はゼロ詰めして通し、不正・欠落は null（流動）。
+  //       items / routines とも。exportData で往復する。
+  // 入力: at="9:05"（妥当・1桁時）/ "25:00"（不正）/ 欠落。ルーチンも "8:30"（妥当）/ "bogus"（不正）
+  // 期待: 09:05 / null / null、08:30 / null。export に at が乗る
+  const D = MK.logic.daily;
+  const day = "2026-07-15";
+  D.importData({ version: 1, items: [
+    { id: "d_1", date: day, title: "正規", minutes: 30, source: "manual", todoId: null, at: "9:05" },
+    { id: "d_2", date: day, title: "不正", minutes: 30, source: "manual", todoId: null, at: "25:00" },
+    { id: "d_3", date: day, title: "欠落", minutes: 30, source: "manual", todoId: null },
+  ], routines: [
+    { id: "r_1", title: "朝会", minutes: 15, days: [1], at: "8:30" },
+    { id: "r_2", title: "不正", minutes: 15, days: [1], at: "bogus" },
+  ] }, "replace");
+  const byId = {};
+  D.items().forEach((x) => (byId[x.id] = x));
+  eq(byId["d_1"].at, "09:05");   // 1桁時をゼロ詰めして通す
+  eq(byId["d_2"].at, null);      // 不正は流動
+  eq(byId["d_3"].at, null);      // 欠落は流動
+  const rById = {};
+  D.routines().forEach((r) => (rById[r.id] = r));
+  eq(rById["r_1"].at, "08:30");
+  eq(rById["r_2"].at, null);
+  eq(D.exportData().items.find((x) => x.id === "d_1").at, "09:05");     // 往復する
+  eq(D.exportData().routines.find((r) => r.id === "r_1").at, "08:30");
+});
