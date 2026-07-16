@@ -24,6 +24,7 @@
    * @property {"todo"|"manual"|"routine"} source - 由来（"todo"＝todo から引いた／"manual"＝手書き／"routine"＝ルーチン定義から自動投入）
    * @property {string|null} todoId - 由来 todo のタスクID（source="todo" のみ・完了同期に使う）
    * @property {string|null} [routineId] - 由来ルーチンID（source="routine" のみ・投入元をたどる。完了同期はしない）
+   * @property {string|null} [at] - 開始時刻の固定（"HH:MM"）。値があれば時間割でその時刻に固定（ピン）、null なら従来どおり並び順に流動する
    * @property {string} createdAt - 作成日時（ISO 8601）
    * @property {string} updatedAt - 更新日時（ISO 8601）
    */
@@ -36,6 +37,7 @@
    * @property {string} title - タスク名
    * @property {number} minutes - 所要時間（分・正の整数）
    * @property {number[]} days - 適用曜日（0=日〜6=土。空・不正なら毎日扱い）
+   * @property {string|null} [at] - 開始時刻の固定（"HH:MM"）。投入時に項目の at へスナップショットされる。null なら流動
    * @property {string} createdAt - 作成日時（ISO 8601）
    * @property {string} updatedAt - 更新日時（ISO 8601）
    */
@@ -121,6 +123,13 @@
     const m = /^(\d{1,2}):(\d{2})$/.exec(String(v == null ? "" : v).trim());
     return !!m && Number(m[1]) <= 23 && Number(m[2]) <= 59;
   }
+  /**
+   * 固定時刻（ピン）を正規化する。妥当な "HH:MM" は "09:05" 形式へ揃え、不正・空・欠落は null（流動）へ寄せる。
+   * 所要時間（normMinutes）と違い、値が無いことに意味がある（＝ピンなし）ので既定へは寄せず null を返す。
+   * @param {*} v - 固定時刻候補
+   * @returns {string|null} "HH:MM" 形式のピン時刻、または null（流動）
+   */
+  function normAt(v) { return isValidTime(v) ? minToHHMM(hhmmToMin(v)) : null; }
 
   // ---- 参照 ----
   /**
@@ -202,16 +211,17 @@
    * @param {string} date - 対象日（"YYYY-MM-DD"）
    * @param {string} title - タスク名（前後空白は trim・空なら追加しない）
    * @param {number} [minutes] - 所要時間（分・既定 30）
+   * @param {string} [at] - 開始時刻の固定（"HH:MM"・不正/空なら流動）
    * @returns {string|null} 追加した項目ID（空タイトルなら null）
    * ※ store へ保存する副作用あり。
    */
-  function addManual(date, title, minutes) {
+  function addManual(date, title, minutes, at) {
     const t = String(title || "").trim();
     if (!t) return null;
     const d = load();
     const now = MK.util.nowISO();
     const id = MK.util.uid("d");
-    d.items.push({ id, date, title: t, minutes: normMinutes(minutes), done: false, source: "manual", todoId: null, createdAt: now, updatedAt: now });
+    d.items.push({ id, date, title: t, minutes: normMinutes(minutes), done: false, source: "manual", todoId: null, at: normAt(at), createdAt: now, updatedAt: now });
     save(d);
     return id;
   }
@@ -292,6 +302,14 @@
    */
   function setMinutes(id, minutes) { updateItem(id, { minutes: normMinutes(minutes) }); }
   /**
+   * 項目の開始時刻の固定（ピン）を設定・解除して保存する。妥当な "HH:MM" で固定、空・不正で解除（流動）。
+   * @param {string} id - 対象項目ID
+   * @param {string} at - "HH:MM" 形式の固定時刻（空・不正なら解除）
+   * @returns {void}
+   * ※ updateItem 経由で store へ保存する副作用あり。
+   */
+  function setAt(id, at) { updateItem(id, { at: normAt(at) }); }
+  /**
    * 項目の完了状態を切り替える。由来が todo の項目は todo 側の完了も同期する
    * （完了→done／解除→next。実体は todo が持つため・spec/modules/daily.md）。
    * @param {string} id - 対象項目ID
@@ -347,17 +365,18 @@
    * @param {string} title - タスク名（前後空白は trim・空なら追加しない）
    * @param {number} [minutes] - 所要時間（分・既定 30）
    * @param {number[]} [days] - 適用曜日（0=日〜6=土。空・不正なら毎日）
+   * @param {string} [at] - 開始時刻の固定（"HH:MM"・不正/空なら流動。投入時に項目へスナップショット）
    * @returns {string|null} 追加したルーチンID（空タイトルなら null）
    * ※ store へ保存する副作用あり。
    */
-  function addRoutine(title, minutes, days) {
+  function addRoutine(title, minutes, days, at) {
     const t = String(title || "").trim();
     if (!t) return null;
     const d = load();
     if (!Array.isArray(d.routines)) d.routines = [];
     const now = MK.util.nowISO();
     const id = MK.util.uid("r");
-    d.routines.push({ id, title: t, minutes: normMinutes(minutes), days: normDays(days), createdAt: now, updatedAt: now });
+    d.routines.push({ id, title: t, minutes: normMinutes(minutes), days: normDays(days), at: normAt(at), createdAt: now, updatedAt: now });
     save(d);
     return id;
   }
@@ -365,7 +384,7 @@
    * ルーチン定義を部分更新して保存する（title / minutes / days のみ・正規化を通す）。該当なしなら何もしない。
    * 定義変更は投入済み項目へ遡及しない（項目は投入時スナップショット）。
    * @param {string} id - 対象ルーチンID
-   * @param {{title?: string, minutes?: number, days?: number[]}} patch - 上書きするフィールド
+   * @param {{title?: string, minutes?: number, days?: number[], at?: string|null}} patch - 上書きするフィールド
    * @returns {void}
    * ※ store へ保存する副作用あり。
    */
@@ -377,6 +396,8 @@
     if (p.title != null) { const t = String(p.title).trim(); if (t) r.title = t; } // 空へは上書きしない
     if (p.minutes != null) r.minutes = normMinutes(p.minutes);
     if (p.days != null) r.days = normDays(p.days);
+    // at は null（空）が「ピン解除」の意味を持つので、undefined のときだけ据え置く（title 等の != null と非対称）。
+    if (p.at !== undefined) r.at = normAt(p.at);
     r.updatedAt = MK.util.nowISO();
     save(d);
   }
@@ -415,7 +436,7 @@
       const key = date + "|" + r.id;
       if (injected[key]) return; // 投入済み（外した後も再投入しない）
       injected[key] = true;
-      d.items.push({ id: MK.util.uid("d"), date, title: String(r.title == null ? "" : r.title), minutes: normMinutes(r.minutes), done: false, source: "routine", todoId: null, routineId: r.id, createdAt: now, updatedAt: now });
+      d.items.push({ id: MK.util.uid("d"), date, title: String(r.title == null ? "" : r.title), minutes: normMinutes(r.minutes), done: false, source: "routine", todoId: null, routineId: r.id, at: normAt(r.at), createdAt: now, updatedAt: now });
       added += 1;
     });
     if (added) save(d);
@@ -494,21 +515,36 @@
 
   /**
    * 指定日の時間割（各項目の開始・終了時刻）を積み上げで算出する純関数。
+   * 固定時刻（ピン＝`at`）は **下限アンカー**として効く（L1 方式）: 項目は並び順に積み上げるが、
+   * ピン項目は開始を `max(積み上がり位置, at)` にする。前が余ればピン手前に空き時間（`gap`）ができ、
+   * 前が押し込んでピン時刻を過ぎたら食い込み（`conflict`）として印を付ける（時刻は戻せないので積み上がり位置のまま置く）。
+   * `totalMin` は空き時間を含めない所要合計、`endMin`/`endLabel` は空き時間を含む実際の終了。
    * @param {string} date - 対象日（"YYYY-MM-DD"）
-   * @returns {{rows: {item: DailyItem, start: string, end: string, startMin: number, endMin: number}[],
-   *           totalMin: number, startMin: number, endMin: number, endLabel: string, overflow: boolean}}
-   *   rows＝各項目の時刻付き、totalMin＝所要合計、endLabel＝終了時刻、overflow＝24時以降にはみ出すか
+   * @returns {{rows: {item: DailyItem, start: string, end: string, startMin: number, endMin: number,
+   *             pinned: boolean, gap: boolean, conflict: boolean}[],
+   *           totalMin: number, startMin: number, endMin: number, endLabel: string, overflow: boolean, hasConflict: boolean}}
+   *   rows＝各項目の時刻付き（pinned/gap/conflict の印）、totalMin＝所要合計、endLabel＝終了時刻、
+   *   overflow＝24時以降にはみ出すか、hasConflict＝いずれかの項目が固定時刻に食い込んだか
    */
   function schedule(date) {
     const start = hhmmToMin(startTime());
     let cur = start;
+    let workMin = 0; // 空き時間を含めない所要の合計（ピンで生じるギャップは「合計」に数えない）
     const rows = dayItems(date).map((it) => {
-      const s = cur, e = cur + normMinutes(it.minutes);
+      const pin = isValidTime(it.at) ? hhmmToMin(it.at) : null;
+      let s = cur, gap = false, conflict = false;
+      if (pin != null) {
+        if (pin >= cur) { gap = pin > cur; s = pin; }  // 前が余ればピンまで空き（ちょうど一致ならギャップ無し）
+        else { conflict = true; }                       // 前が押し込んでピン時刻を過ぎた＝食い込み（s=cur のまま）
+      }
+      const dur = normMinutes(it.minutes);
+      const e = s + dur;
+      workMin += dur;
       cur = e;
-      return { item: it, start: minToHHMM(s), end: minToHHMM(e), startMin: s, endMin: e };
+      return { item: it, start: minToHHMM(s), end: minToHHMM(e), startMin: s, endMin: e, pinned: pin != null, gap, conflict };
     });
     // ちょうど 24:00 で終わる場合は「またいで」いないので overflow ではない（超過のみ警告）。
-    return { rows, totalMin: cur - start, startMin: start, endMin: cur, endLabel: minToHHMM(cur), overflow: cur > 24 * 60 };
+    return { rows, totalMin: workMin, startMin: start, endMin: cur, endLabel: minToHHMM(cur), overflow: cur > 24 * 60, hasConflict: rows.some((r) => r.conflict) };
   }
 
   // ---- HOME サマリー（spec §3.6） ----
@@ -580,6 +616,8 @@
         source,
         todoId: source === "todo" && src.todoId ? src.todoId : null, // 手書き/ルーチンに todoId を残さない
         routineId: source === "routine" && src.routineId ? src.routineId : null, // 由来がルーチンのときだけ保持
+        at: normAt(src.at), // 妥当な "HH:MM" だけ固定として通し、不正・欠落は null（流動）へ寄せる
+
         // typedef / spec が必須と宣言しているフィールドを欠落させない（取込時刻で補完する）。
         createdAt: src.createdAt || now,
         updatedAt: src.updatedAt || now,
@@ -606,6 +644,7 @@
         title: String(src.title == null ? "" : src.title),
         minutes: normMinutes(src.minutes),
         days: normDays(src.days),
+        at: normAt(src.at), // 妥当な "HH:MM" だけ固定として通し、不正・欠落は null（流動）へ寄せる
         createdAt: src.createdAt || now,
         updatedAt: src.updatedAt || now,
       };
@@ -647,15 +686,18 @@
   function loadSample() {
     const today = MK.util.todayISO();
     const now = MK.util.nowISO();
-    const mk = (title, minutes, done) => ({ id: MK.util.uid("d"), date: today, title, minutes, done: !!done, source: "manual", todoId: null, createdAt: now, updatedAt: now });
-    const rt = (title, minutes, days) => ({ id: MK.util.uid("r"), title, minutes, days, createdAt: now, updatedAt: now });
+    const mk = (title, minutes, done, at) => ({ id: MK.util.uid("d"), date: today, title, minutes, done: !!done, source: "manual", todoId: null, at: at || null, createdAt: now, updatedAt: now });
+    const rt = (title, minutes, days, at) => ({ id: MK.util.uid("r"), title, minutes, days, at: at || null, createdAt: now, updatedAt: now });
+    // ルーチンは自動投入で items 末尾へ付くため、サンプルでは時刻を固定しない（手書き項目の後ろに
+    // 付いた固定ルーチンが食い込み表示になり、初見でバグに見えるのを避ける）。固定時刻ピンは手書きの
+    // 「設計レビュー」で見せる（手前に空き＋📌 の見え方を示す）。ルーチン側の固定は設定 UI で試せる。
     save({ version: 1, startTime: DEFAULT_START, routines: [
-      rt("朝会", 15, [1, 2, 3, 4, 5]),   // 平日（月〜金）
-      rt("メールと通知をさばく", 30, [0, 1, 2, 3, 4, 5, 6]), // 毎日
+      rt("朝会", 15, [1, 2, 3, 4, 5]),   // 平日（月〜金）・時刻は流動
+      rt("メールと通知をさばく", 30, [0, 1, 2, 3, 4, 5, 6]), // 毎日・時刻は流動
     ], injected: {}, items: [
       mk("企画書のドラフトを書く", 90, false),
       mk("チームの進捗を確認", 30, false),
-      mk("設計レビュー", 60, false),
+      mk("設計レビュー", 60, false, "15:00"), // 15:00 に固定（午後の予定・手前に空きができる）
     ] });
   }
 
@@ -666,7 +708,7 @@
     load, save, items, dayItems, startTime, setStartTime,
     addManual, pullableTodos, pullFromTodo,
     routines, addRoutine, updateRoutine, removeRoutine, ensureDayInjected,
-    setMinutes, toggleDone, removeItem, moveItem, rolloverTo, rolloverStaleTo, staleCount,
+    setMinutes, setAt, toggleDone, removeItem, moveItem, rolloverTo, rolloverStaleTo, staleCount,
     schedule, summary, exportData, importData, loadSample,
   };
 })();

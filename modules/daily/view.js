@@ -118,7 +118,14 @@
       return host;
     }
     const list = el("ul", { class: "mk-list" });
-    sched.rows.forEach((r) => list.appendChild(itemRow(r)));
+    // ピンで空きが生じたら、その項目の手前に空き時間の行を差し込む（gap は schedule が判定）。
+    let prevEndMin = sched.startMin, prevEndLabel = L().startTime();
+    sched.rows.forEach((r) => {
+      if (r.gap) list.appendChild(gapRow(prevEndLabel, r.start, r.startMin - prevEndMin));
+      list.appendChild(itemRow(r));
+      prevEndMin = r.endMin;
+      prevEndLabel = r.end;
+    });
     host.appendChild(list);
     return host;
   }
@@ -129,22 +136,39 @@
     cb.checked = it.done;
     cb.addEventListener("change", () => { L().toggleDone(it.id, cb.checked); render(); });
 
-    const time = el("div", { class: "sub", style: "min-width:92px;font-variant-numeric:tabular-nums;", text: r.start + "–" + r.end });
+    // 固定時刻に間に合わず食い込んでいる（conflict）ときは算出時刻を警告色にする。
+    const time = el("div", { class: "sub", style: "min-width:92px;font-variant-numeric:tabular-nums;" + (r.conflict ? "color:var(--color-error);" : ""), text: r.start + "–" + r.end });
+    if (r.conflict) time.title = "固定時刻 " + it.at + " に間に合わず食い込んでいます";
 
     const chips = [];
     const srcLabel = it.source === "todo" ? "📥 ToDo" : it.source === "routine" ? "🔁 ルーチン" : "✍ 手書き";
     chips.push(el("span", { class: "chip", text: srcLabel }));
+    // ピン（固定時刻）の状態を明示する。食い込み時は警告チップ、通常固定は 📌 チップ。
+    if (it.at) chips.push(el("span", { class: "chip", text: r.conflict ? "⚠ " + it.at + " に食い込み" : "📌 " + it.at }));
     const title = el("div", { class: it.done ? "mk-done" : "", text: it.title });
     const grow = el("div", { class: "grow" }, [title, el("div", { class: "sub" }, chips)]);
 
     const minSel = ui.select(minOptsFor(it.minutes), String(it.minutes), (v) => { L().setMinutes(it.id, Number(v)); render(); });
     minSel.style.maxWidth = "110px";
 
+    // 開始時刻の固定（ピン）。空にすると解除して流動へ戻す（setAt が normAt で null へ寄せる）。
+    const atInput = ui.input({ type: "time", value: it.at || "", onChange: (v) => { L().setAt(it.id, v); render(); } });
+    atInput.style.maxWidth = "120px";
+    atInput.title = "開始時刻を固定（空で解除）";
+
     return el("li", { class: "mk-row mk-daily-row" }, [
-      cb, time, grow, minSel,
+      cb, time, grow, minSel, atInput,
       ui.button("↑", { variant: "btn-ghost", onClick: () => { L().moveItem(it.id, -1); render(); } }),
       ui.button("↓", { variant: "btn-ghost", onClick: () => { L().moveItem(it.id, 1); render(); } }),
       ui.button("✕", { variant: "btn-ghost", title: "デイリーから外す", onClick: () => removeWithConfirm(it) }),
+    ]);
+  }
+
+  // ピンの手前にできる空き時間を薄い行で見せる（Outlook のように固定予定まで間が空くのを可視化する）。
+  function gapRow(fromLabel, toLabel, mins) {
+    return el("li", { class: "mk-row", style: "opacity:.55;" }, [
+      el("div", { class: "sub", style: "min-width:92px;font-variant-numeric:tabular-nums;", text: fromLabel + "–" + toLabel }),
+      el("div", { class: "grow sub", text: "空き " + fmtDur(mins) }),
     ]);
   }
 
@@ -174,6 +198,7 @@
       el("div", { class: "grow sub" }, [
         "合計 " + fmtDur(sched.totalMin) + " ／ 終了 " + sched.endLabel,
         sched.overflow ? el("span", { class: "chip", style: "margin-left:var(--space-xs);color:var(--color-error);", text: "⚠ 日をまたぎます" }) : null,
+        sched.hasConflict ? el("span", { class: "chip", style: "margin-left:var(--space-xs);color:var(--color-error);", text: "⚠ 固定時刻に食い込み" }) : null,
       ]),
     ]);
     // 繰り越し元/先は確認ダイアログを開く前に両方キャプチャする（片方だけ後読みすると、
@@ -242,6 +267,7 @@
   let newRoutineTitle = "";          // 追加フォームの入力途中タイトル（rebuild で消えないよう退避）
   let newRoutineMin = "30";          // 追加フォームの所要時間（分・文字列）
   let newRoutineDays = [1, 2, 3, 4, 5]; // 追加フォームの選択曜日（既定は平日。0=日〜6=土）
+  let newRoutineAt = "";             // 追加フォームの固定時刻（"HH:MM" or 空＝流動）
 
   // 曜日チェック（0=日〜6=土。WEEK と同じ並び）。selected は number[]、onChange に新しい配列を渡す。
   // next は各チェックボックスの「生きた .checked 状態」から毎回組み立てる（初期 selected をクロージャに
@@ -267,6 +293,10 @@
     } });
     const minSel = ui.select(minOptsFor(r.minutes), String(r.minutes), (v) => { L().updateRoutine(r.id, { minutes: Number(v) }); });
     minSel.style.maxWidth = "110px";
+    // 開始時刻の固定（ピン）。空にすると解除して流動へ戻す。変更は今後の投入に効く（投入済み項目はスナップショットのまま）。
+    const atInput = ui.input({ type: "time", value: r.at || "", onChange: (v) => { L().updateRoutine(r.id, { at: v }); render(); } });
+    atInput.style.maxWidth = "120px";
+    atInput.title = "開始時刻を固定（空で解除）";
     // 曜日は最低1つ必要（全外し＝normDays が「毎日」へ寄せるため、外したつもりが全曜日に化ける）。
     // 全外しは弾いて、rebuild で保存済みの選択へ戻す（操作と表示が食い違わないように）。
     const days = dayChecks(r.days || [], (next) => {
@@ -281,14 +311,14 @@
         render(); // 背後の時間割にも反映（投入済み項目は残るが、定義は消える）
       });
     } });
-    return el("li", { class: "mk-row" }, [el("div", { class: "grow" }, [ui.toolbar([titleInput, minSel]), days]), del]);
+    return el("li", { class: "mk-row" }, [el("div", { class: "grow" }, [ui.toolbar([titleInput, minSel, atInput]), days]), del]);
   }
 
   // モーダル本体を組み直す（追加・編集・削除のたびに呼ぶ）。
   function rebuildRoutineBody(host) {
     host.innerHTML = "";
     const routs = L().routines();
-    const parts = [el("div", { class: "sub", text: "登録すると、該当曜日の日（今日以降）を開いたとき自動で時間割に載ります。定義の変更・削除は投入済みの項目には影響しません。" })];
+    const parts = [el("div", { class: "sub", text: "登録すると、該当曜日の日（今日以降）を開いたとき自動で時間割に載ります。固定時刻を入れるとその時刻に固定して並びます（空なら流動）。定義の変更・削除は投入済みの項目には影響しません。" })];
     if (routs.length) {
       const list = el("ul", { class: "mk-list" });
       routs.forEach((r) => list.appendChild(routineRow(r, host)));
@@ -302,18 +332,24 @@
     titleInput.addEventListener("input", () => { newRoutineTitle = titleInput.value; });
     const minSel = ui.select(MIN_OPTS, newRoutineMin, (v) => { newRoutineMin = v; });
     minSel.style.maxWidth = "110px";
+    // 固定時刻（任意）。入れると投入時にその時刻へ固定される。空なら流動。
+    const atInput = ui.input({ type: "time", value: newRoutineAt });
+    atInput.style.maxWidth = "120px";
+    atInput.title = "開始時刻を固定（任意・空で流動）";
+    atInput.addEventListener("input", () => { newRoutineAt = atInput.value; });
     function addFromForm() {
       if (!titleInput.value.trim()) return;
       if (!newRoutineDays.length) { MK.ui.toast("曜日を1つ以上選んでください", "error"); return; } // 全外し＝毎日化けを防ぐ
-      L().addRoutine(titleInput.value, Number(newRoutineMin), newRoutineDays);
+      L().addRoutine(titleInput.value, Number(newRoutineMin), newRoutineDays, newRoutineAt);
       newRoutineTitle = "";             // 追加できたら入力途中の退避もクリア
       newRoutineDays = [1, 2, 3, 4, 5]; // 追加後は既定（平日）へ戻す（前回選択の持ち越しで混乱しないように）
+      newRoutineAt = "";                // 固定時刻も既定（流動）へ戻す
       rebuildRoutineBody(host);
       render(); // 今日が該当曜日なら背後の時間割へ即投入される
     }
     parts.push(ui.stack([
       el("div", { class: "sub", style: "margin-top:var(--space-sm);font-weight:600;", text: "新しいルーチンを追加" }),
-      ui.toolbar([titleInput, minSel]),
+      ui.toolbar([titleInput, minSel, atInput]),
       dayChecks(newRoutineDays, (next) => { newRoutineDays = next; }),
       ui.toolbar([ui.button("追加", { variant: "btn-primary", onClick: addFromForm })]),
     ]));
@@ -322,6 +358,7 @@
 
   function openRoutineModal() {
     newRoutineTitle = ""; // 開くたびに入力途中の退避はクリア（前回の閉じ残りを持ち込まない）
+    newRoutineAt = "";    // 固定時刻の入力途中もクリア
     const body = el("div");
     rebuildRoutineBody(body);
     _routineModal = MK.ui.modal({
