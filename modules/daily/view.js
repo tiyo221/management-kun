@@ -262,7 +262,12 @@
     } });
     const minSel = ui.select(minOptsFor(r.minutes), String(r.minutes), (v) => { L().updateRoutine(r.id, { minutes: Number(v) }); });
     minSel.style.maxWidth = "110px";
-    const days = dayChecks(r.days || [], (next) => { L().updateRoutine(r.id, { days: next }); rebuildRoutineBody(host); render(); });
+    // 曜日は最低1つ必要（全外し＝normDays が「毎日」へ寄せるため、外したつもりが全曜日に化ける）。
+    // 全外しは弾いて、rebuild で保存済みの選択へ戻す（操作と表示が食い違わないように）。
+    const days = dayChecks(r.days || [], (next) => {
+      if (!next.length) { MK.ui.toast("曜日を1つ以上選んでください", "error"); rebuildRoutineBody(host); return; }
+      L().updateRoutine(r.id, { days: next }); rebuildRoutineBody(host); render();
+    });
     const del = ui.button("✕", { variant: "btn-ghost", title: "ルーチンを削除", onClick: () => {
       MK.ui.confirm("ルーチン「" + (r.title || "無題") + "」を削除しますか？（投入済みの項目は残ります）").then((ok) => {
         if (!ok) return;
@@ -292,7 +297,9 @@
     minSel.style.maxWidth = "110px";
     function addFromForm() {
       if (!titleInput.value.trim()) return;
+      if (!newRoutineDays.length) { MK.ui.toast("曜日を1つ以上選んでください", "error"); return; } // 全外し＝毎日化けを防ぐ
       L().addRoutine(titleInput.value, Number(newRoutineMin), newRoutineDays);
+      newRoutineDays = [1, 2, 3, 4, 5]; // 追加後は既定（平日）へ戻す（前回選択の持ち越しで混乱しないように）
       rebuildRoutineBody(host);
       render(); // 今日が該当曜日なら背後の時間割へ即投入される
     }
