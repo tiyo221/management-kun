@@ -148,12 +148,16 @@
     ]);
   }
 
-  // 削除は「手書き項目のときだけ」確認する。手書きはデイリーが唯一の実体なので消すと復旧できない
-  // （CONVENTIONS §6）。todo 由来は todo に実体が残る＝「今日やらない」の取り消しが容易なので、
-  // 日々の組み替えを妨げないよう確認を挟まない。
+  // 削除は「その日には取り消せない項目のときだけ」確認する。手書きはデイリーが唯一の実体なので消すと
+  // 復旧できない（CONVENTIONS §6）。ルーチン由来も、外すと投入台帳（injected）が同日の再投入を止める
+  // ため当日は復活しない（＝実質その日限りで復旧不能）。一方 todo 由来は todo に実体が残り再度引ける＝
+  // 「今日やらない」の取り消しが容易なので、日々の組み替えを妨げないよう確認を挟まない。
   function removeWithConfirm(it) {
-    if (it.source !== "manual") { L().removeItem(it.id); render(); return; }
-    MK.ui.confirm("「" + (it.title || "無題") + "」を削除しますか？（デイリーにしかない項目です）").then((ok) => {
+    if (it.source === "todo") { L().removeItem(it.id); render(); return; }
+    const msg = it.source === "routine"
+      ? "「" + (it.title || "無題") + "」を外しますか？（ルーチン由来。この日には再投入されません）"
+      : "「" + (it.title || "無題") + "」を削除しますか？（デイリーにしかない項目です）";
+    MK.ui.confirm(msg).then((ok) => {
       if (!ok) return;
       L().removeItem(it.id);
       render();
@@ -235,6 +239,7 @@
 
   // ---- ルーチン（定型業務）設定 ----
   let _routineModal = null;
+  let newRoutineTitle = "";          // 追加フォームの入力途中タイトル（rebuild で消えないよう退避）
   let newRoutineMin = "30";          // 追加フォームの所要時間（分・文字列）
   let newRoutineDays = [1, 2, 3, 4, 5]; // 追加フォームの選択曜日（既定は平日。0=日〜6=土）
 
@@ -291,14 +296,17 @@
     } else {
       parts.push(ui.emptyState({ title: "ルーチンがまだありません", hint: "下の行で定型業務（タイトル・所要時間・曜日）を登録しましょう。" }));
     }
-    // 追加フォーム
-    const titleInput = ui.input({ placeholder: "定型業務のタイトル", onEnter: addFromForm });
+    // 追加フォーム。既存ルーチンの曜日トグルは本体全体を rebuild するため、入力途中のタイトルは
+    // モジュールスコープの newRoutineTitle へ退避し、rebuild 後も復元する（入力が消えないように）。
+    const titleInput = ui.input({ value: newRoutineTitle, placeholder: "定型業務のタイトル", onEnter: addFromForm });
+    titleInput.addEventListener("input", () => { newRoutineTitle = titleInput.value; });
     const minSel = ui.select(MIN_OPTS, newRoutineMin, (v) => { newRoutineMin = v; });
     minSel.style.maxWidth = "110px";
     function addFromForm() {
       if (!titleInput.value.trim()) return;
       if (!newRoutineDays.length) { MK.ui.toast("曜日を1つ以上選んでください", "error"); return; } // 全外し＝毎日化けを防ぐ
       L().addRoutine(titleInput.value, Number(newRoutineMin), newRoutineDays);
+      newRoutineTitle = "";             // 追加できたら入力途中の退避もクリア
       newRoutineDays = [1, 2, 3, 4, 5]; // 追加後は既定（平日）へ戻す（前回選択の持ち越しで混乱しないように）
       rebuildRoutineBody(host);
       render(); // 今日が該当曜日なら背後の時間割へ即投入される
@@ -313,6 +321,7 @@
   }
 
   function openRoutineModal() {
+    newRoutineTitle = ""; // 開くたびに入力途中の退避はクリア（前回の閉じ残りを持ち込まない）
     const body = el("div");
     rebuildRoutineBody(body);
     _routineModal = MK.ui.modal({
