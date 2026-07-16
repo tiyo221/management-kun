@@ -617,7 +617,6 @@
         todoId: source === "todo" && src.todoId ? src.todoId : null, // 手書き/ルーチンに todoId を残さない
         routineId: source === "routine" && src.routineId ? src.routineId : null, // 由来がルーチンのときだけ保持
         at: normAt(src.at), // 妥当な "HH:MM" だけ固定として通し、不正・欠落は null（流動）へ寄せる
-
         // typedef / spec が必須と宣言しているフィールドを欠落させない（取込時刻で補完する）。
         createdAt: src.createdAt || now,
         updatedAt: src.updatedAt || now,
