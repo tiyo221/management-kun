@@ -239,14 +239,16 @@
   let newRoutineDays = [1, 2, 3, 4, 5]; // 追加フォームの選択曜日（既定は平日。0=日〜6=土）
 
   // 曜日チェック（0=日〜6=土。WEEK と同じ並び）。selected は number[]、onChange に新しい配列を渡す。
+  // next は各チェックボックスの「生きた .checked 状態」から毎回組み立てる（初期 selected をクロージャに
+  // 焼き込むと、body を組み直さない追加フォームで2つ目以降のトグルが1つ目の変更を巻き戻してしまう）。
   function dayChecks(selected, onChange) {
     const wrap = el("div", { class: "mk-toolbar", style: "gap:var(--space-xs);flex-wrap:wrap;" });
+    const boxes = [];
     WEEK.forEach((label, i) => {
       const cb = ui.checkbox(selected.indexOf(i) >= 0);
+      boxes[i] = cb;
       cb.addEventListener("change", () => {
-        // i の当落だけ差し替えた 0〜6 の配列を作って返す（他曜日の選択は保つ）。
-        const next = WEEK.map((_, j) => j).filter((j) => (j === i ? cb.checked : selected.indexOf(j) >= 0));
-        onChange(next);
+        onChange(boxes.map((c, j) => (c.checked ? j : -1)).filter((j) => j >= 0));
       });
       wrap.appendChild(el("label", { class: "sub", style: "display:inline-flex;align-items:center;gap:2px;" }, [cb, label]));
     });
