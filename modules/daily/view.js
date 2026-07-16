@@ -39,6 +39,9 @@
   function render() {
     if (!root) return;
     if (!date) date = MK.util.todayISO();
+    // その日を開いたら、該当曜日のルーチンを自動投入する（今日以降のみ・冪等）。schedule の前に呼び、
+    // 投入直後の項目も同じ描画へ反映する。過去日・投入済みは logic 側が握るので条件分岐しない。
+    L().ensureDayInjected(date);
     root.innerHTML = "";
     // 時間割は1描画につき1回だけ算出して、リストとフッタで使い回す（走査の重複を避ける）。
     const sched = L().schedule(date);
@@ -100,6 +103,7 @@
       minSel,
       ui.button("追加", { variant: "btn-primary", onClick: () => { if (input.value.trim() && L().addManual(date, input.value, Number(newMin))) render(); } }),
       ui.button("ToDo から引く", { onClick: openPullModal }),
+      ui.button("🔁 ルーチン設定", { onClick: openRoutineModal }),
     ]);
   }
 
@@ -128,7 +132,8 @@
     const time = el("div", { class: "sub", style: "min-width:92px;font-variant-numeric:tabular-nums;", text: r.start + "–" + r.end });
 
     const chips = [];
-    chips.push(el("span", { class: "chip", text: it.source === "todo" ? "📥 ToDo" : "✍ 手書き" }));
+    const srcLabel = it.source === "todo" ? "📥 ToDo" : it.source === "routine" ? "🔁 ルーチン" : "✍ 手書き";
+    chips.push(el("span", { class: "chip", text: srcLabel }));
     const title = el("div", { class: it.done ? "mk-done" : "", text: it.title });
     const grow = el("div", { class: "grow" }, [title, el("div", { class: "sub" }, chips)]);
 
@@ -143,12 +148,16 @@
     ]);
   }
 
-  // 削除は「手書き項目のときだけ」確認する。手書きはデイリーが唯一の実体なので消すと復旧できない
-  // （CONVENTIONS §6）。todo 由来は todo に実体が残る＝「今日やらない」の取り消しが容易なので、
-  // 日々の組み替えを妨げないよう確認を挟まない。
+  // 削除は「その日には取り消せない項目のときだけ」確認する。手書きはデイリーが唯一の実体なので消すと
+  // 復旧できない（CONVENTIONS §6）。ルーチン由来も、外すと投入台帳（injected）が同日の再投入を止める
+  // ため当日は復活しない（＝実質その日限りで復旧不能）。一方 todo 由来は todo に実体が残り再度引ける＝
+  // 「今日やらない」の取り消しが容易なので、日々の組み替えを妨げないよう確認を挟まない。
   function removeWithConfirm(it) {
-    if (it.source !== "manual") { L().removeItem(it.id); render(); return; }
-    MK.ui.confirm("「" + (it.title || "無題") + "」を削除しますか？（デイリーにしかない項目です）").then((ok) => {
+    if (it.source === "todo") { L().removeItem(it.id); render(); return; }
+    const msg = it.source === "routine"
+      ? "「" + (it.title || "無題") + "」を外しますか？（ルーチン由来。この日には再投入されません）"
+      : "「" + (it.title || "無題") + "」を削除しますか？（デイリーにしかない項目です）";
+    MK.ui.confirm(msg).then((ok) => {
       if (!ok) return;
       L().removeItem(it.id);
       render();
@@ -158,7 +167,9 @@
   // 合計・終了時刻・はみ出し警告＋「残りを明日へ送る」（その日に項目があるときだけ出す）
   function footer(sched) {
     if (!sched.rows.length) return null;
-    const remaining = sched.rows.filter((r) => !r.item.done).length;
+    // 繰り越せる残り＝未完了かつ非ルーチン。ルーチン由来は繰り越し対象外（翌日は翌日ぶんが投入される）
+    // なので「残りN件を送る」の N に数えると、押しても送られず表示と挙動がズレる。除外して数える。
+    const remaining = sched.rows.filter((r) => !r.item.done && r.item.source !== "routine").length;
     const bar = ui.toolbar([
       el("div", { class: "grow sub" }, [
         "合計 " + fmtDur(sched.totalMin) + " ／ 終了 " + sched.endLabel,
@@ -226,6 +237,101 @@
   let _modal = null;
   function closeModal() { if (_modal && typeof _modal.close === "function") _modal.close(); }
 
+  // ---- ルーチン（定型業務）設定 ----
+  let _routineModal = null;
+  let newRoutineTitle = "";          // 追加フォームの入力途中タイトル（rebuild で消えないよう退避）
+  let newRoutineMin = "30";          // 追加フォームの所要時間（分・文字列）
+  let newRoutineDays = [1, 2, 3, 4, 5]; // 追加フォームの選択曜日（既定は平日。0=日〜6=土）
+
+  // 曜日チェック（0=日〜6=土。WEEK と同じ並び）。selected は number[]、onChange に新しい配列を渡す。
+  // next は各チェックボックスの「生きた .checked 状態」から毎回組み立てる（初期 selected をクロージャに
+  // 焼き込むと、body を組み直さない追加フォームで2つ目以降のトグルが1つ目の変更を巻き戻してしまう）。
+  function dayChecks(selected, onChange) {
+    const wrap = el("div", { class: "mk-toolbar", style: "gap:var(--space-xs);flex-wrap:wrap;" });
+    const boxes = [];
+    WEEK.forEach((label, i) => {
+      const cb = ui.checkbox(selected.indexOf(i) >= 0);
+      boxes[i] = cb;
+      cb.addEventListener("change", () => {
+        onChange(boxes.map((c, j) => (c.checked ? j : -1)).filter((j) => j >= 0));
+      });
+      wrap.appendChild(el("label", { class: "sub", style: "display:inline-flex;align-items:center;gap:2px;" }, [cb, label]));
+    });
+    return wrap;
+  }
+
+  // 既存ルーチン1行（タイトル・所要時間・曜日をその場で編集、✕で削除）。編集は即 updateRoutine へ。
+  function routineRow(r, host) {
+    const titleInput = ui.input({ value: r.title, onChange: (v) => {
+      if (v.trim()) L().updateRoutine(r.id, { title: v }); else titleInput.value = r.title; // 空へは戻さない
+    } });
+    const minSel = ui.select(minOptsFor(r.minutes), String(r.minutes), (v) => { L().updateRoutine(r.id, { minutes: Number(v) }); });
+    minSel.style.maxWidth = "110px";
+    // 曜日は最低1つ必要（全外し＝normDays が「毎日」へ寄せるため、外したつもりが全曜日に化ける）。
+    // 全外しは弾いて、rebuild で保存済みの選択へ戻す（操作と表示が食い違わないように）。
+    const days = dayChecks(r.days || [], (next) => {
+      if (!next.length) { MK.ui.toast("曜日を1つ以上選んでください", "error"); rebuildRoutineBody(host); return; }
+      L().updateRoutine(r.id, { days: next }); rebuildRoutineBody(host); render();
+    });
+    const del = ui.button("✕", { variant: "btn-ghost", title: "ルーチンを削除", onClick: () => {
+      MK.ui.confirm("ルーチン「" + (r.title || "無題") + "」を削除しますか？（投入済みの項目は残ります）").then((ok) => {
+        if (!ok) return;
+        L().removeRoutine(r.id);
+        rebuildRoutineBody(host);
+        render(); // 背後の時間割にも反映（投入済み項目は残るが、定義は消える）
+      });
+    } });
+    return el("li", { class: "mk-row" }, [el("div", { class: "grow" }, [ui.toolbar([titleInput, minSel]), days]), del]);
+  }
+
+  // モーダル本体を組み直す（追加・編集・削除のたびに呼ぶ）。
+  function rebuildRoutineBody(host) {
+    host.innerHTML = "";
+    const routs = L().routines();
+    const parts = [el("div", { class: "sub", text: "登録すると、該当曜日の日（今日以降）を開いたとき自動で時間割に載ります。定義の変更・削除は投入済みの項目には影響しません。" })];
+    if (routs.length) {
+      const list = el("ul", { class: "mk-list" });
+      routs.forEach((r) => list.appendChild(routineRow(r, host)));
+      parts.push(list);
+    } else {
+      parts.push(ui.emptyState({ title: "ルーチンがまだありません", hint: "下の行で定型業務（タイトル・所要時間・曜日）を登録しましょう。" }));
+    }
+    // 追加フォーム。既存ルーチンの曜日トグルは本体全体を rebuild するため、入力途中のタイトルは
+    // モジュールスコープの newRoutineTitle へ退避し、rebuild 後も復元する（入力が消えないように）。
+    const titleInput = ui.input({ value: newRoutineTitle, placeholder: "定型業務のタイトル", onEnter: addFromForm });
+    titleInput.addEventListener("input", () => { newRoutineTitle = titleInput.value; });
+    const minSel = ui.select(MIN_OPTS, newRoutineMin, (v) => { newRoutineMin = v; });
+    minSel.style.maxWidth = "110px";
+    function addFromForm() {
+      if (!titleInput.value.trim()) return;
+      if (!newRoutineDays.length) { MK.ui.toast("曜日を1つ以上選んでください", "error"); return; } // 全外し＝毎日化けを防ぐ
+      L().addRoutine(titleInput.value, Number(newRoutineMin), newRoutineDays);
+      newRoutineTitle = "";             // 追加できたら入力途中の退避もクリア
+      newRoutineDays = [1, 2, 3, 4, 5]; // 追加後は既定（平日）へ戻す（前回選択の持ち越しで混乱しないように）
+      rebuildRoutineBody(host);
+      render(); // 今日が該当曜日なら背後の時間割へ即投入される
+    }
+    parts.push(ui.stack([
+      el("div", { class: "sub", style: "margin-top:var(--space-sm);font-weight:600;", text: "新しいルーチンを追加" }),
+      ui.toolbar([titleInput, minSel]),
+      dayChecks(newRoutineDays, (next) => { newRoutineDays = next; }),
+      ui.toolbar([ui.button("追加", { variant: "btn-primary", onClick: addFromForm })]),
+    ]));
+    parts.forEach((p) => host.appendChild(p));
+  }
+
+  function openRoutineModal() {
+    newRoutineTitle = ""; // 開くたびに入力途中の退避はクリア（前回の閉じ残りを持ち込まない）
+    const body = el("div");
+    rebuildRoutineBody(body);
+    _routineModal = MK.ui.modal({
+      title: "🔁 ルーチン（定型業務）設定",
+      body,
+      actions: [{ label: "閉じる", variant: "btn-secondary", onClick: (c) => c() }],
+    });
+  }
+  function closeRoutineModal() { if (_routineModal && typeof _routineModal.close === "function") _routineModal.close(); }
+
   MK.registerModule("daily", {
     title: "デイリー",
     icon: "🗓️",
@@ -234,7 +340,7 @@
     mount(container) { date = MK.util.todayISO(); root = el("div"); container.appendChild(root); render(); },
     // モジュール離脱時に開きっぱなしのモーダルを畳む（overlay が残ると、破棄済み root に対して
     // 候補クリックが走り書き込みだけ効いてしまうため）。
-    unmount() { closeModal(); _modal = null; root = null; },
+    unmount() { closeModal(); closeRoutineModal(); _modal = null; _routineModal = null; root = null; },
     summary() { return L().summary(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },
