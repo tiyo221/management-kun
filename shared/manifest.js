@@ -1,6 +1,6 @@
 /* モジュール／構成マニフェスト（単一ソース）— classic script・依存ゼロ・file:// 動作（Issue #137）。
    「どのモジュールがあるか（カタログ）」「既定のゾーン割当」「読み込むファイル」を **1か所** に集約し、
-   エントリ HTML（index.html / member.html）と shell.js での二重管理を無くす。
+   エントリ HTML（index.html）と shell.js での二重管理を無くす。
 
    役割は2つ:
    1. データ宣言: window.MK_MANIFEST に catalog / zones / shared を載せる。shell.js はここを参照して
@@ -36,7 +36,7 @@
   };
 
   // 既定（マネージャ全部入り）のゾーン割当。index.html は zones を宣言せずこれを使う（＝ここが正）。
-  // 配布プロファイル（member.html）は自分のゾーンを MK_CONFIG.zones で上書き宣言する（サブセット）。
+  // 配布サブセットが必要になったら、エントリ HTML が MK_CONFIG.zones でこれを上書き宣言する（spec §1.5）。
   // 分類は EM が見る領域で切る（自分＋4領域。spec §1.4 / §3.6）。
   const ZONES = [
     { label: "自分", modules: ["todo", "daily", "goals", "questions"] },

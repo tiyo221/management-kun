@@ -23,7 +23,7 @@ npx --yes http-server -p 8777 -c-1
 - **マスタ**: 👤 人 ／ 📁 プロジェクト ／ 📦 プロダクト（全モジュール横断で参照する共通マスタ）
 - ⚙ 設定: 全体バックアップ（JSON 入出力）・サンプル投入・旧ツール移行・テーマ切替（ダークモード）・モジュールの表示/非表示切替
 
-> **モジュールの一覧（id・ゾーン・CSV 対応）は [`spec.md`](spec.md) §5 のモジュール一覧表を正とする。** カタログ・既定ゾーン割当・スクリプト読込は [`shared/manifest.js`](shared/manifest.js)（構成マニフェスト・単一ソース・Issue #137）が正。配布プロファイルで既定を上書きする場合のみエントリ HTML の `MK_CONFIG.zones`（[`member.html`](member.html) 等）で宣言する。CSV 入出力の対象は spec §4.6 を参照。
+> **モジュールの一覧（id・ゾーン・CSV 対応）は [`spec.md`](spec.md) §5 のモジュール一覧表を正とする。** カタログ・既定ゾーン割当・スクリプト読込は [`shared/manifest.js`](shared/manifest.js)（構成マニフェスト・単一ソース・Issue #137）が正。配布プロファイルで既定を上書きする場合のみエントリ HTML の `MK_CONFIG.zones` で宣言する（現状のエントリは [`index.html`](index.html) 1つ・spec §1.5）。CSV 入出力の対象は spec §4.6 を参照。
 
 ## ドキュメント
 
