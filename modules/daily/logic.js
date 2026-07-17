@@ -353,6 +353,46 @@
     d.items[a].updatedAt = now; d.items[b].updatedAt = now;
     save(d);
   }
+  /**
+   * 同じ日の中で項目を先頭（早い時刻）または末尾（遅い時刻）へ一括で移して保存する。
+   * `↑ / ↓` を何度も押さずに狙った端へ一手で動かすためのショートカット（moveItem の粒度を補う）。
+   * 端の付け替えは同日内に閉じ、他日の項目の相対順は保つ。既に端にある・該当なしなら何もしない。
+   * @param {string} id - 対象項目ID
+   * @param {number} dir - 向き（-1 で先頭＝朝イチ、+1 で末尾）
+   * @returns {void}
+   * ※ store へ保存する副作用あり。
+   */
+  function moveItemToEdge(id, dir) {
+    const d = load();
+    const idx = d.items.findIndex((x) => x.id === id);
+    if (idx < 0) return;
+    const date = d.items[idx].date;
+    const sameDay = []; // 同日項目のマスタ配列上の位置（先頭・末尾の付け替え先を得る）
+    d.items.forEach((x, i) => { if (x.date === date) sameDay.push(i); });
+    if (sameDay.length <= 1) return; // 動かす余地がない
+    const target = dir < 0 ? sameDay[0] : sameDay[sameDay.length - 1];
+    if (idx === target) return; // 既にその端にある
+    const [it] = d.items.splice(idx, 1);
+    // 先頭は idx より前なので削除で位置がずれない。末尾は idx より後なので削除で1つ手前へ寄るが、
+    // その要素の直後（＝元の末尾位置）へ挿すため splice のインデックスは target のままでよい。
+    d.items.splice(target, 0, it);
+    it.updatedAt = MK.util.nowISO(); // 並び順＝時刻の変更も更新（moveItem / updateItem と揃える）
+    save(d);
+  }
+  /**
+   * 項目を同日の先頭（朝イチ）へ一括で移す。
+   * @param {string} id - 対象項目ID
+   * @returns {void}
+   * ※ moveItemToEdge 経由で store へ保存する副作用あり。
+   */
+  function moveItemToTop(id) { moveItemToEdge(id, -1); }
+  /**
+   * 項目を同日の末尾へ一括で移す。
+   * @param {string} id - 対象項目ID
+   * @returns {void}
+   * ※ moveItemToEdge 経由で store へ保存する副作用あり。
+   */
+  function moveItemToEnd(id) { moveItemToEdge(id, 1); }
 
   // ---- ルーチン（定型業務の定義と自動投入） ----
   /**
@@ -707,7 +747,7 @@
     load, save, items, dayItems, startTime, setStartTime,
     addManual, pullableTodos, pullFromTodo,
     routines, addRoutine, updateRoutine, removeRoutine, ensureDayInjected,
-    setMinutes, setAt, toggleDone, removeItem, moveItem, rolloverTo, rolloverStaleTo, staleCount,
+    setMinutes, setAt, toggleDone, removeItem, moveItem, moveItemToTop, moveItemToEnd, rolloverTo, rolloverStaleTo, staleCount,
     schedule, summary, exportData, importData, loadSample,
   };
 })();
