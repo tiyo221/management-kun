@@ -158,8 +158,10 @@
 
     return el("li", { class: "mk-row mk-daily-row" }, [
       cb, time, grow, minSel, atInput,
-      ui.button("↑", { variant: "btn-ghost", onClick: () => { L().moveItem(it.id, -1); render(); } }),
-      ui.button("↓", { variant: "btn-ghost", onClick: () => { L().moveItem(it.id, 1); render(); } }),
+      ui.button("↥", { variant: "btn-ghost", title: "先頭（朝イチ）へ移動", onClick: () => { L().moveItemToTop(it.id); render(); } }),
+      ui.button("↑", { variant: "btn-ghost", title: "1つ前へ移動", onClick: () => { L().moveItem(it.id, -1); render(); } }),
+      ui.button("↓", { variant: "btn-ghost", title: "1つ後ろへ移動", onClick: () => { L().moveItem(it.id, 1); render(); } }),
+      ui.button("↧", { variant: "btn-ghost", title: "末尾へ移動", onClick: () => { L().moveItemToEnd(it.id); render(); } }),
       ui.button("✕", { variant: "btn-ghost", title: "デイリーから外す", onClick: () => removeWithConfirm(it) }),
     ]);
   }
