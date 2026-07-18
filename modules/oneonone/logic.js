@@ -379,11 +379,35 @@
     ] };
   }
 
+  /**
+   * グローバル検索（コマンドパレット）用のレコードを返す（任意契約 def.searchItems・spec §3.5）。
+   * 1on1 メモはアプリ内で最もテキスト量が多く「あの話いつだっけ」を Ctrl+K で引く価値が最も高い
+   * （#220）。label＝相手＋実施日、sub＝本文の冒頭、keywords に本文・相手の人名・アクション本文を
+   * 含めて本文／人名でヒットさせる。本文もアクションも無い空エントリは検索価値が無いので除外する。
+   * @returns {{id: string, label: string, sub: string, keywords: string[]}[]}
+   */
+  function searchItems() {
+    const nameOf = (mid) => { const m = mid && MK.people ? MK.people.get(mid) : null; return m ? m.name : ""; };
+    return entries()
+      .filter((e) => (e.body || "").trim() || (e.actions || []).length)
+      .map((e) => {
+        const name = nameOf(e.memberId);
+        const snippet = (e.body || "").replace(/\s+/g, " ").trim().slice(0, 60);
+        const actions = (e.actions || []).map((a) => a.text).filter(Boolean);
+        return {
+          id: e.id,
+          label: [name, e.date].filter(Boolean).join(" ・ ") || "1on1",
+          sub: snippet || "（本文なし）",
+          keywords: [e.body, name].concat(actions).filter(Boolean),
+        };
+      });
+  }
+
   MK.logic = MK.logic || {};
   MK.logic.oneonone = {
     MOODS, load, save, entries, entriesOf, openActionsOf, openActionCount, lastDateOf,
     normalizeActions, addEntry, updateEntry, removeEntry, toggleAction,
     moodFromCSV, actionsToCell, parseActionsCell, buildCSVRows, applyCSV,
-    summary, summaryFor, exportData, importData, loadSample,
+    summary, summaryFor, searchItems, exportData, importData, loadSample,
   };
 })();

@@ -12,8 +12,10 @@
 ## 共通マスタ関係
 **Member を People マスタから参照**（従来の自前 `members[]` を廃し `people.members` を使用）。Project は使わない。
 
-## エンティティ集約（`summaryFor`・[`spec.md`](../../spec.md) §3.6.1）
-人詳細の集約ビュー（#83）向けに `summaryFor("person", memberId)` を実装する。その人の**評価済みスキル数・平均レベル・コア充足（目標レベル以上のコアスキル数／コア総数）**を返す。評価が1件も無ければ `empty:true`。`person` 以外の種別は該当なし（`empty:true`）で応える（"project" 決め打ち分岐をしない）。集計は `MK.logic.skills.summaryFor`（純関数・`test/summary-for.test.js`）。
+## 任意契約の採否（searchItems / summaryFor）
+グローバル検索（[`spec.md`](../../spec.md) §3.5）と人／PJ 詳細の集約（§3.6.1）は任意契約。採否を固着させる（#220）。
+- **searchItems**: 見送り。スキルは台帳の分類語彙（スキル名）で自由記述の本文を持たず、Ctrl+K で「開いて読む一次レコード」にならない。人×スキルの評価は人詳細（`summaryFor`）で引ける。
+- **summaryFor**: 実装。人詳細の集約ビュー（#83）向けに `summaryFor("person", memberId)` を実装する。その人の**評価済みスキル数・平均レベル・コア充足（目標レベル以上のコアスキル数／コア総数）**を返す。評価が1件も無ければ `empty:true`。`person` 以外の種別は該当なし（`empty:true`）で応える（"project" 決め打ち分岐をしない）。集計は `MK.logic.skills.summaryFor`（純関数・`test/summary-for.test.js`）。
 
 ## 固有データ
 - `skills[]`（スキルマスタ）、`ratings`（キー `"<memberId>:<skillId>"`）。`mk:module:skills:v1`。

@@ -17,6 +17,11 @@
 - `tasks[]`（level / deps / progress / status 等）、`uid`。保存は PJ ごとの `mk:module:wbs:<projectId>:v1`（§3.7.4）。
 - モジュール内部 ID は数値 `uid++` を維持する（`deps` が数値参照のため変更しない。[`spec.md`](../../spec.md) §4.7）。`uid` は PJ（対象別キー）ごとに独立して採番する。
 
+## 任意契約の採否（searchItems / summaryFor）
+グローバル検索（[`spec.md`](../../spec.md) §3.5）と人／PJ 詳細の集約（§3.6.1）は任意契約。採否を固着させる（#220）。
+- **searchItems**: 実装。全 PJ 横断で未完の葉タスクを `label`＝タスク名・`sub`＝PJ 名・`keywords`＝担当者名で供給する（親＝集計行・完了は除外）。
+- **summaryFor**: 実装。`summaryFor("project", projectId)` で対象 PJ の WBS 概況（進捗・タスク数等）を返す（dashboard の #78 集約が消費）。`project` 以外の種別は該当なし（`empty:true`）。
+
 ## レイアウト
 統合アプリの幅（~950px）では両方を同時に置くと窮屈なため、**「テーブル / ガント」タブで片方を全幅表示**する（Issue #157）。編集用のフルテーブルは「テーブル」タブに温存し、ガント側は自前の**固定名前列＋固定日付ヘッダ**で単独でも読めるようにする（Issue #165）。
 
