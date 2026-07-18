@@ -61,3 +61,8 @@ People / Project マスタは**使わない**（todo と同じく個人用途）
 
 ## サマリー（HOME 表示）
 `summary(today?)` は `未解決 N件`（残っている学習バックログ）を返す純関数（[`spec.md`](../../spec.md) §3.6）。throughput 系の `今週わかった` は stats から撤去した（方針①・Issue #202。集計 `resolvedThisWeek(today?)` 自体は残す）。`attention` として `停滞 M件`（未解決かつ最終更新から `STALE_DAYS`=14 日以上・warn）を申告する（HOME の要対応帯・Issue #102。`staleCount(today?)`）。全体の未解決と長期分の部分集合である停滞は別事実のため二重表示に当たらない（方針③）。
+
+## 任意契約の採否（searchItems / summaryFor）
+グローバル検索（[`spec.md`](../../spec.md) §3.5）と人／PJ 詳細の集約（§3.6.1）は任意契約。採否を固着させる（#220）。
+- **searchItems**: 実装（上記「ビュー・導線」）。バックログ＋ナレッジを供給し、答え未記入の解決済みは除外する（#81 の再利用導線）。
+- **summaryFor**: 見送り。自分ゾーンで人・プロジェクトに紐づかず、集約先（人／PJ 詳細）を持たないため。

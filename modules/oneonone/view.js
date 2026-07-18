@@ -184,6 +184,7 @@
     unmount() { root = null; },
     summary() { return L().summary(); },
     summaryFor(entityType, id) { return L().summaryFor(entityType, id); },
+    searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },
     loadSample() { L().loadSample(); },

@@ -18,8 +18,10 @@
 - メンバー選択のプルダウンにはアクティブなメンバー（`active !== false`）を並べる。退職メンバー（`active:false`）や、マスタから削除された参照切れメンバーでも、記録が残っていれば過去ログ閲覧のため選択肢に残す（退職者は「（退職）」表示）。
 - `memberId` の参照が壊れていても（該当メンバーがマスタに存在しなくても）モジュールは起動し、「(不明なメンバー)」として表示する。
 
-## エンティティ集約（`summaryFor`・[`spec.md`](../../spec.md) §3.6.1）
-人詳細の集約ビュー（#83）向けに `summaryFor("person", memberId)` を実装する。その人の**記録数・最終実施日・未完アクション数**を返す（記録が無ければ `empty:true`・最終実施は `"-"`）。`person` 以外の種別は該当なし（`empty:true`）で応える。集計は `MK.logic.oneonone.summaryFor`（純関数・`test/summary-for.test.js`）。なお 1on1 は機微情報のためメンバー向け配布サブセットには載せない（上記）＝そのプロファイルでは未搭載になり、人詳細でもこの枠はリーダが `null` を返して黙って省かれる（疎結合の実例）。
+## 任意契約の採否（searchItems / summaryFor）
+グローバル検索（[`spec.md`](../../spec.md) §3.5）と人／PJ 詳細の集約（§3.6.1）は任意契約。採否を固着させる（#220）。
+- **searchItems**: 実装（#220）。1on1 メモはアプリ内で最もテキスト量が多く「あの話いつだっけ」を Ctrl+K で引く価値が最も高い。本文もアクションも無い空エントリを除き、`label`＝相手+実施日・`sub`＝本文冒頭・`keywords`＝本文/相手の人名/アクション本文で供給し、本文・人名でヒットさせる。
+- **summaryFor**: 実装。人詳細の集約ビュー（#83）向けに `summaryFor("person", memberId)` を実装する。その人の**記録数・最終実施日・未完アクション数**を返す（記録が無ければ `empty:true`・最終実施は `"-"`）。`person` 以外の種別は該当なし（`empty:true`）で応える。集計は `MK.logic.oneonone.summaryFor`（純関数・`test/summary-for.test.js`）。なお 1on1 は機微情報のためメンバー向け配布サブセットには載せない（上記）＝そのプロファイルでは未搭載になり、人詳細でもこの枠はリーダが `null` を返して黙って省かれる（疎結合の実例）。
 
 ## 固有データ
 - `entries[]`: `{ id, memberId, date, body, actions[], mood, createdAt, updatedAt }`。`mk:module:oneonone:v1`。

@@ -42,3 +42,8 @@ GTD ベースの軽量タスク管理。
 
 ## サマリー（HOME 表示）
 `summary(today?)` は `未完 N` / `期日未設定 M`（未完かつ due なし＝要整理。期限を切る一手につながる）を返す純関数（[`spec.md`](../../spec.md) §3.6）。母数の全タスクは出さない（方針①・Issue #202）。`attention` として期限切れ（error）／今日期限（warn）の件数を申告する（HOME の要対応帯・Issue #102。完了と期限未設定は対象外＝`dueCounts(today?)`）。stats・attention は同じ事実を二重表示しない（方針③）。
+
+## 任意契約の採否（searchItems / summaryFor）
+グローバル検索（[`spec.md`](../../spec.md) §3.5）と人／PJ 詳細の集約（§3.6.1）は任意契約。採否を固着させる（#220）。
+- **searchItems**: 実装。進行中タスクを `label`＝タイトル・`sub`＝ステータス+PJ・`keywords`＝メモで供給する（完了は除外）。
+- **summaryFor**: 見送り。自分ゾーンで人・プロジェクトに紐づかず、集約先（人／PJ 詳細）を持たないため。
