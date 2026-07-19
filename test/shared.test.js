@@ -83,6 +83,51 @@ test("io.csv: クォート・カンマ・改行を含むラウンドトリップ
   eq(MK.io.csv.parse(MK.io.csv.stringify(rows)), rows);
 });
 
+test("io.backupFreshness: 未実施は stale・記録すると経過日数で判定", (MK) => {
+  // 観点: 全体バックアップの鮮度は「未実施＝警告」から始まり、記録後は基準時刻との
+  //       経過日数で判定される（閾値 BACKUP_STALE_DAYS 以上で警告）
+  // 入力: 記録なし → markBackup("2026-07-01T09:00:00.000Z") 後に基準日を 7/03・7/15 で評価
+  // 期待: 未実施は {days:null, stale:true} / 2日前は stale=false / 14日前は stale=true
+  eq(MK.io.BACKUP_STALE_DAYS, 14);
+  const none = MK.io.backupFreshness("2026-07-20T00:00:00.000Z");
+  eq(none.lastBackupAt, null);
+  eq(none.days, null);
+  eq(none.stale, true);
+
+  MK.io.markBackup("2026-07-01T09:00:00.000Z");
+  const fresh = MK.io.backupFreshness("2026-07-03T09:00:00.000Z");
+  eq(fresh.days, 2);
+  eq(fresh.stale, false);
+  eq(fresh.lastBackupAt, "2026-07-01T09:00:00.000Z");
+  eq(MK.io.backupFreshness("2026-07-15T09:00:00.000Z").stale, true);
+  eq(MK.io.backupFreshness("2026-07-15T09:00:00.000Z").days, 14);
+});
+
+test("io.buildEnvelope: エンベロープ生成自体は鮮度を更新しない", (MK) => {
+  // 観点: 鮮度に数えるのは「全体バックアップの書き出し」だけ。部分エクスポートはもちろん、
+  //       scope:"all" のエンベロープ生成（検索・内部利用）でも記録は動かない（記録は markBackup のみ）
+  // 入力: buildEnvelope("all") と buildEnvelope("todo") を実行
+  // 期待: どちらの後も未実施のまま（lastBackupAt=null）
+  MK.io.buildEnvelope("all");
+  MK.io.buildEnvelope("todo");
+  eq(MK.io.backupFreshness("2026-07-20T00:00:00.000Z").lastBackupAt, null);
+});
+
+test("io.backupFreshness: 壊れた記録・未来日時でも落ちない", (MK) => {
+  // 観点: 記録が壊れている（lastBackupAt が無い/不正）なら未実施扱いで警告し、
+  //       時計ずれ等で未来日時が入っても負の経過日数にはしない（0日＝今日に丸める）
+  // 入力: {version:1} だけの記録 / 不正文字列 / 基準時刻より後の日時
+  // 期待: 前2つは {days:null, stale:true} / 未来日時は days=0・stale=false
+  MK.store.write("backup", { version: 1 });
+  eq(MK.io.backupFreshness("2026-07-20T00:00:00.000Z").stale, true);
+  MK.store.write("backup", { version: 1, lastBackupAt: "not-a-date" });
+  eq(MK.io.backupFreshness("2026-07-20T00:00:00.000Z").days, null);
+  MK.io.markBackup("2026-07-25T00:00:00.000Z");
+  const future = MK.io.backupFreshness("2026-07-20T00:00:00.000Z");
+  eq(future.days, 0);
+  eq(future.stale, false);
+});
+
 test("people: 名寄せで全角空白違いを同一人物に集約", (MK) => {
   // 観点: 表記ゆれ（全角/半角空白）の氏名は同一人物として1件に名寄せされ、重複マスタを作らない
   // 入力: "山田 太郎"(半角) と "山田　太郎"(全角) を続けて resolveOrCreate

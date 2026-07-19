@@ -92,6 +92,36 @@
     });
   };
 
+  // ---- バックアップ鮮度（Issue #223 / §10.1）----
+  // localStorage 一本の永続化では「バックアップし忘れ」が最も痛い事故になるため、全体バックアップ
+  // （scope:"all" の JSON 書き出し）の最終実行日時だけを `mk:backup:v1` に持ち、設定画面で
+  // 「最終バックアップ: n日前」を表示する。部分エクスポート（モジュール／人／PJ 単位）は
+  // 全量を守らないので数えない。閾値は定数で持つ（設定項目は作らない・YAGNI）。
+  io.BACKUP_STALE_DAYS = 14;
+
+  /** 全体バックアップの実行を記録する。at 省略時は現在時刻。@returns {string} 記録した ISO 日時 */
+  io.markBackup = function (at) {
+    const iso = at || MK.util.nowISO();
+    MK.store.write("backup", { version: 1, lastBackupAt: iso });
+    return iso;
+  };
+
+  /**
+   * 全体バックアップの鮮度を返す。未実施・記録が壊れている場合は「未実施」（stale）として扱う。
+   * @param {string} [now] - 基準時刻の ISO 文字列（省略時は現在時刻。テスト用）
+   * @returns {{lastBackupAt: string|null, date: string|null, days: number|null, stale: boolean}}
+   */
+  io.backupFreshness = function (now) {
+    const rec = MK.store.read("backup");
+    const last = rec && typeof rec.lastBackupAt === "string" ? rec.lastBackupAt : null;
+    const t = last ? Date.parse(last) : NaN;
+    if (isNaN(t)) return { lastBackupAt: null, date: null, days: null, stale: true };
+    const base = now ? Date.parse(now) : Date.now();
+    // 未来日時（時計ずれ・他端末からの取込）は 0 日前に丸める
+    const days = Math.max(0, Math.floor((base - t) / 86400000));
+    return { lastBackupAt: last, date: MK.util.fmtDate(new Date(t)), days, stale: days >= io.BACKUP_STALE_DAYS };
+  };
+
   // ---- CSV（RFC4180 準拠の簡易実装・BOM 対応）spec §4.6 ----
   io.csv = {
     parse(text) {
