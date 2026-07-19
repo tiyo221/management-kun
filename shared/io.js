@@ -99,11 +99,14 @@
   // 全量を守らないので数えない。閾値は定数で持つ（設定項目は作らない・YAGNI）。
   io.BACKUP_STALE_DAYS = 14;
 
-  /** 全体バックアップの実行を記録する。at 省略時は現在時刻。@returns {string} 記録した ISO 日時 */
+  /**
+   * 全体バックアップの実行を記録する。at 省略時（および解析できない値のとき）は現在時刻。
+   * @param {string} [at] - 記録する ISO 日時
+   * @returns {boolean} 保存できたら true（容量超過等で書けなければ false・§10.1）
+   */
   io.markBackup = function (at) {
-    const iso = at || MK.util.nowISO();
-    MK.store.write("backup", { version: 1, lastBackupAt: iso });
-    return iso;
+    const iso = at && !isNaN(Date.parse(at)) ? at : MK.util.nowISO();
+    return MK.store.write("backup", { version: 1, lastBackupAt: iso });
   };
 
   /**
@@ -116,7 +119,8 @@
     const last = rec && typeof rec.lastBackupAt === "string" ? rec.lastBackupAt : null;
     const t = last ? Date.parse(last) : NaN;
     if (isNaN(t)) return { lastBackupAt: null, date: null, days: null, stale: true };
-    const base = now ? new Date(now) : new Date();
+    // 基準時刻が解析できないときは現在時刻へ倒す（鮮度判定を NaN で無効化しない）
+    const base = now && !isNaN(Date.parse(now)) ? new Date(now) : new Date();
     const date = MK.util.fmtDate(new Date(t));
     // 経過日数は 24 時間単位ではなく暦日差で数える（表示する日付＝ローカル暦日と食い違わせない）。
     // 未来日時（時計ずれ・他端末からの取込）は 0 日前＝今日に丸める。
