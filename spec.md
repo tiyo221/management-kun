@@ -366,7 +366,7 @@ MK_CONFIG.dimensions = [
 | `mk:allocations:v1` | アロケーション共有マスタ `{ allocations }`（人×器×期間×割当%。§3.7.5 / §4.4） |
 | `mk:demands:v1` | 需要共有マスタ `{ demands }`（器×期間×必要%。§4.4 / Issue #68） |
 | `mk:settings:v1` | アプリ設定（最後に開いたモジュール、列幅等のUI状態。§4.8） |
-| `mk:backup:v1` | 全体バックアップの最終実行日時 `{ lastBackupAt }`（鮮度表示。§10.1） |
+| `mk:backup:v1` | 全体バックアップの最終実行日時 `{ version, lastBackupAt }`（鮮度表示。§10.1） |
 
 **モジュールキー**（規則。個々の id は §5、各モジュールの具体キーは `spec/modules/<id>.md` を正とする）:
 

@@ -116,10 +116,12 @@
     const last = rec && typeof rec.lastBackupAt === "string" ? rec.lastBackupAt : null;
     const t = last ? Date.parse(last) : NaN;
     if (isNaN(t)) return { lastBackupAt: null, date: null, days: null, stale: true };
-    const base = now ? Date.parse(now) : Date.now();
-    // 未来日時（時計ずれ・他端末からの取込）は 0 日前に丸める
-    const days = Math.max(0, Math.floor((base - t) / 86400000));
-    return { lastBackupAt: last, date: MK.util.fmtDate(new Date(t)), days, stale: days >= io.BACKUP_STALE_DAYS };
+    const base = now ? new Date(now) : new Date();
+    const date = MK.util.fmtDate(new Date(t));
+    // 経過日数は 24 時間単位ではなく暦日差で数える（表示する日付＝ローカル暦日と食い違わせない）。
+    // 未来日時（時計ずれ・他端末からの取込）は 0 日前＝今日に丸める。
+    const days = Math.max(0, MK.util.daysBetween(date, MK.util.fmtDate(base)));
+    return { lastBackupAt: last, date, days, stale: days >= io.BACKUP_STALE_DAYS };
   };
 
   // ---- CSV（RFC4180 準拠の簡易実装・BOM 対応）spec §4.6 ----
