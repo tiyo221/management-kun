@@ -83,6 +83,88 @@ test("io.csv: クォート・カンマ・改行を含むラウンドトリップ
   eq(MK.io.csv.parse(MK.io.csv.stringify(rows)), rows);
 });
 
+test("io.backupFreshness: 未実施は stale・記録すると経過日数で判定", (MK) => {
+  // 観点: 全体バックアップの鮮度は「未実施＝警告」から始まり、記録後は基準時刻との
+  //       経過日数で判定される（閾値 BACKUP_STALE_DAYS 以上で警告）
+  // 入力: 記録なし → markBackup("2026-07-01T09:00:00.000Z") 後に基準日を 7/03・7/15 で評価
+  // 期待: 未実施は {days:null, stale:true} / 2日前は stale=false / 14日前は stale=true
+  eq(MK.io.BACKUP_STALE_DAYS, 14);
+  const none = MK.io.backupFreshness("2026-07-20T00:00:00.000Z");
+  eq(none.lastBackupAt, null);
+  eq(none.days, null);
+  eq(none.stale, true);
+
+  MK.io.markBackup("2026-07-01T09:00:00.000Z");
+  const fresh = MK.io.backupFreshness("2026-07-03T09:00:00.000Z");
+  eq(fresh.days, 2);
+  eq(fresh.stale, false);
+  eq(fresh.lastBackupAt, "2026-07-01T09:00:00.000Z");
+  eq(MK.io.backupFreshness("2026-07-15T09:00:00.000Z").stale, true);
+  eq(MK.io.backupFreshness("2026-07-15T09:00:00.000Z").days, 14);
+});
+
+test("io.backupFreshness: 経過日数は 24 時間単位でなく暦日差で数える", (MK) => {
+  // 観点: 表示する日付（ローカル暦日）と経過日数を食い違わせない。時刻の前後に依らず
+  //       「暦日が何日離れているか」で数え、閾値もその暦日差で切り替わる
+  // 入力: 同日の朝→夜 / 前日の夜遅く→翌日の朝 / 閾値ちょうどの暦日差14日（時刻は基準より後）
+  // 期待: 同日=0日 / 前日=1日（24時間未満でも1日前） / 暦日差14日は時刻に依らず stale
+  const at = (iso) => { MK.io.markBackup(iso); };
+  const d = (base) => MK.io.backupFreshness(base);
+  at("2026-07-01T00:00:00");
+  eq(d("2026-07-01T23:00:00").days, 0);
+  at("2026-07-01T23:00:00");
+  eq(d("2026-07-02T01:00:00").days, 1);
+  at("2026-07-01T23:00:00");
+  eq(d("2026-07-15T01:00:00").days, 14);
+  eq(d("2026-07-15T01:00:00").stale, true);
+});
+
+test("io.markBackup: 不正な日時は現在時刻へ倒し、保存成否を返す", (MK) => {
+  // 観点: 書込側でも壊れた値を残さない（読取側だけの防御は非対称）。保存の成否は呼び出し元が
+  //       案内を出し分けられるよう戻り値で返す
+  // 入力: markBackup("not-a-date") / 引数なし
+  // 期待: どちらも true を返し、記録は「今日」として読める（stale=false・days=0）
+  eq(MK.io.markBackup("not-a-date"), true);
+  eq(MK.io.backupFreshness().days, 0);
+  eq(MK.io.markBackup(), true);
+  eq(MK.io.backupFreshness().stale, false);
+});
+
+test("io.backupFreshness: 基準時刻が不正でも判定が無効化されない", (MK) => {
+  // 観点: 基準時刻が壊れていても NaN で「新しい」側へ倒れず、現在時刻を基準に判定する
+  // 入力: 100日前を記録し、基準時刻に "bogus" を渡す
+  // 期待: days は 90 日以上・stale=true（フェイルセーフが警告側に倒れる）
+  MK.io.markBackup(new Date(Date.now() - 100 * 86400000).toISOString());
+  const f = MK.io.backupFreshness("bogus");
+  assert(f.days >= 90, "days が現在時刻基準で算出される: " + f.days);
+  eq(f.stale, true);
+});
+
+test("io.buildEnvelope: エンベロープ生成自体は鮮度を更新しない", (MK) => {
+  // 観点: 鮮度に数えるのは「全体バックアップの書き出し」だけ。部分エクスポートはもちろん、
+  //       scope:"all" のエンベロープ生成（検索・内部利用）でも記録は動かない（記録は markBackup のみ）
+  // 入力: buildEnvelope("all") と buildEnvelope("todo") を実行
+  // 期待: どちらの後も未実施のまま（lastBackupAt=null）
+  MK.io.buildEnvelope("all");
+  MK.io.buildEnvelope("todo");
+  eq(MK.io.backupFreshness("2026-07-20T00:00:00.000Z").lastBackupAt, null);
+});
+
+test("io.backupFreshness: 壊れた記録・未来日時でも落ちない", (MK) => {
+  // 観点: 記録が壊れている（lastBackupAt が無い/不正）なら未実施扱いで警告し、
+  //       時計ずれ等で未来日時が入っても負の経過日数にはしない（0日＝今日に丸める）
+  // 入力: {version:1} だけの記録 / 不正文字列 / 基準時刻より後の日時
+  // 期待: 前2つは {days:null, stale:true} / 未来日時は days=0・stale=false
+  MK.store.write("backup", { version: 1 });
+  eq(MK.io.backupFreshness("2026-07-20T00:00:00.000Z").stale, true);
+  MK.store.write("backup", { version: 1, lastBackupAt: "not-a-date" });
+  eq(MK.io.backupFreshness("2026-07-20T00:00:00.000Z").days, null);
+  MK.io.markBackup("2026-07-25T00:00:00.000Z");
+  const future = MK.io.backupFreshness("2026-07-20T00:00:00.000Z");
+  eq(future.days, 0);
+  eq(future.stale, false);
+});
+
 test("people: 名寄せで全角空白違いを同一人物に集約", (MK) => {
   // 観点: 表記ゆれ（全角/半角空白）の氏名は同一人物として1件に名寄せされ、重複マスタを作らない
   // 入力: "山田 太郎"(半角) と "山田　太郎"(全角) を続けて resolveOrCreate

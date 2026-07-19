@@ -79,6 +79,7 @@
       card.appendChild(mig);
     }
     main.appendChild(card);
+    main.appendChild(renderBackupFreshness());
     main.appendChild(renderStorageUsage());
     main.appendChild(renderModuleVisibility());
 
@@ -88,6 +89,45 @@
       MK.store.errors.forEach((e) => warn.appendChild(el("div", { class: "sub", text: e.key + ": " + e.message })));
       main.appendChild(warn);
     }
+  }
+
+  // バックアップ鮮度の可視化（Issue #223 / §10.1）。localStorage 一本の永続化では
+  // 「バックアップし忘れ」がデータ全損に直結するため、最終の全体バックアップからの経過日数を
+  // 常時表示し、閾値超過（未実施を含む）で警告とエクスポート導線を出す。判定は MK.io に置く。
+  // 現在描画中の鮮度カード。エクスポート後はここだけ差し替える（設定画面ごと再描画すると
+  // スクロール位置が先頭へ戻り、押したボタンが視界から消えるため）。
+  let freshnessCard = null;
+
+  function renderBackupFreshness() {
+    const f = MK.io.backupFreshness();
+    const card = el("div", { class: "card", style: "margin-top:var(--space-md);" + (f.stale ? "border-color:var(--color-error);" : "") });
+    card.appendChild(el("h3", { text: "バックアップ鮮度" }));
+    card.appendChild(el("p", { class: "sub", text: "データはこのブラウザの保存領域にのみ存在します。ブラウザのデータ削除・端末移行に備え、定期的に全体バックアップ（JSON）を取得してください。" }));
+    const when = f.lastBackupAt
+      ? (f.days === 0 ? "今日" : f.days + "日前") + "（" + f.date + "）"
+      : "未実施";
+    card.appendChild(el("div", { style: "font-weight:600;", text: "最終バックアップ: " + when }));
+    if (f.stale) {
+      card.appendChild(el("p", {
+        class: "sub",
+        style: "margin-top:var(--space-xs);color:var(--color-error);",
+        text: f.lastBackupAt
+          ? "⚠ 最後のバックアップから " + MK.io.BACKUP_STALE_DAYS + " 日以上経過しています。全体バックアップ（JSON）を取得してください。"
+          : "⚠ まだ一度もバックアップを取得していません。全体バックアップ（JSON）を取得してください。",
+      }));
+      const btn = el("button", { class: "btn btn-primary", text: "全体バックアップ（JSON）" });
+      btn.addEventListener("click", exportAll);
+      card.appendChild(btn);
+    }
+    freshnessCard = card;
+    return card;
+  }
+
+  // 鮮度カードが表示中なら、その場で作り直して差し替える（設定画面以外では何もしない）。
+  function refreshBackupFreshness() {
+    const old = freshnessCard;
+    if (!old || !old.parentNode) return;
+    old.parentNode.replaceChild(renderBackupFreshness(), old);
   }
 
   // ストレージ使用量の可視化（Issue #76 / §10.1）。閾値超過で警告表示し、
@@ -139,7 +179,14 @@
     const p = (n) => String(n).padStart(2, "0");
     const fname = "management-kun-" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + ".json";
     MK.io.download(fname, MK.io.buildEnvelope("all"));
-    MK.ui.toast("バックアップを書き出しました", "success");
+    // 全体バックアップのみ鮮度に数える（Issue #223）。記録の保存に失敗（容量超過等）しても
+    // 書き出し自体は成功しているので、そのことを混同させない文面で伝える（store 側の
+    // エラートーストと並んでも矛盾しない）。
+    const recorded = MK.io.markBackup();
+    MK.ui.toast(recorded
+      ? "バックアップを書き出しました"
+      : "バックアップを書き出しました（実行日時は記録できませんでした）", recorded ? "success" : "info");
+    refreshBackupFreshness(); // 鮮度表示を即時更新する（設定画面を開いているときだけ効く）
   }
 
   function importAll() {
