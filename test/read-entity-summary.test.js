@@ -1,4 +1,4 @@
-/* 任意契約リーダ MK.readEntitySummary（spec §3.6 / §9.5 柱1・着脱耐性）—
+/* 任意契約リーダ MK.readEntitySummary（spec §3.6 / §9.5・着脱耐性）—
    エンティティ（人1人・PJ1つ）単位のサマリーを、他モジュールをハード参照せず
    「あれば読む／無ければ null」で安全に問い合わせられること。readSummary と同じ原則で、
    未搭載（MK_CONFIG から外した id）・summaryFor 未実装・summaryFor が例外のいずれでも
