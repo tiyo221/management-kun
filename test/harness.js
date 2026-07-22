@@ -67,7 +67,7 @@ const MANIFEST = loadManifest();
 // 共有資産（全構成で常にロードする土台）。読込順＝依存順はマニフェストの shared 配列に従う。
 const SHARED_SCRIPTS = MANIFEST.shared.map((s) => "shared/" + s + ".js");
 
-// モジュール id → logic.js。着脱テスト（Issue #123・spec §9.5 柱1）でサブセット構成を
+// モジュール id → logic.js。着脱テスト（Issue #123・spec §9.5）でサブセット構成を
 // 作れるよう一覧化する。既定（setup() 引数なし）ではカタログ全モジュールをロードする。
 // view.js は DOM を触るためここには含めない（logic＋core 層まで）。
 const MODULE_LOGIC = {};

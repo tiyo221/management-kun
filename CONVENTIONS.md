@@ -132,7 +132,7 @@ modules/
 - [ ] logic の公開関数に JSDoc（`@param`/`@returns`・副作用）が付いている。
 - [ ] ストアは自分の名前空間 `mk:module:<id>` のみ・mount 非依存。マスタは `MK.people`/`MK.projects` 経由。scoped モジュール（[`spec.md`](spec.md) §3.7）は対象別 `mk:module:<id>:<targetId>` に書き、`ctx.scope` の対象内に閉じる。
 - [ ] スコープ／次元を扱うなら `"project"` の決め打ち分岐が無い（config／配列を回して汎用。§3 / spec §3.7.6）。
-- [ ] 他モジュールを参照する横断表示・集約ビューは、相手をハード参照せず `MK.readSummary` 等の任意契約で問い合わせ、欠損（`MK_CONFIG` から外した／未実装）時は該当枠を黙って省く。相手モジュールを外しても起動・全画面・横断表示が壊れない（spec §9.5 柱1）。
+- [ ] 他モジュールを参照する横断表示・集約ビューは、相手をハード参照せず `MK.readSummary` 等の任意契約で問い合わせ、欠損（`MK_CONFIG` から外した／未実装）時は該当枠を黙って省く。相手モジュールを外しても起動・全画面・横断表示が壊れない（spec §9.5）。
 
 **UI・レイアウト**
 - [ ] 余白のインライン直書きが無い（`ui.stack` 等に委譲）。隣接ブロックが密着していない。
@@ -150,7 +150,7 @@ modules/
 **動作・テスト**
 - [ ] `node --check` 通過。`file://` で外部通信ゼロ・依存ゼロ。全モジュール切替・サンプル投入・バックアップで確認。
 - [ ] ロジックの自動テストが通る（`node test/run.js`）。変更したモジュール＋依存側をテスト（[`TESTING.md`](TESTING.md)）。バグ修正には再発防止テストを追加。
-- [ ] 着脱耐性の手動チェック（DOM 層・spec §9.5 柱1）: `MK_CONFIG` からモジュールを1つ外して `file://` で開き、HOME・全画面・検索が壊れないことを確認（logic＋core 層は `test/module-detach.test.js` が担保）。
+- [ ] 着脱耐性の手動チェック（DOM 層・spec §9.5）: `MK_CONFIG` からモジュールを1つ外して `file://` で開き、HOME・全画面・検索が壊れないことを確認（logic＋core 層は `test/module-detach.test.js` が担保）。
 
 **ドキュメント**
 - [ ] 作業中に参照したドキュメントと実装・現状の食い違いを放置していない（同じ PR で更新した or `[core]`・`documentation` ラベルの Issue 化した。[`CLAUDE.md`](CLAUDE.md) の開発ワークフロー）。

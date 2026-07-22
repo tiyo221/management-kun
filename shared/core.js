@@ -16,7 +16,7 @@
     if (!MK.moduleOrder.includes(id)) MK.moduleOrder.push(id);
   };
 
-  // 任意契約リーダ（spec §9.5 柱1）。モジュールの summary() を「あれば読む／無ければ null」で
+  // 任意契約リーダ（spec §9.5）。モジュールの summary() を「あれば読む／無ければ null」で
   // 安全に読む単一プリミティブ。未搭載（MK_CONFIG から外した）・summary 未実装・summary が例外の
   // いずれでも null を返し、横断表示（HOME サマリー・集約ビュー #83）を壊さない。DOM 非依存。
   // 横断表示・集約ビューは他モジュールをハード参照せず必ずこれ経由で問い合わせること。
@@ -27,7 +27,7 @@
     catch (e) { console.warn("summary() failed:", id, e); return null; } // 追跡用に記録（呼び手は壊さない）
   };
 
-  // 任意契約リーダ（spec §3.6 / §9.5 柱1）。モジュールの summaryFor(entityType, id) を「あれば読む／
+  // 任意契約リーダ（spec §3.6 / §9.5）。モジュールの summaryFor(entityType, id) を「あれば読む／
   // 無ければ null」で安全に読む。readSummary の「モジュール全体」に対し、こちらは「人1人・PJ1つ」など
   // エンティティ単位のサマリー（人・プロジェクト詳細の集約ビュー #83 の消費対象）。戻り値は summary()
   // 契約と同型（{ empty, stats, attention? }）。未搭載・未実装・例外のいずれでも null を返し、横断表示を

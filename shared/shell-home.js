@@ -71,7 +71,7 @@
   }
 
   // summary は任意契約。未実装・例外でも HOME 全体を壊さない（null を返して呼び手がフォールバック）。
-  // 実体は DOM 非依存の共通プリミティブ MK.readSummary（core.js・spec §9.5 柱1）に委譲し単一ソース化する。
+  // 実体は DOM 非依存の共通プリミティブ MK.readSummary（core.js・spec §9.5）に委譲し単一ソース化する。
   function moduleSummary(id) { return MK.readSummary(id); }
 
   // ピン留めトグル（★/☆）。カード／チップのクリック遷移と衝突しないよう伝播を止める。

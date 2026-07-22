@@ -31,7 +31,7 @@ npx --yes http-server -p 8777 -c-1
 
 | 文書 | 役割 |
 |---|---|
-| [`spec.md`](spec.md) | **何を作るか（共通）**。アーキテクチャ・共通データ規格（JSON/CSV/localStorage）・名寄せ・デザイン統一・フェーズ。**最上位の正** |
+| [`spec.md`](spec.md) | **何を作るか（共通）**。アーキテクチャ・共通データ規格（JSON/CSV/localStorage）・名寄せ・デザイン統一・モジュールの着脱と統廃合。**最上位の正** |
 | [`spec/masters.md`](spec/masters.md) | 共通マスタ（§4.4）: マスタ共通契約＋People / Project / Allocation / Product の定義。マスタ追加・修正時に参照 |
 | [`spec/import-migration.md`](spec/import-migration.md) | 取り込み・移行・名寄せ（§4.6 CSV 規約 / §7 旧データ移行 / §8 名寄せ）。取込・移行作業時のみ参照 |
 | [`spec/consolidation.md`](spec/consolidation.md) | モジュール統廃合（module→module 統合）の移行テンプレート（§9.6）。手順書＋one-off スクリプト骨格＋テストパターン＋後始末。統廃合を実施する時のみ参照 |
