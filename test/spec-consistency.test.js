@@ -81,7 +81,9 @@ function stripCodeFences(md) {
    `[label]: path` や <a href> は対象外）。外部 URL・ページ内アンカー・mailto は
    検証対象外（Issue #241 の決定事項）。 */
 function relativeLinksOf(md) {
-  const body = stripCodeFences(md);
+  // フェンスに加えインラインコード（`…`）も落とす。`](path)` のようにリンク記法そのものを
+  // 説明として書く箇所があり、コードとして書かれている以上リンクではない。
+  const body = stripCodeFences(md).replace(/`+[^`\n]*`+/g, "");
   const links = [];
   const re = /\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
   let m;
