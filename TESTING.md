@@ -34,9 +34,10 @@
 | `modules/wbs/logic.js`（進捗集計） | **dashboard**（WBS 進捗を対象別に集約する横断ビュー） | 自動（`dashboard`）＋ダッシュボード画面の手動確認 |
 | `modules/todo/logic.js`（`toggleDone` / `next` / `tasks`） | **daily**（todo の next を引き・完了を同期する） | 自動（`daily`）＋デイリー画面の手動確認 |
 | `shared/search.js`（横断検索・任意契約 `searchItems`） | **横断検索**（実装したモジュールの `searchItems` を含む） | 自動（`search`）＋検索 UI の手動確認 |
-| `shared/manifest.js`（カタログ／既定ゾーン） | **全モジュール**（`test/harness.js` のロード対象がカタログ由来・#137）・**シェル**（ナビ・HOME の並び）・spec.md §5 の一覧表 | 自動フルスイート（特に `spec-consistency`＝表の id ⇄ manifest のカタログ）＋ナビ・HOME の手動確認 |
+| `shared/manifest.js`（カタログ／既定ゾーン） | **全モジュール**（`test/harness.js` のロード対象がカタログ由来・#137）・**シェル**（ナビ・HOME の並び）・spec.md §5 の一覧表・`spec/modules/<id>.md` の存在 | 自動フルスイート（特に `spec-consistency`＝表の id ⇄ manifest のカタログ／個別仕様の存在とリンク）＋ナビ・HOME の手動確認 |
 | `shared/ui.js` / `design.css`（見た目の共通） | **全モジュールの view** | 手動（375/768/1280・ダーク・空状態） |
 | `index.html` / `shared/shell*.js`（シェル/ナビ/移行/設定。責務別分割・Issue #140） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
+| `*.md`（仕様・ガイドの追加/移動/改名） | ドキュメント間の相対リンク | 自動（`spec-consistency`＝リンク切れ検出・#241） |
 
 > 各モジュールは基本独立で、共通の依存は「shared」と「人/プロジェクトのマスタ」。例外は **dashboard**（横断集約ビュー）で、共有マスタに加え **wbs の対象別データ（`exportData(projectId)`）を読み取り専用で集約**する（編集はしない）。wbs の進捗集計を変えたら dashboard も確認する。
 
