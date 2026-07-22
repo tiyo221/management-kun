@@ -34,7 +34,7 @@
 | `modules/wbs/logic.js`（進捗集計） | **dashboard**（WBS 進捗を対象別に集約する横断ビュー） | 自動（`dashboard`）＋ダッシュボード画面の手動確認 |
 | `modules/todo/logic.js`（`toggleDone` / `next` / `tasks`） | **daily**（todo の next を引き・完了を同期する） | 自動（`daily`）＋デイリー画面の手動確認 |
 | `shared/search.js`（横断検索・任意契約 `searchItems`） | **横断検索**（実装したモジュールの `searchItems` を含む） | 自動（`search`）＋検索 UI の手動確認 |
-| `shared/manifest.js`（カタログ／既定ゾーン） | **シェル**（ナビ・HOME の並び）・spec.md §5 の一覧表（表の id ⇄ manifest のカタログを突き合わせる・#117） | 自動（`spec-consistency`）＋ナビ・HOME の手動確認 |
+| `shared/manifest.js`（カタログ／既定ゾーン） | **全モジュール**（`test/harness.js` のロード対象がカタログ由来・#137）・**シェル**（ナビ・HOME の並び）・spec.md §5 の一覧表 | 自動フルスイート（特に `spec-consistency`＝表の id ⇄ manifest のカタログ）＋ナビ・HOME の手動確認 |
 | `shared/ui.js` / `design.css`（見た目の共通） | **全モジュールの view** | 手動（375/768/1280・ダーク・空状態） |
 | `index.html` / `shared/shell*.js`（シェル/ナビ/移行/設定。責務別分割・Issue #140） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
 
@@ -47,7 +47,7 @@
 | 対象 | 種別 | 手段 |
 |---|---|---|
 | ロジック（計算・集計・CRUD・CSV整形/取込・名寄せ） | 自動ユニット | `node test/run.js` |
-| shared（util / io / store / people / projects / products / allocations / demands / scope） | 自動ユニット | 同上 |
+| shared（`shared/*` の共有資産。util / io / store / マスタ / scope / search など） | 自動ユニット | 同上 |
 | view（描画・イベント） | 手動スモーク | プレビューで「描画される・コンソールエラーゼロ」 |
 | レイアウト・レスポンシブ・ダーク | 手動 | 375 / 768 / 1280px ＋ テーマ切替（CONVENTIONS §2.2 / §6） |
 | 全体 I/O・旧データ移行 | 自動（ロジック）＋手動（UI） | ラウンドトリップの自動テスト＋設定画面での実操作 |
