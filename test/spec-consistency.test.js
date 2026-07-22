@@ -25,7 +25,8 @@ function parseSpecModuleTable() {
   const csv = new Set();
   const specLink = new Map(); // id → 個別仕様セルのリンク先（無ければ null）
   // 列は位置ではなくヘッダ名で引く（列を足しても別のセルを黙って読まないように）。
-  const cellsOf = (line) => line.split("|").slice(1, -1).map((c) => c.trim());
+  // 分割はエスケープされていない | でのみ行う（セル内の \| で列がずれると名前引きが崩れる）。
+  const cellsOf = (line) => line.split(/(?<!\\)\|/).slice(1, -1).map((c) => c.trim());
   const header = cellsOf(lines[headIdx]);
   const csvCol = header.indexOf("CSV");
   const specCol = header.indexOf("個別仕様");
@@ -51,6 +52,13 @@ function parseSpecModuleTable() {
    （tarball 展開など）ではファイル走査へフォールバックし、その場合は隠しディレクトリ
    （.git / .claude 等）と node_modules を除く（.github は追跡対象の置き場なので見る）。 */
 function allMarkdownFiles() {
+  const files = collectMarkdownFiles();
+  // 0件・spec.md 抜けは「全部素通り＝緑」になる無効化パターン（sparse-checkout 等）。印を残す。
+  assert(files.includes("spec.md"), "検査対象の md に spec.md が含まれる（" + files.length + "件）");
+  return files;
+}
+
+function collectMarkdownFiles() {
   try {
     const out = cp.execFileSync("git", ["ls-files", "-z", "*.md"], { cwd: rootDir, encoding: "utf8" });
     return out.split("\0").filter((p) => p !== "");
@@ -137,15 +145,24 @@ function relativeLinksOf(md) {
    fs.existsSync は Windows / macOS で大小文字を無視するため、
    各階層を readdirSync の実名と厳密一致で突き合わせる（大小違いのリンクは
    GitHub 上のレンダリングで切れるので、開発機でも赤くしたい）。 */
+const dirEntriesCache = new Map(); // dir → readdirSync の結果（同じ階層を何度も読まない）
+function entriesOf(dir) {
+  if (!dirEntriesCache.has(dir)) {
+    let entries;
+    try { entries = fs.readdirSync(dir); } catch { entries = null; }
+    dirEntriesCache.set(dir, entries);
+  }
+  return dirEntriesCache.get(dir);
+}
+
 function existsExact(absPath) {
   const rel = path.relative(rootDir, absPath);
   if (rel === "") return true;
   if (rel.startsWith("..")) return true; // リポジトリ外（旧ツールのリポジトリ等）は検査対象外
   let dir = rootDir;
   for (const seg of rel.split(path.sep)) {
-    let entries;
-    try { entries = fs.readdirSync(dir); } catch { return false; }
-    if (!entries.includes(seg)) return false;
+    const entries = entriesOf(dir);
+    if (!entries || !entries.includes(seg)) return false;
     dir = path.join(dir, seg);
   }
   return true;
@@ -212,9 +229,13 @@ test("md の相対リンクがリンク切れしていない（#241）", () => {
   const broken = [];
   allMarkdownFiles().forEach((rel) => {
     const dir = path.dirname(path.join(rootDir, rel));
-    relativeLinksOf(fs.readFileSync(path.join(rootDir, rel), "utf8")).forEach((target) => {
+    // 追跡されているのに作業ツリーに無い（git rm せず消した／移動した）ケースも、
+    // 例外で検査を中断させずここで拾う——ファイル移動の取りこぼしこそ本ガードの主目的。
+    let md;
+    try { md = fs.readFileSync(path.join(rootDir, rel), "utf8"); }
+    catch { broken.push(rel + "（追跡されているがファイルが無い）"); return; }
+    relativeLinksOf(md).forEach((target) => {
       const file = target.split("#")[0];
-      if (!file) return; // 同一ファイル内アンカーのみ
       // %エンコードは戻して照合するが、不正な % を含むリンクで例外死させない（生パスで見る）。
       let decoded;
       try { decoded = decodeURIComponent(file); } catch { decoded = file; }
@@ -284,8 +305,11 @@ test("md にコードフェンスの閉じ忘れが無い（#241）", () => {
   // 観点: 閉じ忘れたフェンスがあると、そのファイルの残り全部がリンク検査から静かに外れる
   // 入力: 検査対象の全 md
   // 期待: unclosed なファイルはゼロ
-  const unclosed = allMarkdownFiles().filter((rel) =>
-    stripCodeFences(fs.readFileSync(path.join(rootDir, rel), "utf8")).unclosed);
+  const unclosed = allMarkdownFiles().filter((rel) => {
+    // 追跡されているのに無いファイルはリンク検査側が報告するので、ここでは黙って飛ばす。
+    if (!fs.existsSync(path.join(rootDir, rel))) return false;
+    return stripCodeFences(fs.readFileSync(path.join(rootDir, rel), "utf8")).unclosed;
+  });
   eq(unclosed, [], "閉じていないコードフェンスを持つ md");
 });
 
