@@ -47,10 +47,11 @@ function parseSpecModuleTable() {
 /** リポジトリ内の .md を再帰的に集める（相対パスの配列）。 */
 function allMarkdownFiles() {
   const out = [];
-  const skip = new Set([".git", "node_modules"]);
+  // 隠しディレクトリ（.git / .claude 等の gitignore 済みツール置き場）と node_modules は見ない。
+  // リポジトリ本体と無関係な md でフルスイートが赤くなるのを防ぐ。
   (function walk(dir) {
     fs.readdirSync(dir, { withFileTypes: true }).forEach((ent) => {
-      if (skip.has(ent.name)) return;
+      if (ent.isDirectory() && (ent.name.startsWith(".") || ent.name === "node_modules")) return;
       const abs = path.join(dir, ent.name);
       if (ent.isDirectory()) walk(abs);
       else if (ent.name.endsWith(".md")) out.push(path.relative(rootDir, abs).split(path.sep).join("/"));
@@ -83,7 +84,9 @@ function stripCodeFences(md) {
 function relativeLinksOf(md) {
   // フェンスに加えインラインコード（`…`）も落とす。`](path)` のようにリンク記法そのものを
   // 説明として書く箇所があり、コードとして書かれている以上リンクではない。
-  const body = stripCodeFences(md).replace(/`+[^`\n]*`+/g, "");
+  // 対で閉じている場合だけ落とす（後方参照）。奇数個のバッククォートで本物のリンクを
+  // 巻き込むと、検査対象から黙って外れる＝ガードが弱くなる方向の劣化になるため。
+  const body = stripCodeFences(md).replace(/(`+)[^`\n]*?\1/g, "");
   const links = [];
   const re = /\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
   let m;
@@ -95,13 +98,15 @@ function relativeLinksOf(md) {
   return links;
 }
 
-/* パスが実在するか。fs.existsSync は Windows / macOS で大小文字を無視するため、
+/* パスが実在するか（リポジトリ外を指すリンクは検査しない＝常に true。旧ツールの
+   リポジトリを隣に置いた前提の参照が個別仕様にあり、有無はこのリポジトリの管轄外）。
+   fs.existsSync は Windows / macOS で大小文字を無視するため、
    各階層を readdirSync の実名と厳密一致で突き合わせる（大小違いのリンクは
    GitHub 上のレンダリングで切れるので、開発機でも赤くしたい）。 */
 function existsExact(absPath) {
   const rel = path.relative(rootDir, absPath);
   if (rel === "") return true;
-  if (rel.startsWith("..")) return fs.existsSync(absPath); // リポジトリ外は実名照合しない
+  if (rel.startsWith("..")) return true; // リポジトリ外（旧ツールのリポジトリ等）は検査対象外
   let dir = rootDir;
   for (const seg of rel.split(path.sep)) {
     let entries;
