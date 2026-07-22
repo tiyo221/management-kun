@@ -47,11 +47,13 @@ function parseSpecModuleTable() {
 /** リポジトリ内の .md を再帰的に集める（相対パスの配列）。 */
 function allMarkdownFiles() {
   const out = [];
-  // 隠しディレクトリ（.git / .claude 等の gitignore 済みツール置き場）と node_modules は見ない。
-  // リポジトリ本体と無関係な md でフルスイートが赤くなるのを防ぐ。
+  // 隠しディレクトリ（.git / .claude 等の gitignore 済みツール置き場）と node_modules は見ない
+  // ——リポジトリ本体と無関係な md でフルスイートが赤くなるのを防ぐ。ただし .github は
+  // 追跡対象のドキュメント（テンプレート等）を置く場所なので検査する。
   (function walk(dir) {
     fs.readdirSync(dir, { withFileTypes: true }).forEach((ent) => {
-      if (ent.isDirectory() && (ent.name.startsWith(".") || ent.name === "node_modules")) return;
+      const ignored = (ent.name.startsWith(".") && ent.name !== ".github") || ent.name === "node_modules";
+      if (ent.isDirectory() && ignored) return;
       const abs = path.join(dir, ent.name);
       if (ent.isDirectory()) walk(abs);
       else if (ent.name.endsWith(".md")) out.push(path.relative(rootDir, abs).split(path.sep).join("/"));
@@ -167,7 +169,7 @@ test("spec §5: 各モジュールに個別仕様 spec/modules/<id>.md があり
   sorted(implementedModules()).forEach((id) => {
     const rel = "spec/modules/" + id + ".md";
     assert(existsExact(path.join(rootDir, rel)), rel + " が存在する");
-    eq(specLink.get(id), rel, "spec.md §5 の " + id + " 行が個別仕様へリンクする");
+    eq(specLink.get(id), rel, "spec.md §5 の " + id + " 行が個別仕様へリンクする（表記は spec/modules/<id>.md に統一）");
   });
 });
 
@@ -184,8 +186,55 @@ test("md の相対リンクがリンク切れしていない（#241）", () => {
       // %エンコードは戻して照合するが、不正な % を含むリンクで例外死させない（生パスで見る）。
       let decoded;
       try { decoded = decodeURIComponent(file); } catch { decoded = file; }
-      if (!existsExact(path.resolve(dir, decoded))) broken.push(rel + " → " + target);
+      // `/` 始まりは GitHub 上ではリポジトリルート基準で解決される（OS のルートではない）。
+      const abs = decoded.startsWith("/") ? path.join(rootDir, decoded) : path.resolve(dir, decoded);
+      if (!existsExact(abs)) broken.push(rel + " → " + target);
     });
   });
   eq(broken, [], "リンク切れ");
+});
+
+test("relativeLinksOf(): コード内の記述を拾わず、実リンクだけを返す（#241）", () => {
+  // 観点: リンク抽出の除外条件（フェンス・インラインコード・外部 URL・アンカー）が効いているか
+  //       ——ここが壊れると「検査対象から静かに外れる」＝ガードが黙って弱くなるため、実データに
+  //       依存せずリテラルで固定する。
+  // 入力: 各種フェンス（```／~~~／インデント／4連バッククォート）とインラインコードを含む md 断片
+  // 期待: フェンス内・インラインコード内・外部 URL・アンカーは拾わず、本文の相対リンクだけを返す
+  const md = [
+    "本文 [a](real1.md) と [外部](https://example.com/x.md) と [中](#anchor)。",
+    "```",
+    "[fence](fenced1.md)",
+    "```",
+    "- リスト:",
+    "  ```js",
+    "  [indented](fenced2.md)",
+    "  ```",
+    "~~~",
+    "[tilde](fenced3.md)",
+    "~~~",
+    "````",
+    "``` 入れ子",
+    "[deep](fenced4.md)",
+    "````",
+    "インラインコード `](fenced5.md)` は拾わない。",
+    "末尾 [b](real2.md)。",
+  ].join("\n");
+  eq(relativeLinksOf(md), ["real1.md", "real2.md"]);
+});
+
+test("relativeLinksOf(): リンクテキストがコードでもリンクは拾う（#241）", () => {
+  // 観点: §5 表の記法 [`spec/modules/x.md`](spec/modules/x.md)（リンクテキストがインラインコード）で
+  //       宛先を取り逃さないこと。インラインコード除去がリンク全体を巻き込むと検査が空振りする。
+  // 自明: 入力・期待とも1行で読み取れる
+  eq(relativeLinksOf("[`spec/modules/x.md`](spec/modules/x.md)"), ["spec/modules/x.md"]);
+});
+
+test("existsExact(): 大小文字を区別し、リポジトリ外は検査しない（#241）", () => {
+  // 観点: fs.existsSync の大小文字無視（Windows / macOS）で GitHub 上のリンク切れを見逃さないこと
+  // 入力: 実在する spec.md／大小違いの SPEC.md／存在しないパス／リポジトリ外を指すパス
+  // 期待: 実在=true、大小違い=false（GitHub では切れる）、不在=false、リポジトリ外=true（対象外）
+  eq(existsExact(path.join(rootDir, "spec.md")), true);
+  eq(existsExact(path.join(rootDir, "SPEC.md")), false);
+  eq(existsExact(path.join(rootDir, "spec/modules/__none__.md")), false);
+  eq(existsExact(path.join(rootDir, "../outside.md")), true);
 });
