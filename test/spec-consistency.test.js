@@ -23,19 +23,23 @@ function parseSpecModuleTable() {
   const ids = new Set();
   const csv = new Set();
   const specLink = new Map(); // id → 個別仕様セルのリンク先（無ければ null）
+  // 列は位置ではなくヘッダ名で引く（列を足しても別のセルを黙って読まないように）。
+  const cellsOf = (line) => line.split("|").slice(1, -1).map((c) => c.trim());
+  const header = cellsOf(lines[headIdx]);
+  const csvCol = header.indexOf("CSV");
+  const specCol = header.indexOf("個別仕様");
+  assert(csvCol >= 0 && specCol >= 0, "§5 の表に「個別仕様」「CSV」列がある");
   // ヘッダ＋区切り行の次から、表が途切れる（| で始まらない行）まで読む。
   for (let i = headIdx + 2; i < lines.length; i++) {
     const line = lines[i];
     if (!/^\|/.test(line)) break;
-    const cells = line.split("|").slice(1, -1).map((c) => c.trim());
-    if (cells.length < 5) continue;
+    const cells = cellsOf(line);
+    if (cells.length < header.length) continue;
     const id = cells[0];
-    const csvFlag = cells[cells.length - 1];
     if (!/^[a-z]+$/.test(id)) continue; // 区切り行や注記行を除外
     ids.add(id);
-    if (csvFlag === "✓") csv.add(id);
-    const link = /\]\(([^)\s]+)\)/.exec(cells[cells.length - 2]);
-    specLink.set(id, link ? link[1] : null);
+    if (cells[csvCol] === "✓") csv.add(id);
+    specLink.set(id, relativeLinksOf(cells[specCol])[0] || null);
   }
   return { ids, csv, specLink };
 }
@@ -55,11 +59,29 @@ function allMarkdownFiles() {
   return out;
 }
 
-/* md 本文からリンク先を拾う。フェンス（``` … ```）内はコード例なので除外する
-   （実在しないパスを説明用に書くことがあるため）。外部 URL・ページ内アンカー・
-   mailto は検証対象外（Issue #241 の決定事項）。 */
+/* コードフェンス（``` / ~~~）の中身を落とす。説明用に実在しないパスを書くため。
+   フェンスは行頭3スペースまでのインデントを許し、開始と同じ記号・同数以上の
+   バッククォート/チルダが来るまでを中身とみなす（CommonMark の緩い近似）。 */
+function stripCodeFences(md) {
+  const out = [];
+  let fence = null; // 開始フェンスの { marker, len }
+  md.split(/\r?\n/).forEach((line) => {
+    const m = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (fence) {
+      if (m && m[1][0] === fence.marker && m[1].length >= fence.len) fence = null;
+      return; // 中身も終了フェンス自身も落とす
+    }
+    if (m) { fence = { marker: m[1][0], len: m[1].length }; return; }
+    out.push(line);
+  });
+  return out.join("\n");
+}
+
+/* md 本文から相対リンク先を拾う（インラインリンク `](path)` のみ。参照定義形式
+   `[label]: path` や <a href> は対象外）。外部 URL・ページ内アンカー・mailto は
+   検証対象外（Issue #241 の決定事項）。 */
 function relativeLinksOf(md) {
-  const body = md.replace(/^```[\s\S]*?^```/gm, "");
+  const body = stripCodeFences(md);
   const links = [];
   const re = /\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
   let m;
@@ -69,6 +91,23 @@ function relativeLinksOf(md) {
     links.push(target);
   }
   return links;
+}
+
+/* パスが実在するか。fs.existsSync は Windows / macOS で大小文字を無視するため、
+   各階層を readdirSync の実名と厳密一致で突き合わせる（大小違いのリンクは
+   GitHub 上のレンダリングで切れるので、開発機でも赤くしたい）。 */
+function existsExact(absPath) {
+  const rel = path.relative(rootDir, absPath);
+  if (rel === "") return true;
+  if (rel.startsWith("..")) return fs.existsSync(absPath); // リポジトリ外は実名照合しない
+  let dir = rootDir;
+  for (const seg of rel.split(path.sep)) {
+    let entries;
+    try { entries = fs.readdirSync(dir); } catch { return false; }
+    if (!entries.includes(seg)) return false;
+    dir = path.join(dir, seg);
+  }
+  return true;
 }
 
 /** 実装済みモジュール id 集合＝構成マニフェストのカタログ（shared/manifest.js の単一ソース・Issue #137）。 */
@@ -120,7 +159,7 @@ test("spec §5: 各モジュールに個別仕様 spec/modules/<id>.md があり
   // 記録として残す spec/modules/workload.md（#167）が違反になってしまう。
   sorted(implementedModules()).forEach((id) => {
     const rel = "spec/modules/" + id + ".md";
-    assert(fs.existsSync(path.join(rootDir, rel)), rel + " が存在する");
+    assert(existsExact(path.join(rootDir, rel)), rel + " が存在する");
     eq(specLink.get(id), rel, "spec.md §5 の " + id + " 行が個別仕様へリンクする");
   });
 });
@@ -135,7 +174,10 @@ test("md の相対リンクがリンク切れしていない（#241）", () => {
     relativeLinksOf(fs.readFileSync(path.join(rootDir, rel), "utf8")).forEach((target) => {
       const file = target.split("#")[0];
       if (!file) return; // 同一ファイル内アンカーのみ
-      if (!fs.existsSync(path.resolve(dir, decodeURIComponent(file)))) broken.push(rel + " → " + target);
+      // %エンコードは戻して照合するが、不正な % を含むリンクで例外死させない（生パスで見る）。
+      let decoded;
+      try { decoded = decodeURIComponent(file); } catch { decoded = file; }
+      if (!existsExact(path.resolve(dir, decoded))) broken.push(rel + " → " + target);
     });
   });
   eq(broken, [], "リンク切れ");
