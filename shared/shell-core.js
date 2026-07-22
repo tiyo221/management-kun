@@ -207,7 +207,7 @@
       // 未実装モジュール
       const meta = META[view];
       main.appendChild(el("h2", { class: "mk-section-title", text: (meta ? meta.title : view) + "（準備中）" }));
-      main.appendChild(el("p", { class: "mk-empty", text: "このモジュールは今後のリリースで実装予定です（spec §9）。" }));
+      main.appendChild(el("p", { class: "mk-empty", text: "このモジュールはまだ実装されていません。" }));
     }
   }
 
