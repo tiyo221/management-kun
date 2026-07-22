@@ -2,7 +2,7 @@
    spec.md §5 のモジュール一覧表は「時点で変わる列挙」の単一ソース（#97）であり、
    §4.6・§9・§11・§12・import-migration.md・CLAUDE.md 等はすべてこの表を参照する。
    よって §5 の表さえ実装と一致していればドキュメント全体の鮮度が保てる。
-   ここでは §5 の表を実装（index.html のロード対象・各 logic.js の CSV 実装）と突き合わせ、
+   ここでは §5 の表を実装（shared/manifest.js のカタログ・各 logic.js の CSV 実装）と突き合わせ、
    モジュール追加／CSV 対応追加のたびに表の更新漏れを検出する。 */
 "use strict";
 const fs = require("fs");

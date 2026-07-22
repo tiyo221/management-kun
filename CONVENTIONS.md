@@ -117,7 +117,7 @@ modules/
    - `MK_CONFIG.zones` を絞った配布用エントリ（現状は無し・spec §1.5）を将来足す場合のみ、そのエントリの `zones` にも `<id>` を足す（載せなければ配布物にコードもデータも含まれない）。マネージャ（[`index.html`](index.html)）は `zones` を宣言せず manifest 既定を使うため追記不要。
 4. 旧ツール移行が必要なら [`shared/shell-settings.js`](shared/shell-settings.js) の `migrateLegacy()` に分岐を、[`shared/shell-core.js`](shared/shell-core.js) の `LEGACY_KEYS` にキーを追加（シェルは責務別に分割済み・Issue #140）。
 5. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、**[`spec.md`](spec.md) §5 のモジュール一覧表に行を追加する（モジュール id の列挙・CSV 対応の ✓ はここだけ・単一ソース）**。CSV に対応させたら §5 表の CSV 列を ✓ にする（`build…CSVRows` を実装したのに ✓ を付け忘れる／逆に外し忘れると [`test/spec-consistency.test.js`](test/spec-consistency.test.js) が失敗する。id 一覧は manifest カタログと突き合わせる）。マスタ利用の有無に増減があれば [`spec/masters.md`](spec/masters.md) §4.4 の利用関係表も同期する。§3.2 / §4.1 / §4.2 / §4.6 / §6.4・README・CLAUDE.md は規則＋参照になっているため個別列挙の追記は不要（もし id や「CSV 対応＝○○」の列挙を見つけたら §5 への参照へ直す）。
-6. `test/<id>.test.js` を追加する（[`TESTING.md`](TESTING.md) §5）。ロード対象（[`test/harness.js`](test/harness.js) の `SHARED_SCRIPTS`／`MODULE_LOGIC`）は manifest から自動導出されるため、**モジュールのハーネス登録は不要**（カタログに足せば載る）。`test/` の一覧は [`TESTING.md`](TESTING.md) §7 を正とする。
+6. `test/<id>.test.js` を追加する（[`TESTING.md`](TESTING.md) §5）。ロード対象（[`test/harness.js`](test/harness.js) の `SHARED_SCRIPTS`／`MODULE_LOGIC`）は manifest から自動導出されるため、**モジュールのハーネス登録は不要**（カタログに足せば載る）。`test/` の一覧は `node test/list.js` で俯瞰する（[`TESTING.md`](TESTING.md) §7）。
 7. §6 のチェックリストで点検。
 
 > **モジュールを 1 つ追加するときの登録は [`shared/manifest.js`](shared/manifest.js) 1か所**（Issue #137）。id の一覧は spec.md §5（ドキュメント正）と manifest カタログ（実装正）に一元化してあるため、他のドキュメント（§3.2 / §4.1 / §4.2 / §6.4 / README）やエントリ HTML（index.html）へ id を再列挙しない。

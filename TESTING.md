@@ -33,6 +33,8 @@
 | `shared/allocations.js` / `demands.js`（共有マスタ） | **resource / dashboard**（要員計画・ダッシュボードがアロケーションを参照） | 自動（`allocations` / `demands` / `resource` / `dashboard`）＋要員計画・ダッシュボード画面の手動確認 |
 | `modules/wbs/logic.js`（進捗集計） | **dashboard**（WBS 進捗を対象別に集約する横断ビュー） | 自動（`dashboard`）＋ダッシュボード画面の手動確認 |
 | `modules/todo/logic.js`（`toggleDone` / `next` / `tasks`） | **daily**（todo の next を引き・完了を同期する） | 自動（`daily`）＋デイリー画面の手動確認 |
+| `shared/search.js`（横断検索・任意契約 `searchItems`） | **横断検索**（実装したモジュールの `searchItems` を含む） | 自動（`search`）＋検索 UI の手動確認 |
+| `shared/manifest.js`（カタログ／既定ゾーン） | **全モジュール**（`test/harness.js` のロード対象がカタログ由来・#137）・**シェル**（ナビ・HOME の並び）・spec.md §5 の一覧表 | 自動フルスイート（特に `spec-consistency`＝表の id ⇄ manifest のカタログ）＋ナビ・HOME の手動確認 |
 | `shared/ui.js` / `design.css`（見た目の共通） | **全モジュールの view** | 手動（375/768/1280・ダーク・空状態） |
 | `index.html` / `shared/shell*.js`（シェル/ナビ/移行/設定。責務別分割・Issue #140） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
 
@@ -45,7 +47,7 @@
 | 対象 | 種別 | 手段 |
 |---|---|---|
 | ロジック（計算・集計・CRUD・CSV整形/取込・名寄せ） | 自動ユニット | `node test/run.js` |
-| shared（util / io / store / people / projects / products / allocations / demands / scope） | 自動ユニット | 同上 |
+| shared（`shared/*` の共有資産。util / io / store / マスタ / scope / search など） | 自動ユニット | 同上 |
 | view（描画・イベント） | 手動スモーク | プレビューで「描画される・コンソールエラーゼロ」 |
 | レイアウト・レスポンシブ・ダーク | 手動 | 375 / 768 / 1280px ＋ テーマ切替（CONVENTIONS §2.2 / §6） |
 | 全体 I/O・旧データ移行 | 自動（ロジック）＋手動（UI） | ラウンドトリップの自動テスト＋設定画面での実操作 |
@@ -102,29 +104,8 @@ test("wbs: 依存の循環を検出", (MK) => {
 
 ---
 
-## 7. 現状のカバレッジ（自動）
+## 7. カバレッジの俯瞰
 
-`test/*.test.js` の一覧（`node test/run.js` で自動収集・実行）:
-
-- **shared**（`shared.test.js`）: `util`（名寄せキー・日付）、`io.csv`（ラウンドトリップ）
-- **people** / **projects** / **products**: マスタ CRUD・名寄せ（resolve / resolveOrCreate）・CSV upsert
-- **allocations**: 人×器×期間×% の CRUD・`percentOn`（期間内合算）
-- **demands**: 器×期間×必要% の CRUD・`demandOn` / `totalDemandOn`
-- **scope**: スコープ次元の汎用走査（Project / Product・`"project"` 決め打ちしないこと）
-- **wbs-scope**: wbs の対象別 namespace（`mk:module:wbs:<projectId>`）分離
-- **summary**: 各モジュールの `summary()`（HOME カード集計）
-- **module-meta**: 全モジュール def が1行説明 `description` を持つこと（HOME の見取り図・Issue #40。view.js を読み込んで検証）
-- **spec-consistency**: spec.md §5 のモジュール一覧表が実装と一致すること（id ⇄ index.html のロード対象／CSV✓ ⇄ `build…CSVRows` を持つモジュール。仕様の陳腐化を検出・Issue #117）
-- **todo**: 追加/件数/完了/フィルタ
-- **daily**: 時間割の積み上げ・並べ替え・開始起点/日またぎ・todo(next)引き込みと完了同期・翌日繰り越し・summary
-- **goals**: 進捗・いまここ・全完了で達成
-- **questions**: 追加/解決/フィルタ
-- **skills**: 平均・ギャップ判定・紐づけCSVラウンドトリップ
-- **resource**: 要員計画（空き＝キャパ−全器割当）・横断集計・アロケーション吸い上げ移行（退役 workload → 共有マスタ・#167）
-- **oneonone**: 1on1メモの CRUD
-- **wbs**: ロールアップ・WBS番号・依存循環・削除/元に戻す・日付逆転（開始>終了は不正入力として拒否）
-- **dashboard**: PJ 横断集約（WBS 進捗・期限超過の基準日判定・対象PJのアロケーション/関連プロダクト抽出）
-- **techstack**: 技術スタック台帳の CRUD・CSV ラウンドトリップ
-- **releases**: 必須項目（プロダクト・バージョン）・時系列ソート・ステータス正規化・直近予定・削除済み Product 参照ガード
+**どのテストが何を見ているかは `node test/list.js` を見る**（`--html` でカバレッジ HTML、`--missing` で規約の欠落点検）。実物の `test/*.test.js` から生成されるため、ここに一覧を置かない（手で並べた表は必ず実装から遅れる）。
 
 view（描画・レスポンシブ・ダーク）は自動化対象外（手動スモーク＋DoD）。将来 DOM テストが必要になれば、依存ゼロ方針とのトレードオフを検討する。
