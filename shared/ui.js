@@ -5,19 +5,38 @@
   const el = (t, a, c) => MK.util.el(t, a, c);
   const ui = {};
 
-  ui.toast = function (message, type) {
+  function toastHost() {
     let host = document.getElementById("mk-toasts");
     if (!host) {
       host = el("div", { id: "mk-toasts", class: "mk-toasts" });
       document.body.appendChild(host);
     }
-    const t = el("div", { class: "mk-toast " + (type || "info"), text: message });
-    host.appendChild(t);
-    requestAnimationFrame(() => t.classList.add("show"));
+    return host;
+  }
+
+  function showToast(node, ms) {
+    toastHost().appendChild(node);
+    requestAnimationFrame(() => node.classList.add("show"));
     setTimeout(() => {
-      t.classList.remove("show");
-      setTimeout(() => t.remove(), 300);
-    }, 3000);
+      node.classList.remove("show");
+      setTimeout(() => node.remove(), 300);
+    }, ms);
+  }
+
+  ui.toast = function (message, type) {
+    showToast(el("div", { class: "mk-toast " + (type || "info"), text: message }), 3000);
+  };
+
+  // 取り消しトースト（破壊的操作は confirm ではなくこれを既定にする。CONVENTIONS §2.5-3）
+  // message: 実行済みの操作を伝える文（例「削除しました」）／onUndo: 「元に戻す」押下時に呼ぶ復元処理
+  ui.undoToast = function (message, onUndo) {
+    const btn = el("button", { class: "btn btn-ghost", text: "元に戻す" });
+    const t = el("div", { class: "mk-toast info" }, [String(message == null ? "" : message) + "　", btn]);
+    btn.addEventListener("click", () => {
+      t.remove();
+      if (typeof onUndo === "function") onUndo();
+    });
+    showToast(t, 6000);
   };
 
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }

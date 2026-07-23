@@ -64,12 +64,23 @@ modules/
 
 ### 2.3 一貫した状態表現
 - 一覧が空のときは必ず空状態メッセージ（`ui.emptyState`）を出す。
-- 破壊的操作（削除等）は確認（`MK.ui.confirm`）または取り消し導線を用意。
+- 破壊的操作（削除等）は**取り消し（`MK.ui.undoToast`）を既定**とし、`MK.ui.confirm` は取り消し不能な操作にだけ使う（詳細は §2.5-3）。
 - **ネイティブダイアログ禁止**: `confirm()` / `alert()` / `prompt()` を使わない。確認は `MK.ui.confirm(message)→Promise<bool>`、通知は `MK.ui.toast(message, type)`、入力・複雑な確認は `MK.ui.modal(...)` を使う（DESIGN トークン描画・ダークモード追従・Esc で閉じる操作性を共通化するため。[`spec.md`](spec.md) §6）。
 - テーマは `[data-theme="dark"]` に自動追従。グラフは **SVG で `var(--token)` 参照**すれば自動追従。Canvas を使う場合は描画時にトークンを読み、`MK.bus` の `theme:changed` で再描画する。
 
 ### 2.4 安全
 - ユーザー入力・取込データを DOM に出すときは `textContent` かエスケープ（`MK.util.escapeHtml`）。`innerHTML` に未エスケープ文字列を渡さない。
+
+### 2.5 操作コスト（その操作は何アクションで終わるべきか）
+§2.1〜§2.4 が**静的な見た目**の規約なのに対し、ここは**動きのコスト**の規約。規約が無い領域は書くたびに一番無難な形（モーダル＋フォーム＋保存）へ落ちるため、先に型を置く。
+
+1. **主操作は1アクション** — 各モジュールには「一番多く繰り返す操作」が1つある（todo＝Inbox の仕分け、daily＝時間の割当、skills＝評価の入力）。これを個別仕様 [`spec/modules/<id>.md`](spec/modules/) に `## 主操作` として明記し、**1アクションで完了させる**。主操作にモーダルを挟まない。
+2. **編集はインライン既定** — 一覧項目の編集はその場で行う（クリックで入力欄化、Enter 確定・Esc 取消）。モーダルを使ってよいのは「3項目以上を同時に変える」「新規作成で必須項目が複数ある」ときだけ。共通ヘルパを使い、各モジュールで自作しない。
+3. **破壊的操作は undo 既定** — 削除は確認を出さず即実行し、取り消しトースト `MK.ui.undoToast(message, onUndo)` を出す。`MK.ui.confirm` を使ってよいのは**取り消し不能な操作だけ**（全データ削除・インポートの置換・旧データ移行）。undo の対象は**削除だけ**に限る（編集・ステータス変更は元に戻す操作が自明。logic 側は「直前に消した1件」だけ保持すればよく、汎用 undo スタックは [`CODING.md`](CODING.md) のオーバーエンジニアリング防止と衝突する）。
+4. **行内で完結する操作は行だけ更新する** — チェック・ステータス変更・インライン編集は該当行のみ差し替え、`render()` で画面全体を作り直さない（スクロール位置・フォーカスを失わないため）。フィルタ変更・タブ切替・データ取込など**画面の意味が変わる操作は全再描画でよい**（全再描画という割り切りが view を小さく保っている。差分管理を各 view に持たせるとミニフレームワークの内製になる）。
+5. **画面上部は使用頻度順** — 最上段には主操作に必要なものだけを置く。CSV 入出力・サンプル投入など低頻度の操作は画面最下部へ置く。
+
+> **ドラッグ&ドロップは規約にしない**（蒸し返さないための記録）。(1) HTML5 DnD はタッチで動かず、§2.2 の 375px 対応と両立させるには Pointer Events の自前実装が要る。(2) DnD だけの並べ替えはキーボード操作を塞ぎ [`spec.md`](spec.md) §10.2 に反する。規約化すると全モジュールに中途半端な DnD が生える。必要なモジュールごとに、キーボード代替とセットで個別 Issue として扱う。
 
 ---
 
@@ -86,7 +97,7 @@ modules/
 ### `MK.ui`（描画部品 / `shared/ui.js`）
 - レイアウト: `sectionTitle(text)` / `stack(children)` / `toolbar(children)` / `card(children, {flush})` / `emptyState(text)` / `statsRow([{num,label}])`
 - フォーム: `button(label, {variant,onClick,title})` / `field(label,control)` / `input({type,value,placeholder,onChange,onEnter})` / `textarea(value)` / `checkbox(checked)` / `select(options=[{value,label}], value, onChange)` / `pillTabs(tabs=[{key,label}], activeKey, onChange)`
-- オーバーレイ: `modal({title, body, actions:[{label,variant,onClick(close)}]})` / `toast(message, type)` / `confirm(message)→Promise<bool>`
+- オーバーレイ: `modal({title, body, actions:[{label,variant,onClick(close)}]})` / `toast(message, type)` / `undoToast(message, onUndo)`（削除の取り消し。6秒表示・「元に戻す」で `onUndo`。§2.5-3） / `confirm(message)→Promise<bool>`
 - 方針: **view は部品を自作しない**（`btn/fld/inp` 等をモジュール内に再定義しない）。**ネイティブ `confirm/alert/prompt` は使わず**、上記オーバーレイ部品で代替する。
 
 ### `MK.util`（純粋ヘルパ / `shared/core.js`）
@@ -116,7 +127,7 @@ modules/
 3. [`shared/manifest.js`](shared/manifest.js): **モジュールの登録は原則ここ1か所**（Issue #137）。カタログ `CATALOG` に `<id>: {}`（空オブジェクト）を追加し（**カタログに無いモジュールはナビ・HOME に出ず、スクリプトも読み込まれない**）、既定（マネージャ全部入り）の `ZONES` の該当グループ（自分／ピープル／デリバリー…＝§1.4 の領域）に `<id>` を登録する。ゾーンが未定義なら新しいゾーンを追加する。ゾーンに出さないが実体だけ常に読み込みたい場合は `LOAD` に追加する（現状は該当なし）。これだけでエントリ HTML（index.html）の `<script>` 追記もゾーンの二重定義も不要（manifest が `logic→view→shell` を順序どおり動的読込し、shell.js の `META`／`DEFAULT_ZONES` も manifest を参照する）。表示メタ `title`／`icon`／`description` は **カタログに足さず def 側に持たせる**（シェルの `META` が def を単一ソースとして読む。重複ハードコード禁止・§3.6 / Issue #142・#40）。まだ def を書かない「準備中」モジュールを名前だけ先に出したいときのみ、カタログ値に `{ title, icon }` をフォールバックとして書く（def 実装時に空へ戻す）。
    - `MK_CONFIG.zones` を絞った配布用エントリ（現状は無し・spec §1.5）を将来足す場合のみ、そのエントリの `zones` にも `<id>` を足す（載せなければ配布物にコードもデータも含まれない）。マネージャ（[`index.html`](index.html)）は `zones` を宣言せず manifest 既定を使うため追記不要。
 4. 旧ツール移行が必要なら [`shared/shell-settings.js`](shared/shell-settings.js) の `migrateLegacy()` に分岐を、[`shared/shell-core.js`](shared/shell-core.js) の `LEGACY_KEYS` にキーを追加（シェルは責務別に分割済み・Issue #140）。
-5. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、**[`spec.md`](spec.md) §5 のモジュール一覧表に行を追加する（モジュール id の列挙・CSV 対応の ✓ はここだけ・単一ソース）**。CSV に対応させたら §5 表の CSV 列を ✓ にする（`build…CSVRows` を実装したのに ✓ を付け忘れる／逆に外し忘れると [`test/spec-consistency.test.js`](test/spec-consistency.test.js) が失敗する。id 一覧は manifest カタログと突き合わせる）。**個別仕様の作成漏れ・§5 表からのリンク漏れ・md の相対リンク切れも同テストが検出する**（#241）。マスタ利用の有無に増減があれば [`spec/masters.md`](spec/masters.md) §4.4 の利用関係表も同期する。§3.2 / §4.1 / §4.2 / §4.6 / §6.4・README・CLAUDE.md は規則＋参照になっているため個別列挙の追記は不要（もし id や「CSV 対応＝○○」の列挙を見つけたら §5 への参照へ直す）。
+5. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・**主操作**・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、`## 主操作` には「一番多く繰り返す操作」を1つ書く（§2.5-1。**既存モジュールへの遡及記入は求めない** ── そのモジュールを触ったときに書き足す）。**[`spec.md`](spec.md) §5 のモジュール一覧表に行を追加する（モジュール id の列挙・CSV 対応の ✓ はここだけ・単一ソース）**。CSV に対応させたら §5 表の CSV 列を ✓ にする（`build…CSVRows` を実装したのに ✓ を付け忘れる／逆に外し忘れると [`test/spec-consistency.test.js`](test/spec-consistency.test.js) が失敗する。id 一覧は manifest カタログと突き合わせる）。**個別仕様の作成漏れ・§5 表からのリンク漏れ・md の相対リンク切れも同テストが検出する**（#241）。マスタ利用の有無に増減があれば [`spec/masters.md`](spec/masters.md) §4.4 の利用関係表も同期する。§3.2 / §4.1 / §4.2 / §4.6 / §6.4・README・CLAUDE.md は規則＋参照になっているため個別列挙の追記は不要（もし id や「CSV 対応＝○○」の列挙を見つけたら §5 への参照へ直す）。
 6. `test/<id>.test.js` を追加する（[`TESTING.md`](TESTING.md) §5）。ロード対象（[`test/harness.js`](test/harness.js) の `SHARED_SCRIPTS`／`MODULE_LOGIC`）は manifest から自動導出されるため、**モジュールのハーネス登録は不要**（カタログに足せば載る）。`test/` の一覧は `node test/list.js` で俯瞰する（[`TESTING.md`](TESTING.md) §7）。
 7. §6 のチェックリストで点検。
 
@@ -138,9 +149,16 @@ modules/
 - [ ] 余白のインライン直書きが無い（`ui.stack` 等に委譲）。隣接ブロックが密着していない。
 - [ ] 375 / 768 / 1280px で崩れない（ヘッダー・テーブル・カード・グラフ）。テーブルは潰さず横スクロール、広幅で右に空白を作らない。
 - [ ] 色/余白/角丸/タイポはトークン経由。ダークで確認。
-- [ ] 空状態メッセージがある。破壊的操作に確認/取り消し。
+- [ ] 空状態メッセージがある。
 - [ ] 部品は `MK.ui` のヘルパを使用（自作していない）。
 - [ ] def に1行説明 `description`（何ができるか）を持たせ、HOME の見取り図に出る（[`spec.md`](spec.md) §3.6 / Issue #40）。
+
+**操作コスト（§2.5）**
+- [ ] 主操作が [`spec/modules/<id>.md`](spec/modules/) に書かれ、1アクションで完了する。
+- [ ] 一覧項目の編集がインラインで、モーダルは3項目以上の同時編集にだけ使っている。
+- [ ] 削除が undo トースト（`MK.ui.undoToast`）で、`confirm` は取り消し不能な操作にだけ使っている。
+- [ ] 行内で完結する操作で全再描画していない（操作してもスクロール位置が飛ばない）。
+- [ ] 画面最上段に低頻度操作（CSV 入出力・サンプル投入）を置いていない。
 
 **データ・安全**
 - [ ] ユーザー入力は `textContent`/エスケープ。
