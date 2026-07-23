@@ -251,6 +251,8 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-toast { background: var(--color-ink); color: var(--color-canvas); padding: 10px 16px; border-radius: var(--rounded-md); font-size: 14px; opacity: 0; transform: translateY(8px); transition: all .25s; box-shadow: rgba(15,15,15,.16) 0 8px 24px -6px; }
 .mk-toast.show { opacity: 1; transform: translateY(0); }
 .mk-toast .btn { color: inherit; }
+/* ダーク背景なので primary のリングでは沈む。Tab で「元に戻す」へ到達する導線（spec §10.2）の可視化 */
+.mk-toast .btn:focus-visible { outline: 2px solid var(--color-canvas); outline-offset: 1px; }
 .mk-toast.error { background: var(--color-error); color: var(--color-on-primary); }
 .mk-toast.success { background: var(--color-success); color: var(--color-on-primary); }
 
