@@ -14,13 +14,15 @@
     return host;
   }
 
+  // node を表示し ms 後に自動で消す。戻り値 dismiss() で即時に消せる（保留中のタイマーも破棄する）。
   function showToast(node, ms) {
     toastHost().appendChild(node);
     requestAnimationFrame(() => node.classList.add("show"));
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       node.classList.remove("show");
       setTimeout(() => node.remove(), 300);
     }, ms);
+    return function dismiss() { clearTimeout(timer); node.remove(); };
   }
 
   ui.toast = function (message, type) {
@@ -29,14 +31,20 @@
 
   // 取り消しトースト（破壊的操作は confirm ではなくこれを既定にする。CONVENTIONS §2.5-3）
   // message: 実行済みの操作を伝える文（例「削除しました」）／onUndo: 「元に戻す」押下時に呼ぶ復元処理
+  // アクティブな undo トーストは常に1つに保つ。logic 側は「直前に消した1件」しか持たない規約（§2.5-3）
+  // のため、2つ並ぶと古いトーストの「元に戻す」が新しい削除を復元してしまう。
+  let activeUndo = null;
   ui.undoToast = function (message, onUndo) {
+    if (activeUndo) activeUndo();
     const btn = el("button", { class: "btn btn-ghost", text: "元に戻す" });
-    const t = el("div", { class: "mk-toast info" }, [String(message == null ? "" : message) + "　", btn]);
+    const t = el("div", { class: "mk-toast info" }, [(message || "") + "　", btn]);
+    const dismiss = showToast(t, 6000);
+    const close = () => { if (activeUndo === close) activeUndo = null; dismiss(); };
+    activeUndo = close;
     btn.addEventListener("click", () => {
-      t.remove();
+      close();
       if (typeof onUndo === "function") onUndo();
     });
-    showToast(t, 6000);
   };
 
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }
