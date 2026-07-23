@@ -5,7 +5,7 @@
   // 既定は従来の単一 namespace。scoped 化（§3.7.4）に伴い、シェルが mount 時に対象別 store
   // （mk:module:wbs:<projectId>:v1）を渡してくるので setStore で差し替える（表示中の PJ 文脈）。
   let store = MK.store.scope("module:wbs");
-  function setStore(s) { if (s) store = s; }
+  function setStore(s) { if (s) { store = s; lastDeleted = null; } } // 対象切替をまたいで undo させない
   // 表示中の store（setStore で束ねた PJ）とは独立に、指定 PJ の対象別 store を引く。
   // export/import/サンプル投入が「現在表示中でない PJ」も扱えるようにするため（§3.7.4）。
   // targetId 未指定なら表示中の store を返す（global モジュール・テスト時の従来動作）。
@@ -62,9 +62,10 @@
    * @param {WbsData} d - 保存するデータ
    * @param {{set:Function}} [s] - 保存先ストア（省略時は表示中の store）
    * @returns {void}
-   * ※ store（localStorage）へ書き込む副作用あり。
+   * ※ store（localStorage）へ書き込む副作用あり。undo 退避（lastDeleted）は破棄する
+   *   （削除以外の変更が入ると index がずれ、対象データセットも変わりうるため。CONVENTIONS §2.5-3）。
    */
-  function save(d, s) { (s || store).set(d); }
+  function save(d, s) { (s || store).set(d); lastDeleted = null; }
   /**
    * 全タスクの配列（表示順のフラット配列）を返す。
    * @returns {WbsTask[]} タスク一覧
@@ -214,8 +215,8 @@
     const removed = d.tasks.splice(idx, e - idx);
     const removedIds = removed.map((t) => t.id);
     d.tasks.forEach((t) => { t.deps = t.deps.filter((id) => removedIds.indexOf(id) < 0); });
-    lastDeleted = { index: idx, block: removed };
     save(d);
+    lastDeleted = { index: idx, block: removed }; // save が破棄するため保存後に置く
   }
   /**
    * 直近の deleteTask を取り消し、退避したサブツリーを元位置へ復元して保存する。退避がなければ何もしない。

@@ -8,21 +8,25 @@
   function toastHost() {
     let host = document.getElementById("mk-toasts");
     if (!host) {
-      host = el("div", { id: "mk-toasts", class: "mk-toasts" });
+      // undoToast は「元に戻す」ボタンを持つため、支援技術へも読み上げる（spec §10.2）
+      host = el("div", { id: "mk-toasts", class: "mk-toasts", role: "status", "aria-live": "polite" });
       document.body.appendChild(host);
     }
     return host;
   }
 
-  // node を表示し ms 後に自動で消す。戻り値 dismiss() で即時に消せる（保留中のタイマーも破棄する）。
-  function showToast(node, ms) {
+  // node を表示し ms 後に自動で消す。戻り値 dismiss() で即時に消せる（保留中のタイマーを全て破棄する）。
+  // onExpire: 自動消滅したときだけ呼ばれる（dismiss() で消したときは呼ばれない）。
+  function showToast(node, ms, onExpire) {
     toastHost().appendChild(node);
     requestAnimationFrame(() => node.classList.add("show"));
+    let fade = null;
     const timer = setTimeout(() => {
       node.classList.remove("show");
-      setTimeout(() => node.remove(), 300);
+      fade = setTimeout(() => node.remove(), 300);
+      if (onExpire) onExpire();
     }, ms);
-    return function dismiss() { clearTimeout(timer); node.remove(); };
+    return function dismiss() { clearTimeout(timer); clearTimeout(fade); node.remove(); };
   }
 
   ui.toast = function (message, type) {
@@ -38,8 +42,9 @@
     if (activeUndo) activeUndo();
     const btn = el("button", { class: "btn btn-ghost", text: "元に戻す" });
     const t = el("div", { class: "mk-toast info" }, [(message || "") + "　", btn]);
-    const dismiss = showToast(t, 6000);
-    const close = () => { if (activeUndo === close) activeUndo = null; dismiss(); };
+    const forget = () => { if (activeUndo === close) activeUndo = null; };
+    const dismiss = showToast(t, 6000, forget); // 自動消滅時も参照を残さない
+    const close = () => { forget(); dismiss(); };
     activeUndo = close;
     btn.addEventListener("click", () => {
       close();
