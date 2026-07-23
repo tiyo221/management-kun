@@ -198,7 +198,10 @@
     // メニューには頻度の低い追加・削除だけを残す。
     const items = [
       ["＋ 子タスク", () => L().addChild(idx), ""], ["＋ 兄弟タスク", () => L().addSibling(idx), ""],
-      ["✕ 削除", () => { L().deleteTask(idx); showUndo(); }, "danger"],
+      ["✕ 削除", () => { L().deleteTask(idx); MK.ui.undoToast("削除しました", () => {
+        if (L().undoDelete()) render();
+        else MK.ui.toast("他の変更が入ったため元に戻せませんでした", "error"); // 無言で失敗させない
+      }); }, "danger"],
     ];
     items.forEach(([label, fn, cls]) => { const it = el("button", { class: "wbs-ops-item " + cls, text: label }); it.addEventListener("click", (e) => { e.stopPropagation(); run(fn); }); menu.appendChild(it); });
     menu.style.top = (rect.bottom + 4) + "px";
@@ -208,15 +211,6 @@
     setTimeout(() => document.addEventListener("click", closeOpsMenu), 0);
   }
   function closeOpsMenu() { if (!opsMenu) return; opsMenu.remove(); opsMenu = null; document.removeEventListener("click", closeOpsMenu); }
-
-  function showUndo() {
-    const host = document.getElementById("mk-toasts") || (function () { const h = el("div", { id: "mk-toasts", class: "mk-toasts" }); document.body.appendChild(h); return h; })();
-    const b = el("button", { class: "btn btn-ghost", text: "元に戻す" });
-    const toast = el("div", { class: "mk-toast show" }, ["削除しました　", b]);
-    b.addEventListener("click", () => { L().undoDelete(); render(); toast.remove(); });
-    host.appendChild(toast);
-    setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 6000);
-  }
 
   // ---- ガント（freeze panes: 固定名前列＋固定日付ヘッダ＋バーSVG）Issue #165 ----
   // 1つのスクロール容器＋CSS grid（2×2）＋sticky で全同期する（スクロール同期 JS なし）。

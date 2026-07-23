@@ -5,19 +5,56 @@
   const el = (t, a, c) => MK.util.el(t, a, c);
   const ui = {};
 
-  ui.toast = function (message, type) {
+  function toastHost() {
     let host = document.getElementById("mk-toasts");
     if (!host) {
       host = el("div", { id: "mk-toasts", class: "mk-toasts" });
       document.body.appendChild(host);
     }
-    const t = el("div", { class: "mk-toast " + (type || "info"), text: message });
-    host.appendChild(t);
-    requestAnimationFrame(() => t.classList.add("show"));
-    setTimeout(() => {
-      t.classList.remove("show");
-      setTimeout(() => t.remove(), 300);
-    }, 3000);
+    return host;
+  }
+
+  // node を表示し ms 後に自動で消す。戻り値 dismiss() で即時に消せる（保留中のタイマーを全て破棄する）。
+  // onExpire: 自動消滅したときだけ呼ばれる（dismiss() で消したときは呼ばれない）。
+  function showToast(node, ms, onExpire) {
+    toastHost().appendChild(node);
+    requestAnimationFrame(() => node.classList.add("show"));
+    let fade = null;
+    const timer = setTimeout(() => {
+      node.classList.remove("show");
+      fade = setTimeout(() => node.remove(), 300);
+      if (onExpire) onExpire();
+    }, ms);
+    return function dismiss() { clearTimeout(timer); clearTimeout(fade); node.remove(); };
+  }
+
+  ui.toast = function (message, type) {
+    // ライブリージョンはテキストだけに付ける（読み上げ専用。操作要素は入れない）
+    showToast(el("div", { class: "mk-toast " + (type || "info"), role: "status", "aria-live": "polite", text: message }), 3000);
+  };
+
+  // 取り消しトースト（破壊的操作は confirm ではなくこれを既定にする。CONVENTIONS §2.5-3）
+  // message: 実行済みの操作を伝える文（例「削除しました」）／onUndo: 「元に戻す」押下時に呼ぶ復元処理
+  // アクティブな undo トーストは常に1つに保つ。logic 側は「直前に消した1件」しか持たない規約（§2.5-3）
+  // のため、2つ並ぶと古いトーストの「元に戻す」が新しい削除を復元してしまう。
+  let activeUndo = null;
+  ui.undoToast = function (message, onUndo) {
+    if (activeUndo) activeUndo();
+    const btn = el("button", { class: "btn btn-ghost", text: "元に戻す" });
+    // 読み上げるのは本文だけ。ボタンをライブリージョン内に置くと支援技術から操作しづらくなる。
+    const label = el("span", { role: "status", "aria-live": "polite", text: (message || "") + "　" });
+    const t = el("div", { class: "mk-toast info" }, [label, btn]);
+    let close = null;
+    // 自動消滅時: 参照を残さず、ボタンも即無効化する。ノードはフェードアウトの 300ms 残るため、
+    // 無効化しないとその隙間に押されて「次の削除」を undo してしまう（1つ制限をすり抜ける）。
+    const forget = () => { btn.disabled = true; if (activeUndo === close) activeUndo = null; };
+    const dismiss = showToast(t, 6000, forget);
+    close = () => { forget(); dismiss(); };
+    activeUndo = close;
+    btn.addEventListener("click", () => {
+      close();
+      if (typeof onUndo === "function") onUndo();
+    });
   };
 
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }

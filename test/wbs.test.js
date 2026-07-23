@@ -51,6 +51,33 @@ test("wbs: 削除と元に戻す", (MK) => {
   eq(W.tasks().length, 5);
   W.deleteTask(1);
   eq(W.tasks().length, 4);
-  W.undoDelete();
+  eq(W.undoDelete(), true, "退避があれば復元して true");
   eq(W.tasks().length, 5);
+});
+
+test("wbs: 削除後に別の変更が入ったら undo 退避を破棄する", (MK) => {
+  // 観点: undo が保持するのは「直前に消した1件」だけ（CONVENTIONS §2.5-3）。削除以外の変更が
+  //       入ると index がずれ、対象ストアも切り替わりうるため、退避は破棄して復元させない
+  // 入力: (1) 削除 → 兄弟タスク追加 → undoDelete()  (2) 削除 → setStore で別対象へ → undoDelete()
+  // 期待: どちらも復元されず（件数が増えない＝他データセット・ずれた位置へ挿し込まない）、
+  //       undoDelete() は false を返す（view が「戻せなかった」と伝えられる＝無言で失敗しない）
+  const W = MK.logic.wbs;
+  W.loadSample();
+  W.deleteTask(1);
+  W.addSibling(0);          // 削除以外の変更（配列長・位置が変わる）
+  const afterEdit = W.tasks().length;
+  eq(W.undoDelete(), false, "他の変更後は復元しない");
+  eq(W.tasks().length, afterEdit);
+
+  W.deleteTask(1);
+  try {
+    W.setStore(MK.store.scope("module:wbs:p_other")); // 対象（プロジェクト）切替
+    const other = W.tasks().length;
+    eq(W.undoDelete(), false, "対象切替をまたいで復元しない");
+    eq(W.tasks().length, other);
+  } finally {
+    // setStore は logic のモジュール変数を書き換える。reset() では戻らないため、
+    // 後続テストへ漏らさないよう既定ストアへ戻す（run.js の setup() は全体で1回だけ）。
+    W.setStore(MK.store.scope("module:wbs"));
+  }
 });
