@@ -35,7 +35,8 @@
     return {
       dismiss() { done = true; clearTimeout(timer); clearTimeout(fade); node.remove(); },
       pause() { clearTimeout(timer); timer = null; },
-      // 消滅後に resume() が来ても復活させない（消えたノードのタイマーを回さない）
+      // 残り時間ではなく ms を丸ごと数え直す（フォーカスを外した時点から改めて読む時間を与える）。
+      // 消滅後に resume() が来ても復活はさせない（消えたノードのタイマーを回さない）。
       resume() { if (!done && timer === null) start(); },
     };
   }
@@ -45,13 +46,19 @@
     showToast(el("div", { class: "mk-toast " + (type || "info"), role: "status", "aria-live": "polite", text: message }), 3000);
   };
 
-  // テキスト入力中か（Ctrl+Z は文字入力の取り消しに使われるため、そこでは横取りしない）
+  // テキスト入力中か（Ctrl+Z は文字入力の取り消しに使われるため、そこでは横取りしない）。
+  // input は type で絞る ── 一覧行のチェックボックス（MK.ui.checkbox）はフォーカス先として多く、
+  // ここを一律に「入力中」と見なすと undo のショートカットが黙って効かなくなる。
+  const TEXT_INPUT_TYPES = ["", "text", "search", "url", "tel", "email", "password", "number",
+    "date", "time", "datetime-local", "month", "week"];
   function isTextEntry(node) {
     if (!node) return false;
     if (node.isContentEditable) return true;
     const tag = (node.tagName || "").toLowerCase();
-    return tag === "input" || tag === "textarea";
-  };
+    if (tag === "textarea") return true;
+    if (tag !== "input") return false;
+    return TEXT_INPUT_TYPES.indexOf((node.type || "").toLowerCase()) >= 0;
+  }
 
   // 取り消しトースト（破壊的操作は confirm ではなくこれを既定にする。CONVENTIONS §2.5-3）
   // message: 実行済みの操作を伝える文（例「削除しました」）／onUndo: 「元に戻す」押下時に呼ぶ復元処理
@@ -78,6 +85,9 @@
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
       if (e.key !== "z" && e.key !== "Z") return;
       if (isTextEntry(document.activeElement)) return; // 入力中はテキストの取り消しに譲る
+      // モーダル／パレットが前面にある間は譲る（背面で undo が走り、開いたままのダイアログが
+      // 消えたデータを指す状態になるのを防ぐ）
+      if (document.querySelector(".mk-modal-overlay, .mk-palette-overlay")) return;
       e.preventDefault();
       undo();
     }
