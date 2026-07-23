@@ -62,7 +62,7 @@
   function openPalette() {
     if (paletteEl) return;
     const sources = buildSearchSources();
-    const overlay = el("div", { class: "mk-palette-overlay" }); // クラス名を変えるなら shared/ui.js の FRONT_OVERLAY_SELECTOR も直す
+    const overlay = el("div", { class: "mk-palette-overlay" });
     const box = el("div", { class: "mk-palette", role: "dialog", "aria-label": "検索" });
     const input = el("input", {
       class: "mk-palette-input", type: "text", placeholder: "人・プロジェクト・モジュールを検索…",

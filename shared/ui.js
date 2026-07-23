@@ -46,14 +46,6 @@
     showToast(el("div", { class: "mk-toast " + (type || "info"), role: "status", "aria-live": "polite", text: message }), 3000);
   };
 
-  // 画面全体を覆い、背面の操作を止めるオーバーレイ。生成側は ui.modal（.mk-modal-overlay）と
-  // shared/shell-palette.js（.mk-palette-overlay）の2つで、どちらもここを参照する旨をコメントしてある。
-  // 背面を占有しないポップオーバー（メニュー等）は含めない。
-  // **ここに足してよいのは「開いている間だけ DOM に存在する」要素だけ**。常設のまま display で
-  // 出し入れする要素（index.html の .mk-sidebar-overlay 等）を足すと querySelector が常に一致し、
-  // Ctrl+Z が全環境で無言で効かなくなる。可視性まで見る作りにはしない（判定を単純に保つ）。
-  const FRONT_OVERLAY_SELECTOR = ".mk-modal-overlay, .mk-palette-overlay";
-
   // テキスト入力中か（Ctrl+Z は文字入力の取り消しに使われるため、そこでは横取りしない）。
   // input は type で絞る ── 一覧行のチェックボックス（MK.ui.checkbox）はフォーカス先として多く、
   // ここを一律に「入力中」と見なすと undo のショートカットが黙って効かなくなる。
@@ -76,8 +68,11 @@
   // （6秒では間に合わない）。表示中だけ有効なショートカットを代替導線にする（Issue #250・spec §10.2）。
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
   const undoHotkeyLabel = isMac ? "⌘Z" : "Ctrl+Z";
-  // キーボードが無い端末（タッチのみ）にショートカットを案内しない。到達できない導線の案内が
-  // 全ての削除トーストに載ってしまうため。都度評価する（iPad はキーボードの着脱で変わる）。
+  // キーボードの無い端末に、押せないショートカットを案内しない（全ての削除トーストに載るため）。
+  // 判定できるのはポインタの精度までで、キーボードの有無そのものは検出できない ── 細ポインタ＝
+  // キーボードありという近似なので、外付けキーボード付きタブレット等では案内が出ない取りこぼしが
+  // ある。ハンドラは常に登録されるので、案内が出なくてもショートカット自体は効く。
+  // 都度評価する（同じ端末でも周辺機器の着脱で変わりうる）。
   const showsHotkey = () =>
     typeof matchMedia !== "function" || matchMedia("(hover: hover) and (pointer: fine)").matches;
   let activeUndo = null;
@@ -98,9 +93,8 @@
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
       if (e.key !== "z" && e.key !== "Z") return;
       if (isTextEntry(document.activeElement)) return; // 入力中はテキストの取り消しに譲る
-      // 前面オーバーレイがある間は譲る（背面で undo が走り、開いたままのダイアログが
-      // 消えたデータを指す状態になるのを防ぐ）
-      if (document.querySelector(FRONT_OVERLAY_SELECTOR)) return;
+      // モーダル表示中も止めない。トースト（z-index 1000）はオーバーレイより前面にあり
+      // マウスでは押せるので、キーボードだけ塞ぐと本来消したい非対称が戻る。
       e.preventDefault();
       undo();
     }
@@ -128,7 +122,7 @@
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }
   ui.modal = function (opts) {
     opts = opts || {};
-    const overlay = el("div", { class: "mk-modal-overlay" }); // クラス名を変えるなら FRONT_OVERLAY_SELECTOR も直す
+    const overlay = el("div", { class: "mk-modal-overlay" });
     const box = el("div", { class: "mk-modal" });
     const head = el("div", { class: "mk-modal-head" }, [el("h3", { text: opts.title || "" })]);
     const body = el("div", { class: "mk-modal-body" });
