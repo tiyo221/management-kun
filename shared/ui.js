@@ -46,6 +46,11 @@
     showToast(el("div", { class: "mk-toast " + (type || "info"), role: "status", "aria-live": "polite", text: message }), 3000);
   };
 
+  // 画面全体を覆い、背面の操作を止めるオーバーレイ。生成側は ui.modal（.mk-modal-overlay）と
+  // shared/shell-palette.js（.mk-palette-overlay）の2つで、どちらもここを参照する旨をコメントしてある。
+  // 背面を占有しないポップオーバー（メニュー等）は含めない。
+  const FRONT_OVERLAY_SELECTOR = ".mk-modal-overlay, .mk-palette-overlay";
+
   // テキスト入力中か（Ctrl+Z は文字入力の取り消しに使われるため、そこでは横取りしない）。
   // input は type で絞る ── 一覧行のチェックボックス（MK.ui.checkbox）はフォーカス先として多く、
   // ここを一律に「入力中」と見なすと undo のショートカットが黙って効かなくなる。
@@ -85,9 +90,9 @@
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
       if (e.key !== "z" && e.key !== "Z") return;
       if (isTextEntry(document.activeElement)) return; // 入力中はテキストの取り消しに譲る
-      // モーダル／パレットが前面にある間は譲る（背面で undo が走り、開いたままのダイアログが
+      // 前面オーバーレイがある間は譲る（背面で undo が走り、開いたままのダイアログが
       // 消えたデータを指す状態になるのを防ぐ）
-      if (document.querySelector(".mk-modal-overlay, .mk-palette-overlay")) return;
+      if (document.querySelector(FRONT_OVERLAY_SELECTOR)) return;
       e.preventDefault();
       undo();
     }
@@ -111,7 +116,7 @@
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }
   ui.modal = function (opts) {
     opts = opts || {};
-    const overlay = el("div", { class: "mk-modal-overlay" });
+    const overlay = el("div", { class: "mk-modal-overlay" }); // クラス名を変えるなら FRONT_OVERLAY_SELECTOR も直す
     const box = el("div", { class: "mk-modal" });
     const head = el("div", { class: "mk-modal-head" }, [el("h3", { text: opts.title || "" })]);
     const body = el("div", { class: "mk-modal-body" });
