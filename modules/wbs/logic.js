@@ -219,11 +219,12 @@
     lastDeleted = { index: idx, block: removed }; // save が破棄するため保存後に置く
   }
   /**
-   * 直近の deleteTask を取り消し、退避したサブツリーを元位置へ復元して保存する。退避がなければ何もしない。
-   * @returns {void}
-   * ※ store へ保存し、lastDeleted をクリアする副作用あり（除去済みの依存参照は復元されない）。
+   * 直近の deleteTask を取り消し、退避したサブツリーを元位置へ復元して保存する。
+   * 退避が無い（削除後に他の変更・対象切替が入って破棄された）場合は何もせず false を返す。
+   * @returns {boolean} 復元したら true、退避が無く復元しなかったら false
+   * ※ store へ保存する副作用あり（除去済みの依存参照は復元されない）。
    */
-  function undoDelete() { if (!lastDeleted) return; const d = load(); d.tasks.splice(lastDeleted.index, 0, ...lastDeleted.block); lastDeleted = null; save(d); }
+  function undoDelete() { if (!lastDeleted) return false; const d = load(); d.tasks.splice(lastDeleted.index, 0, ...lastDeleted.block); save(d); return true; }
   /**
    * 指定インデックスのタスクを部分更新して保存する。start/end を含む patch を適用した結果が
    * 日付逆転（開始 > 終了）になる場合は不正入力として弾き、保存せず false を返す（TESTING.md §1）。

@@ -8,8 +8,7 @@
   function toastHost() {
     let host = document.getElementById("mk-toasts");
     if (!host) {
-      // undoToast は「元に戻す」ボタンを持つため、支援技術へも読み上げる（spec §10.2）
-      host = el("div", { id: "mk-toasts", class: "mk-toasts", role: "status", "aria-live": "polite" });
+      host = el("div", { id: "mk-toasts", class: "mk-toasts" });
       document.body.appendChild(host);
     }
     return host;
@@ -30,7 +29,8 @@
   }
 
   ui.toast = function (message, type) {
-    showToast(el("div", { class: "mk-toast " + (type || "info"), text: message }), 3000);
+    // ライブリージョンはテキストだけに付ける（読み上げ専用。操作要素は入れない）
+    showToast(el("div", { class: "mk-toast " + (type || "info"), role: "status", "aria-live": "polite", text: message }), 3000);
   };
 
   // 取り消しトースト（破壊的操作は confirm ではなくこれを既定にする。CONVENTIONS §2.5-3）
@@ -41,10 +41,13 @@
   ui.undoToast = function (message, onUndo) {
     if (activeUndo) activeUndo();
     const btn = el("button", { class: "btn btn-ghost", text: "元に戻す" });
-    const t = el("div", { class: "mk-toast info" }, [(message || "") + "　", btn]);
+    // 読み上げるのは本文だけ。ボタンをライブリージョン内に置くと支援技術から操作しづらくなる。
+    const label = el("span", { role: "status", "aria-live": "polite", text: (message || "") + "　" });
+    const t = el("div", { class: "mk-toast info" }, [label, btn]);
+    let close = null;
     const forget = () => { if (activeUndo === close) activeUndo = null; };
     const dismiss = showToast(t, 6000, forget); // 自動消滅時も参照を残さない
-    const close = () => { forget(); dismiss(); };
+    close = () => { forget(); dismiss(); };
     activeUndo = close;
     btn.addEventListener("click", () => {
       close();

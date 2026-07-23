@@ -198,7 +198,10 @@
     // メニューには頻度の低い追加・削除だけを残す。
     const items = [
       ["＋ 子タスク", () => L().addChild(idx), ""], ["＋ 兄弟タスク", () => L().addSibling(idx), ""],
-      ["✕ 削除", () => { L().deleteTask(idx); MK.ui.undoToast("削除しました", () => { L().undoDelete(); render(); }); }, "danger"],
+      ["✕ 削除", () => { L().deleteTask(idx); MK.ui.undoToast("削除しました", () => {
+        if (L().undoDelete()) render();
+        else MK.ui.toast("他の変更が入ったため元に戻せませんでした", "error"); // 無言で失敗させない
+      }); }, "danger"],
     ];
     items.forEach(([label, fn, cls]) => { const it = el("button", { class: "wbs-ops-item " + cls, text: label }); it.addEventListener("click", (e) => { e.stopPropagation(); run(fn); }); menu.appendChild(it); });
     menu.style.top = (rect.bottom + 4) + "px";
