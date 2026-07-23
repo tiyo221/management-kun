@@ -117,7 +117,11 @@
     document.addEventListener("keydown", onKey);
     // Tab で到達した利用者が読んでいる最中に消えないよう、フォーカスがトースト内にある間は消さない。
     t.addEventListener("focusin", () => handle.pause());
-    t.addEventListener("focusout", () => handle.resume());
+    // focusout はウィンドウのブラーでも発火する（フォーカスはトースト内のまま）。別タブへ切り替えた
+    // だけで裏で消えないよう、次のタスクで実際にフォーカスが外へ出たかを確かめてから再開する。
+    t.addEventListener("focusout", () => {
+      setTimeout(() => { if (!t.contains(document.activeElement)) handle.resume(); }, 0);
+    });
     btn.addEventListener("click", undo);
   };
 
