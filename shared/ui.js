@@ -14,18 +14,30 @@
     return host;
   }
 
-  // node を表示し ms 後に自動で消す。戻り値 dismiss() で即時に消せる（保留中のタイマーを全て破棄する）。
+  // node を表示し ms 後に自動で消す。戻り値の dismiss() で即時に消せる（保留中のタイマーを全て破棄する）。
+  // pause()/resume() は自動消滅タイマーの停止・再開（フォーカスが入っている間は消さないため）。
   // onExpire: 自動消滅したときだけ呼ばれる（dismiss() で消したときは呼ばれない）。
   function showToast(node, ms, onExpire) {
     toastHost().appendChild(node);
     requestAnimationFrame(() => node.classList.add("show"));
     let fade = null;
-    const timer = setTimeout(() => {
-      node.classList.remove("show");
-      fade = setTimeout(() => node.remove(), 300);
-      if (onExpire) onExpire();
-    }, ms);
-    return function dismiss() { clearTimeout(timer); clearTimeout(fade); node.remove(); };
+    let timer = null;
+    let done = false;
+    const start = () => {
+      timer = setTimeout(() => {
+        done = true;
+        node.classList.remove("show");
+        fade = setTimeout(() => node.remove(), 300);
+        if (onExpire) onExpire();
+      }, ms);
+    };
+    start();
+    return {
+      dismiss() { done = true; clearTimeout(timer); clearTimeout(fade); node.remove(); },
+      pause() { clearTimeout(timer); timer = null; },
+      // 消滅後に resume() が来ても復活させない（消えたノードのタイマーを回さない）
+      resume() { if (!done && timer === null) start(); },
+    };
   }
 
   ui.toast = function (message, type) {
@@ -33,28 +45,57 @@
     showToast(el("div", { class: "mk-toast " + (type || "info"), role: "status", "aria-live": "polite", text: message }), 3000);
   };
 
+  // テキスト入力中か（Ctrl+Z は文字入力の取り消しに使われるため、そこでは横取りしない）
+  function isTextEntry(node) {
+    if (!node) return false;
+    if (node.isContentEditable) return true;
+    const tag = (node.tagName || "").toLowerCase();
+    return tag === "input" || tag === "textarea";
+  };
+
   // 取り消しトースト（破壊的操作は confirm ではなくこれを既定にする。CONVENTIONS §2.5-3）
   // message: 実行済みの操作を伝える文（例「削除しました」）／onUndo: 「元に戻す」押下時に呼ぶ復元処理
   // アクティブな undo トーストは常に1つに保つ。logic 側は「直前に消した1件」しか持たない規約（§2.5-3）
   // のため、2つ並ぶと古いトーストの「元に戻す」が新しい削除を復元してしまう。
+  // トーストはページ末尾に生成され、フォーカスも移さないため、キーボードでは Tab で到達できない
+  // （6秒では間に合わない）。表示中だけ有効なショートカットを代替導線にする（Issue #250・spec §10.2）。
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+  const undoHotkeyLabel = isMac ? "⌘Z" : "Ctrl+Z";
   let activeUndo = null;
   ui.undoToast = function (message, onUndo) {
     if (activeUndo) activeUndo();
     const btn = el("button", { class: "btn btn-ghost", text: "元に戻す" });
     // 読み上げるのは本文だけ。ボタンをライブリージョン内に置くと支援技術から操作しづらくなる。
-    const label = el("span", { role: "status", "aria-live": "polite", text: (message || "") + "　" });
+    // ショートカットは本文に書く（知られていない導線は無いのと同じ）。
+    const label = el("span", { role: "status", "aria-live": "polite", text: (message || "") + "（" + undoHotkeyLabel + " で取り消し）　" });
     const t = el("div", { class: "mk-toast info" }, [label, btn]);
     let close = null;
-    // 自動消滅時: 参照を残さず、ボタンも即無効化する。ノードはフェードアウトの 300ms 残るため、
-    // 無効化しないとその隙間に押されて「次の削除」を undo してしまう（1つ制限をすり抜ける）。
-    const forget = () => { btn.disabled = true; if (activeUndo === close) activeUndo = null; };
-    const dismiss = showToast(t, 6000, forget);
-    close = () => { forget(); dismiss(); };
-    activeUndo = close;
-    btn.addEventListener("click", () => {
+    const undo = () => {
       close();
       if (typeof onUndo === "function") onUndo();
-    });
+    };
+    function onKey(e) {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      if (e.key !== "z" && e.key !== "Z") return;
+      if (isTextEntry(document.activeElement)) return; // 入力中はテキストの取り消しに譲る
+      e.preventDefault();
+      undo();
+    }
+    // 自動消滅時: 参照を残さず、ボタンも即無効化し、ショートカットも解除する。ノードはフェードアウトの
+    // 300ms 残るため、無効化しないとその隙間に押されて「次の削除」を undo してしまう（1つ制限をすり抜ける）。
+    const forget = () => {
+      btn.disabled = true;
+      document.removeEventListener("keydown", onKey);
+      if (activeUndo === close) activeUndo = null;
+    };
+    const handle = showToast(t, 6000, forget);
+    close = () => { forget(); handle.dismiss(); };
+    activeUndo = close;
+    document.addEventListener("keydown", onKey);
+    // Tab で到達した利用者が読んでいる最中に消えないよう、フォーカスがトースト内にある間は消さない。
+    t.addEventListener("focusin", () => handle.pause());
+    t.addEventListener("focusout", () => handle.resume());
+    btn.addEventListener("click", undo);
   };
 
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }
