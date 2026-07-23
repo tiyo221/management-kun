@@ -63,15 +63,21 @@ test("wbs: 削除後に別の変更が入ったら undo 退避を破棄する", 
   //       undoDelete() は false を返す（view が「戻せなかった」と伝えられる＝無言で失敗しない）
   const W = MK.logic.wbs;
   W.loadSample();
-  eq(W.deleteTask(1), undefined);
+  W.deleteTask(1);
   W.addSibling(0);          // 削除以外の変更（配列長・位置が変わる）
   const afterEdit = W.tasks().length;
   eq(W.undoDelete(), false, "他の変更後は復元しない");
   eq(W.tasks().length, afterEdit);
 
   W.deleteTask(1);
-  W.setStore(MK.store.scope("module:wbs:p_other")); // 対象（プロジェクト）切替
-  const other = W.tasks().length;
-  eq(W.undoDelete(), false, "対象切替をまたいで復元しない");
-  eq(W.tasks().length, other);
+  try {
+    W.setStore(MK.store.scope("module:wbs:p_other")); // 対象（プロジェクト）切替
+    const other = W.tasks().length;
+    eq(W.undoDelete(), false, "対象切替をまたいで復元しない");
+    eq(W.tasks().length, other);
+  } finally {
+    // setStore は logic のモジュール変数を書き換える。reset() では戻らないため、
+    // 後続テストへ漏らさないよう既定ストアへ戻す（run.js の setup() は全体で1回だけ）。
+    W.setStore(MK.store.scope("module:wbs"));
+  }
 });

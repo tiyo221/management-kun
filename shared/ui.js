@@ -45,8 +45,10 @@
     const label = el("span", { role: "status", "aria-live": "polite", text: (message || "") + "　" });
     const t = el("div", { class: "mk-toast info" }, [label, btn]);
     let close = null;
-    const forget = () => { if (activeUndo === close) activeUndo = null; };
-    const dismiss = showToast(t, 6000, forget); // 自動消滅時も参照を残さない
+    // 自動消滅時: 参照を残さず、ボタンも即無効化する。ノードはフェードアウトの 300ms 残るため、
+    // 無効化しないとその隙間に押されて「次の削除」を undo してしまう（1つ制限をすり抜ける）。
+    const forget = () => { btn.disabled = true; if (activeUndo === close) activeUndo = null; };
+    const dismiss = showToast(t, 6000, forget);
     close = () => { forget(); dismiss(); };
     activeUndo = close;
     btn.addEventListener("click", () => {
