@@ -49,6 +49,9 @@
   // 画面全体を覆い、背面の操作を止めるオーバーレイ。生成側は ui.modal（.mk-modal-overlay）と
   // shared/shell-palette.js（.mk-palette-overlay）の2つで、どちらもここを参照する旨をコメントしてある。
   // 背面を占有しないポップオーバー（メニュー等）は含めない。
+  // **ここに足してよいのは「開いている間だけ DOM に存在する」要素だけ**。常設のまま display で
+  // 出し入れする要素（index.html の .mk-sidebar-overlay 等）を足すと querySelector が常に一致し、
+  // Ctrl+Z が全環境で無言で効かなくなる。可視性まで見る作りにはしない（判定を単純に保つ）。
   const FRONT_OVERLAY_SELECTOR = ".mk-modal-overlay, .mk-palette-overlay";
 
   // テキスト入力中か（Ctrl+Z は文字入力の取り消しに使われるため、そこでは横取りしない）。
@@ -73,13 +76,18 @@
   // （6秒では間に合わない）。表示中だけ有効なショートカットを代替導線にする（Issue #250・spec §10.2）。
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
   const undoHotkeyLabel = isMac ? "⌘Z" : "Ctrl+Z";
+  // キーボードが無い端末（タッチのみ）にショートカットを案内しない。到達できない導線の案内が
+  // 全ての削除トーストに載ってしまうため。都度評価する（iPad はキーボードの着脱で変わる）。
+  const showsHotkey = () =>
+    typeof matchMedia !== "function" || matchMedia("(hover: hover) and (pointer: fine)").matches;
   let activeUndo = null;
   ui.undoToast = function (message, onUndo) {
     if (activeUndo) activeUndo();
     const btn = el("button", { class: "btn btn-ghost", text: "元に戻す" });
     // 読み上げるのは本文だけ。ボタンをライブリージョン内に置くと支援技術から操作しづらくなる。
     // ショートカットは本文に書く（知られていない導線は無いのと同じ）。
-    const label = el("span", { role: "status", "aria-live": "polite", text: (message || "") + "（" + undoHotkeyLabel + " で取り消し）　" });
+    const hint = showsHotkey() ? "（" + undoHotkeyLabel + " で取り消し）" : "";
+    const label = el("span", { role: "status", "aria-live": "polite", text: (message || "") + hint + "　" });
     const t = el("div", { class: "mk-toast info" }, [label, btn]);
     let close = null;
     const undo = () => {
