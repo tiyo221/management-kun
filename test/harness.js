@@ -25,27 +25,88 @@ function makeLocalStorage(opts) {
   Object.defineProperty(api, "length", { get: () => Object.keys(m).length });
   return api;
 }
-function makeNode() {
+// DOM スタブ。logic 層は DOM を使わないため大半は素通しの器だが、shared/ui.js の「振る舞いを持つ
+// ヘルパ」（undoToast など。Issue #252）を自動テストできるだけの最小の実体を持たせる:
+// イベントの登録/解除/発火・親子関係と contains()・classList・activeElement。実 DOM の再実装はしない。
+function makeNode(tag) {
+  const classes = new Set();
   return {
-    style: {}, className: "", children: [],
-    classList: { add() {}, remove() {}, contains() { return false; } },
-    setAttribute() {}, appendChild() {}, removeChild() {}, remove() {},
-    addEventListener() {}, removeEventListener() {},
+    tagName: tag ? String(tag).toUpperCase() : "",
+    style: {}, className: "", children: [], parentNode: null,
+    _attrs: {}, _listeners: {},
+    classList: {
+      add: (c) => classes.add(c),
+      remove: (c) => classes.delete(c),
+      contains: (c) => classes.has(c),
+      toggle: (c) => (classes.has(c) ? classes.delete(c) : classes.add(c)),
+    },
+    setAttribute(k, v) { this._attrs[k] = v; if (k === "id") this.id = v; if (k === "type") this.type = v; },
+    getAttribute(k) { return k in this._attrs ? this._attrs[k] : null; },
+    removeAttribute(k) { delete this._attrs[k]; },
+    appendChild(child) {
+      if (child.parentNode) child.parentNode.removeChild(child);
+      child.parentNode = this; this.children.push(child); return child;
+    },
+    removeChild(child) {
+      const i = this.children.indexOf(child);
+      if (i >= 0) { this.children.splice(i, 1); child.parentNode = null; }
+      return child;
+    },
+    remove() { if (this.parentNode) this.parentNode.removeChild(this); },
+    contains(other) { for (let n = other; n; n = n.parentNode) if (n === this) return true; return false; },
+    addEventListener(type, fn) { (this._listeners[type] || (this._listeners[type] = [])).push(fn); },
+    removeEventListener(type, fn) {
+      const arr = this._listeners[type]; if (!arr) return;
+      const i = arr.indexOf(fn); if (i >= 0) arr.splice(i, 1);
+    },
     set textContent(v) {}, set innerHTML(v) {},
     querySelector() { return null; }, querySelectorAll() { return []; },
     getBoundingClientRect() { return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }; },
   };
 }
+function findById(node, id) {
+  if (!node) return null;
+  if (node.id === id) return node;
+  for (const c of node.children) { const found = findById(c, id); if (found) return found; }
+  return null;
+}
 function makeDocument() {
+  const doc = makeNode("#document");
+  doc.body = makeNode("body"); doc.body.parentNode = doc;
+  doc.documentElement = makeNode("html");
+  doc.activeElement = null;
+  doc.createElement = (t) => makeNode(t);
+  doc.createTextNode = () => makeNode("#text");
+  doc.getElementById = (id) => findById(doc.body, id);
+  return doc;
+}
+
+// 制御可能なタイマー（実時間を待たずにテストから時計を進める）。setTimeout/clearTimeout を差し替え、
+// advance(ms) で期限の来たコールバックを登録順に発火する。undoToast の自動消滅・フェード・
+// focusout の遅延判定（次タスク）を決定的に検証するため（Issue #252）。
+// 注意: この差し替えは setup() で一度だけ効き、以降スイート全体に効く（実タイマーには戻らない）。
+// 現状 logic はタイマーを使わない（shared/ui.js・io.js のみ）ため無害。タイマーを張るコードを
+// テストするときは、そのテスト冒頭で resetDom()（＝CLOCK.reset()）を呼んで前のタイマーと分離する。
+function makeClock() {
+  let timers = [], seq = 1, now = 0;
   return {
-    createElement: () => makeNode(),
-    createTextNode: () => makeNode(),
-    getElementById: () => null,
-    body: makeNode(),
-    documentElement: { setAttribute() {}, removeAttribute() {} },
-    addEventListener() {}, removeEventListener() {},
+    setTimeout: (fn, ms) => { const id = seq++; timers.push({ id, fn, at: now + (ms || 0) }); return id; },
+    clearTimeout: (id) => { timers = timers.filter((t) => t.id !== id); },
+    advance(ms) {
+      const end = now + ms;
+      for (;;) {
+        timers.sort((a, b) => a.at - b.at || a.id - b.id);
+        const due = timers.find((t) => t.at <= end);
+        if (!due) break;
+        timers = timers.filter((t) => t !== due);
+        now = due.at; due.fn();
+      }
+      now = end;
+    },
+    reset() { timers = []; now = 0; },
   };
 }
+let CLOCK = null;
 
 // 構成マニフェスト（shared/manifest.js の window.MK_MANIFEST）を単一ソースとして、共有資産の一覧と
 // モジュール id をここで導出する（Issue #137）。manifest.js は DOM が無ければスクリプト注入をスキップ
@@ -88,6 +149,9 @@ function setup(opts) {
   global.window = {};
   global.localStorage = makeLocalStorage();
   global.document = makeDocument();
+  CLOCK = makeClock();
+  global.setTimeout = CLOCK.setTimeout;
+  global.clearTimeout = CLOCK.clearTimeout;
   global.requestAnimationFrame = (f) => { if (f) f(); return 0; };
   const rootDir = path.join(__dirname, "..");
   const scripts = SHARED_SCRIPTS.concat(ids.map((id) => MODULE_LOGIC[id]));
@@ -104,4 +168,27 @@ function reset(MK) {
   MK.store._cache = {};
 }
 
-module.exports = { setup, reset, ALL_MODULE_IDS, ZONE_MODULE_IDS };
+// ---- DOM/タイマーを使うテスト（ui.test.js）向けの操作ヘルパ ----
+// 時計を ms 進める（期限の来た setTimeout を発火）。
+function advanceTimers(ms) { if (CLOCK) CLOCK.advance(ms); }
+// target に登録された type のリスナを、init を混ぜたイベントで発火する（document / ノード両対応）。
+function fireEvent(target, type, init) {
+  const e = Object.assign({ type, target, defaultPrevented: false,
+    preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} }, init || {});
+  ((target._listeners && target._listeners[type]) || []).slice().forEach((fn) => fn(e));
+  return e;
+}
+// document.activeElement を差し替える（フォーカス依存の分岐を検証するため）。
+function setActiveElement(node) { global.document.activeElement = node || null; }
+// DOM/タイマーの状態をテスト間で分離する（body の子・document のリスナ・activeElement・時計をクリア）。
+function resetDom() {
+  const doc = global.document; if (!doc) return;
+  doc.body.children.slice().forEach((c) => c.remove());
+  doc.body._listeners = {}; doc._listeners = {}; doc.activeElement = null;
+  if (CLOCK) CLOCK.reset();
+}
+
+module.exports = {
+  setup, reset, ALL_MODULE_IDS, ZONE_MODULE_IDS,
+  advanceTimers, fireEvent, setActiveElement, resetDom,
+};

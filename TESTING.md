@@ -35,7 +35,8 @@
 | `modules/todo/logic.js`（`toggleDone` / `next` / `tasks`） | **daily**（todo の next を引き・完了を同期する） | 自動（`daily`）＋デイリー画面の手動確認 |
 | `shared/search.js`（横断検索・任意契約 `searchItems`） | **横断検索**（実装したモジュールの `searchItems` を含む） | 自動（`search`）＋検索 UI の手動確認 |
 | `shared/manifest.js`（カタログ／既定ゾーン） | **全モジュール**（`test/harness.js` のロード対象がカタログ由来・#137）・**シェル**（ナビ・HOME の並び）・spec.md §5 の一覧表・`spec/modules/<id>.md` の存在 | 自動フルスイート（特に `spec-consistency`＝表の id ⇄ manifest のカタログ／個別仕様の存在とリンク）＋ナビ・HOME の手動確認 |
-| `shared/ui.js` / `design.css`（見た目の共通） | **全モジュールの view** | 手動（375/768/1280・ダーク・空状態） |
+| `shared/ui.js`（振る舞いを持つヘルパ＝undoToast 等） | そのヘルパの状態遷移の中核 | 自動（`test/ui.test.js`） |
+| `shared/ui.js`（レイアウト部品＝sectionTitle/card 等）/ `design.css`（見た目の共通） | **全モジュールの view** | 手動（375/768/1280・ダーク・空状態） |
 | `index.html` / `shared/shell*.js`（シェル/ナビ/移行/設定。責務別分割・Issue #140） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
 | `*.md`（仕様・ガイドの追加/移動/改名） | ドキュメント間の相対リンク（Git 追跡下の md が対象）とコードフェンスの閉じ忘れ | 自動（`spec-consistency`＝リンク切れ検出・#241） |
 
@@ -49,8 +50,12 @@
 |---|---|---|
 | ロジック（計算・集計・CRUD・CSV整形/取込・名寄せ） | 自動ユニット | `node test/run.js` |
 | shared（`shared/*` の共有資産。util / io / store / マスタ / scope / search など） | 自動ユニット | 同上 |
+| `shared/ui.js` の**振る舞いを持つ**ヘルパ（undoToast 等。状態遷移・イベント登録/解除・タイマー・フォーカス判定） | 自動ユニット | 同上（`test/ui.test.js`。ハーネスの最小 DOM スタブで発火/解除/時計送りを検証） |
+| `shared/ui.js` の**見た目**の部品（要素を並べるだけ。sectionTitle / card 等） | 手動スモーク | プレビューで「描画される・コンソールエラーゼロ」 |
 | view（描画・イベント） | 手動スモーク | プレビューで「描画される・コンソールエラーゼロ」 |
 | レイアウト・レスポンシブ・ダーク | 手動 | 375 / 768 / 1280px ＋ テーマ切替（CONVENTIONS §2.2 / §6） |
+
+**`shared/ui.js` の自動/手動の判定基準**: 同じ DOM を触るヘルパでも、**要素を並べて返すだけ（見た目）＝手動**、**状態遷移を持つ（イベントの登録/解除・タイマー・`activeElement` 依存の分岐）＝自動**で分ける。壊れると「見た目が崩れる」で済むものは手動スモーク、「別の削除を undo する」等のデータ破壊になるものは自動で固定する。ただし view（`modules/*/view.js`）の描画・レスポンシブ・ダークは対象外（従来どおり手動）。
 | 全体 I/O・旧データ移行 | 自動（ロジック）＋手動（UI） | ラウンドトリップの自動テスト＋設定画面での実操作 |
 
 ---
