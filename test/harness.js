@@ -84,6 +84,9 @@ function makeDocument() {
 // 制御可能なタイマー（実時間を待たずにテストから時計を進める）。setTimeout/clearTimeout を差し替え、
 // advance(ms) で期限の来たコールバックを登録順に発火する。undoToast の自動消滅・フェード・
 // focusout の遅延判定（次タスク）を決定的に検証するため（Issue #252）。
+// 注意: この差し替えは setup() で一度だけ効き、以降スイート全体に効く（実タイマーには戻らない）。
+// 現状 logic はタイマーを使わない（shared/ui.js・io.js のみ）ため無害。タイマーを張るコードを
+// テストするときは、そのテスト冒頭で resetDom()（＝CLOCK.reset()）を呼んで前のタイマーと分離する。
 function makeClock() {
   let timers = [], seq = 1, now = 0;
   return {
