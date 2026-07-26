@@ -48,6 +48,12 @@
   // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→tasks 配列検証→既定返却、
   // save＝exportedAt 付与→store.set（返り値は保存成否）。仕様は MK.store.collection を参照。
   const { load, save } = col;
+
+  // 削除の取り消し（CONVENTIONS §2.5-3）。保持するのは「直前に消した1件＋その位置」だけ。
+  // 汎用 undo スタックは持たない（CODING.md オーバーエンジニアリング防止）。他の変更が入ったら
+  // 位置がずれる／全置換でデータセットごと変わるため退避を破棄する（drop）。
+  let pendingUndo = null; // { task: TodoTask, index: number } | null
+  function drop() { pendingUndo = null; }
   /**
    * 全タスクの配列を返す。
    * @returns {TodoTask[]} タスク一覧
@@ -118,6 +124,7 @@
    * ※ store へ保存する副作用あり。
    */
   function addTask(title) {
+    drop(); // 別の変更が入ったので削除の退避を捨てる
     const d = load();
     const now = MK.util.nowISO();
     d.tasks.unshift({
@@ -134,6 +141,7 @@
    * ※ store へ保存する副作用あり。
    */
   function updateTask(id, patch) {
+    drop(); // 別の変更が入ったので削除の退避を捨てる
     const d = load();
     const t = d.tasks.find((x) => x.id === id);
     if (!t) return;
@@ -142,22 +150,55 @@
     save(d);
   }
   /**
-   * タスクの完了状態を切り替える。完了なら status="done"／completedAt を設定、解除なら status="next" に戻す。
+   * ステータスを変更して保存する。done へ送るときは completedAt を打刻し、done 以外へ戻すと null に戻す。
+   * 完了打刻の業務ルールをここに集約する（view は完了時刻を計算しない・CONVENTIONS §1）。
    * @param {string} id - 対象タスクID
-   * @param {boolean} done - true で完了、false で未完了に戻す
+   * @param {string} status - 送り先ステータスキー（{@link STATUSES} の key）
    * @returns {void}
    * ※ updateTask 経由で store へ保存する副作用あり。
    */
-  function toggleDone(id, done) {
-    updateTask(id, done ? { status: "done", completedAt: MK.util.nowISO() } : { status: "next", completedAt: null });
+  function setStatus(id, status) {
+    updateTask(id, status === "done"
+      ? { status, completedAt: MK.util.nowISO() }
+      : { status, completedAt: null });
   }
   /**
-   * 指定タスクを削除して保存する。
+   * タスクの完了状態を切り替える。完了なら status="done"、解除なら status="next" に戻す（打刻は setStatus に委譲）。
+   * @param {string} id - 対象タスクID
+   * @param {boolean} done - true で完了、false で未完了（next）に戻す
+   * @returns {void}
+   * ※ setStatus→updateTask 経由で store へ保存する副作用あり。
+   */
+  function toggleDone(id, done) { setStatus(id, done ? "done" : "next"); }
+  /**
+   * 指定タスクを削除して保存する。取り消し用に「消した1件＋元の位置」を退避する（{@link undoDelete}）。
    * @param {string} id - 対象タスクID
    * @returns {void}
-   * ※ store へ保存する副作用あり。
+   * ※ store へ保存する副作用あり。退避は次の変更（{@link drop} を呼ぶ操作）で破棄される。
    */
-  function removeTask(id) { const d = load(); d.tasks = d.tasks.filter((t) => t.id !== id); save(d); }
+  function removeTask(id) {
+    const d = load();
+    const index = d.tasks.findIndex((t) => t.id === id);
+    if (index < 0) return;
+    const task = d.tasks.splice(index, 1)[0];
+    pendingUndo = { task, index };
+    save(d);
+  }
+  /**
+   * 直前の削除を取り消して元の位置へ戻す。退避が無ければ（他の変更で破棄済みなら）戻さず false を返す。
+   * view はこの戻り値で「戻せなかった」ことを伝える（無言の no-op にしない・CONVENTIONS §2.5-3）。
+   * @returns {boolean} 復元できたら true、退避が無ければ false
+   * ※ 復元時のみ store へ保存する副作用あり。
+   */
+  function undoDelete() {
+    if (!pendingUndo) return false;
+    const { task, index } = pendingUndo;
+    pendingUndo = null;
+    const d = load();
+    d.tasks.splice(Math.min(index, d.tasks.length), 0, task); // 元の位置へ（末尾超過は末尾に丸める）
+    save(d);
+    return true;
+  }
 
   // プロジェクト名寄せ（マスタ解決はロジック側の責務）
   /**
@@ -206,6 +247,7 @@
    * ※ store へ保存する副作用あり（全置換）。未登録プロジェクト名は MK.projects へ作成する副作用あり。
    */
   function applyCSV(rows) {
+    drop(); // 全置換でデータセットごと変わるため退避を破棄
     const now = MK.util.nowISO();
     let ok = 0, skip = 0;
     const list = [];
@@ -238,6 +280,7 @@
    * ※ store へ保存する副作用あり。
    */
   function importData(data, mode) {
+    drop(); // 取込でデータが変わるため退避を破棄
     if (mode === "merge") {
       const d = load();
       d.tasks = MK.util.mergeById(d.tasks, data.tasks);
@@ -252,6 +295,7 @@
    * ※ store へ保存し、参照プロジェクトを MK.projects マスタへ作成する副作用あり。
    */
   function loadSample() {
+    drop(); // 全置換でデータセットごと変わるため退避を破棄
     const now = MK.util.nowISO();
     const dayOffset = (n) => MK.util.addDays(MK.util.todayISO(), n);
     const pid = (name) => MK.projects.resolveOrCreate(name);
@@ -324,7 +368,7 @@
   MK.logic = MK.logic || {};
   MK.logic.todo = {
     STATUSES, load, save, tasks, counts, filtered,
-    addTask, updateTask, toggleDone, removeTask,
+    addTask, updateTask, setStatus, toggleDone, removeTask, undoDelete,
     projectNameOf, resolveProject, statusFromCSV, buildCSVRows, applyCSV, dueCounts, summary,
     searchItems, exportData, importData, loadSample,
   };

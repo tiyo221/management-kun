@@ -408,6 +408,25 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-daily-row { flex-wrap: wrap; }
 .mk-daily-row .grow { min-width: 160px; }
 
+/* ---- todo: 操作コスト規約に沿った一覧行（#244 / CONVENTIONS §2.5）----
+   チェック＋タイトル(インライン編集)＋ステータス select＋期日＋詳細＋削除 と要素が多く、
+   375px では1行に収まらない。daily と同じく折り返しを許し、タイトルに下限幅を与える。 */
+.mk-todo-row { flex-wrap: wrap; }
+.mk-todo-row .grow { min-width: 160px; }
+/* 行内コントロールは幅100%の .text-input を内容幅へ抑える（行の flex を壊さない） */
+.mk-todo-control { width: auto; flex: 0 0 auto; min-height: 36px; padding: 6px 8px; font-size: 14px; }
+.mk-todo-status { max-width: 130px; }
+.mk-todo-due { max-width: 150px; }
+/* 低頻度操作（CSV）を退避する最下部の帯。主操作から視覚的に切り離す（§2.5-5）。 */
+.mk-todo-footer { display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-lg); padding-top: var(--space-md); border-top: 1px solid var(--color-hairline-soft); }
+
+/* ---- インライン編集（クリックでその場編集・#244 / CONVENTIONS §2.5-2）---- */
+.mk-inline-edit { display: inline-block; min-width: 0; max-width: 100%; }
+.mk-inline-view { cursor: text; border-radius: var(--rounded-sm); padding: 1px 4px; margin: -1px -4px; }
+.mk-inline-view:hover { background: var(--color-surface-soft); }
+.mk-inline-view.is-placeholder { color: var(--color-muted); }
+.mk-inline-input { width: 100%; min-height: 32px; padding: 4px 8px; font-size: 15px; }
+
 /* ---- goals: ロードマップ ---- */
 .mk-goals-layout { display: flex; gap: var(--space-xl); align-items: flex-start; flex-wrap: wrap; }
 .mk-goals-side { width: 260px; flex: 0 0 260px; display: flex; flex-direction: column; gap: var(--space-xs); }

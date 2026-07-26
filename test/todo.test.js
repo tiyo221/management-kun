@@ -16,6 +16,54 @@ test("todo: 追加は inbox・件数・完了・フィルタ", (MK) => {
   eq(T.filtered("all", "買い").length, 1);
 });
 
+test("todo: setStatus は done で completedAt を打刻し done 以外で null に戻す", (MK) => {
+  // 観点: ステータス変更の業務ルール（完了打刻）が logic に集約されている（view は打刻しない）
+  // 入力: 追加→next 化して打刻が無いこと→done 化→再び waiting 化
+  // 期待: next では completedAt=null、done で completedAt が入り、done 以外へ戻すと null に戻る
+  const T = MK.logic.todo;
+  T.addTask("設計する");
+  const id = T.tasks()[0].id;
+  T.setStatus(id, "next");
+  eq(T.tasks()[0].completedAt, null);
+  T.setStatus(id, "done");
+  assert(T.tasks()[0].completedAt, "done は completedAt を持つ");
+  eq(T.tasks()[0].status, "done");
+  T.setStatus(id, "waiting");
+  eq(T.tasks()[0].completedAt, null);
+  eq(T.counts().done, 0);
+});
+
+test("todo: 削除の取り消し（元の位置へ復元・他の変更が入ると破棄）", (MK) => {
+  // 観点: removeTask が「消した1件＋位置」を退避し、undoDelete で元の位置へ戻せる。
+  //       別の変更（drop を呼ぶ操作）が入ると退避は破棄され、undoDelete は false を返す（CONVENTIONS §2.5-3）
+  // 入力: A/B/C を投入（挿入順で並ぶ）→ 真ん中 B を削除 → undoDelete
+  // 期待: 削除で all=2・並びは [A,C]、undoDelete=true で B が元の位置(中央)へ戻り [A,B,C]
+  const T = MK.logic.todo;
+  T.applyCSV([
+    ["タイトル", "ステータス", "プロジェクト", "コンテキスト", "期限", "メモ"],
+    ["A", "next", "", "", "", ""],
+    ["B", "next", "", "", "", ""],
+    ["C", "next", "", "", "", ""],
+  ]);
+  const titles = () => T.tasks().map((t) => t.title);
+  const bId = T.tasks().find((t) => t.title === "B").id;
+  T.removeTask(bId);
+  eq(T.counts().all, 2);
+  eq(titles(), ["A", "C"]);
+  eq(T.undoDelete(), true);
+  eq(titles(), ["A", "B", "C"]); // 中央の元位置へ戻る
+
+  // 退避が無い状態での undoDelete は false（二重取り消しにならない）
+  eq(T.undoDelete(), false);
+
+  // 削除後に別の変更が入ると退避は破棄される
+  const cId = T.tasks().find((t) => t.title === "C").id;
+  T.removeTask(cId);
+  T.addTask("D");          // drop を呼ぶ操作
+  eq(T.undoDelete(), false); // 破棄済みなので戻せない
+  assert(!titles().includes("C"), "破棄後は C が戻らない");
+});
+
 test("todo: filtered の並び替え（締め切り/プロジェクト/コンテキスト/既定）", (MK) => {
   // 観点: sort 引数で締め切り順(未設定は末尾)・プロジェクト別・コンテキスト別に並び、
   //       既定(created)は追加日順（挿入順＝新しい順）のまま
