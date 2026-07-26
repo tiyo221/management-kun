@@ -205,6 +205,51 @@
     return i;
   };
   ui.textarea = function (value) { const t = el("textarea", { class: "text-input" }); t.value = value || ""; return t; };
+  // クリックでその場編集するテキスト（一覧項目をモーダルを開かず直す・CONVENTIONS §2.5-2）。
+  // 表示⇄入力を切り替えるラッパ要素を返す。Enter または blur で確定、Esc で取消。
+  // opts:
+  //   value        : 現在値（文字列）
+  //   onCommit(next): 値が変わったときだけ呼ぶ（next は trim 済み）。false を返すと不正として元値へ戻す
+  //                   （空必須項目の拒否などは呼び出し側で判定する。ここに業務ルールを持たない）
+  //   placeholder  : 入力時／空表示のプレースホルダ（任意）
+  ui.inlineEdit = function (opts) {
+    opts = opts || {};
+    let value = opts.value == null ? "" : String(opts.value);
+    const wrap = el("span", { class: "mk-inline-edit" });
+    const view = el("span", { class: "mk-inline-view", title: "クリックで編集" });
+    function paintView() {
+      view.textContent = value || opts.placeholder || "";
+      view.classList.toggle("is-placeholder", !value && !!opts.placeholder);
+    }
+    function toView() { wrap.innerHTML = ""; wrap.appendChild(view); paintView(); }
+    function toEdit() {
+      const input = el("input", { class: "text-input mk-inline-input", type: "text", placeholder: opts.placeholder || "" });
+      input.value = value;
+      let settled = false; // Enter→blur の二重確定・Esc→blur での確定を防ぐ
+      function commit() {
+        if (settled) return; settled = true;
+        const next = input.value.trim();
+        if (next !== value) {
+          const res = opts.onCommit ? opts.onCommit(next) : undefined;
+          if (res !== false) value = next; // false＝拒否なので元値を保持
+        }
+        toView();
+      }
+      function cancel() { if (settled) return; settled = true; toView(); }
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); commit(); }
+        else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+      });
+      input.addEventListener("blur", commit);
+      wrap.innerHTML = ""; wrap.appendChild(input);
+      input.focus();
+      if (input.select) input.select();
+    }
+    view.addEventListener("click", toEdit);
+    paintView();
+    wrap.appendChild(view);
+    return wrap;
+  };
   ui.checkbox = function (checked) { const c = el("input", { type: "checkbox" }); c.checked = !!checked; return c; };
   ui.select = function (options, value, onChange) {
     const s = el("select", { class: "text-input" });

@@ -98,7 +98,7 @@ modules/
 
 ### `MK.ui`（描画部品 / `shared/ui.js`）
 - レイアウト: `sectionTitle(text)` / `stack(children)` / `toolbar(children)` / `card(children, {flush})` / `emptyState(text)` / `statsRow([{num,label}])`
-- フォーム: `button(label, {variant,onClick,title})` / `field(label,control)` / `input({type,value,placeholder,onChange,onEnter})` / `textarea(value)` / `checkbox(checked)` / `select(options=[{value,label}], value, onChange)` / `pillTabs(tabs=[{key,label}], activeKey, onChange)`
+- フォーム: `button(label, {variant,onClick,title})` / `field(label,control)` / `input({type,value,placeholder,onChange,onEnter})` / `textarea(value)` / `checkbox(checked)` / `select(options=[{value,label}], value, onChange)` / `pillTabs(tabs=[{key,label}], activeKey, onChange)` / `inlineEdit({value, onCommit(next)→false で拒否, placeholder})`（クリックでその場編集・Enter/blur 確定・Esc 取消。§2.5-2）
 - オーバーレイ: `modal({title, body, actions:[{label,variant,onClick(close)}]})` / `toast(message, type)` / `undoToast(message, onUndo)`（削除の取り消し。6秒表示・「元に戻す」または `Ctrl+Z` で `onUndo`。§2.5-3） / `confirm(message)→Promise<bool>`
 - 方針: **view は部品を自作しない**（`btn/fld/inp` 等をモジュール内に再定義しない）。**ネイティブ `confirm/alert/prompt` は使わず**、上記オーバーレイ部品で代替する。
 
