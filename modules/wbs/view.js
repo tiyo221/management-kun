@@ -312,9 +312,11 @@
     // 対象別 scope（§3.7.4）: io が PJ ごとに targetId を渡す。省略時は表示中の store。
     exportData(targetId) { return L().exportData(targetId); },
     importData(data, mode, targetId) { L().importData(data, mode, targetId); },
-    // サンプル/旧ツール移行の投入先は、自分の次元の既定対象（先頭 PJ・無ければ作成）へ寄せる。
+    // 投入先を指定できる（シェルのサンプル投入バーが表示中の PJ を渡す。Issue #256）。省略時＝
+    // サンプル/旧ツール移行の一括投入は、自分の次元の既定対象（先頭 PJ・無ければ作成）へ寄せる。
     // this はこの def（scope を持つ）。dim 決め打ちを避けつつ既定 PJ を解決する（§3.7.6）。
-    loadSample() {
+    loadSample(targetId) {
+      if (targetId) { L().loadSample(targetId); return; }
       const dim = MK.scope.dimOf(this.scope);
       L().loadSample(dim ? MK.scope.ensureDefaultTarget(dim) : null);
     },

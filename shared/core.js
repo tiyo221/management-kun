@@ -40,6 +40,50 @@
     catch (e) { console.warn("summaryFor() failed:", moduleId, entityType, entityId, e); return null; } // 追跡用に記録（呼び手は壊さない）
   };
 
+  // エクスポート形（＝モジュール自身の namespace のデータ）が空か。配列・オブジェクトの値が
+  // どれも空なら空とみなし、スカラは判定に数えない。**スカラを数えないことは必須**で、
+  // 全モジュールのエクスポートが `version` を持つため、数えると何一つ空にならない
+  // （`uid` / `startTime` / `exportedAt` も同じく既定値・メタでありデータではない）。
+  //
+  // 前提: **データは配列かマップで持つ**（全モジュールの空エクスポートが「スカラ＋空の入れ物」の
+  // 形になっていることを確認済み）。本体をスカラ1本で持つモジュールが出てきたら、それは空と
+  // 誤判定されるのでここを見直すこと（この述語がサンプル投入の唯一の安全装置なので、
+  // 判定を緩めるより前提を壊さない側で守る）。DOM 非依存。
+  MK.isEmptyExport = function (data) {
+    if (!data || typeof data !== "object") return true;
+    // 配列そのものを返すモジュールは現状無いが、Object.keys が添字を返すため下の走査に落とすと
+    // スカラの配列（["a","b"]）が空と判定される。長さで判定して取りこぼさない。
+    if (Array.isArray(data)) return data.length === 0;
+    return Object.keys(data).every((k) => {
+      const v = data[k];
+      if (Array.isArray(v)) return v.length === 0;
+      if (v && typeof v === "object") return Object.keys(v).length === 0;
+      return true;
+    });
+  };
+
+  // 「そのモジュール（scoped ならこの対象）は今サンプルで試せるか」の述語（Issue #256）。
+  // シェルのサンプル投入バーが使う。各モジュールの loadSample() は例外なく全置換のため、
+  // **空のときにしか true を返さない**ことで、実データへ全置換が走る事故を構造的に防ぐ。
+  // 投入と片付け（exportData で退避 → importData で復元）が対で成立するモジュールにだけ出すので、
+  // 3契約を揃えていることを条件にする。未搭載・未実装・exportData が例外のいずれでも false。
+  //
+  // 空判定に summary().empty を使わないのは、それが**モジュール全体**の指標だから:
+  // scoped の wbs / metrics は全 PJ・全プロダクト横断で empty を出すため「他の PJ に1件あると
+  // 空の PJ で出ない」、skills は People マスタが空かどうかまで見るため「人が1人いると永久に
+  // 出ない」。ここで見たいのは「投入先（この対象の自分の namespace）が空か」なので、
+  // 投入先そのものである exportData(targetId) の中身で判定する。DOM 非依存。
+  MK.canOfferSample = function (id, targetId) {
+    const mod = MK.modules[id];
+    if (!mod) return false;
+    if (typeof mod.loadSample !== "function") return false;
+    if (typeof mod.exportData !== "function" || typeof mod.importData !== "function") return false;
+    let data;
+    try { data = mod.exportData(targetId); }
+    catch (e) { console.warn("exportData() failed:", id, e); return false; } // 追跡用に記録（呼び手は壊さない）
+    return MK.isEmptyExport(data);
+  };
+
   // 軽量イベントバス（マスタ変更通知など）
   MK.bus = {
     on(event, handler) {
