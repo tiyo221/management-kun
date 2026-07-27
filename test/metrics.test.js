@@ -151,6 +151,20 @@ test("metrics: summary は達成/計測中・未記録・未達を返す", (MK) 
   eq(s.attention[0].severity, "warn");
 });
 
+test("metrics: 循環を含む取込データでも descendantsOf/tree は無限再帰しない", (MK) => {
+  // 観点: importData は外部 JSON をそのまま格納するため循環（A→B→A）もありうる。木の走査は seen で防御し落ちない
+  // 入力: parentId が相互参照する A↔B を replace で取り込む
+  // 期待: descendantsOf(A) は有限で返り（B を含む）、tree は2ノードを列挙して例外にならない
+  const M = MK.logic.metrics;
+  M.importData({ metrics: [
+    { id: "A", name: "A", kind: "kpi", unit: "", direction: "up", parentId: "B", targetValue: null, records: [], note: "" },
+    { id: "B", name: "B", kind: "kpi", unit: "", direction: "up", parentId: "A", targetValue: null, records: [], note: "" },
+  ] }, "replace");
+  const desc = M.descendantsOf(M.metrics(), "A");
+  assert(desc.indexOf("B") >= 0, "B は A の子孫");
+  eq(M.tree(M.metrics()).length, 2); // 両ノードを取りこぼさず列挙（循環でも有限）
+});
+
 test("metrics: importData の replace と merge", (MK) => {
   // 観点: replace は全置換、merge は id 一致で上書きしつつ既存を残す
   // 入力: 既存A を作り、merge で {A の id→上書きA, 新規B}／その後 replace で {置換のみ1件}

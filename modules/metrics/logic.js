@@ -136,8 +136,12 @@
    * @returns {string[]}
    */
   function descendantsOf(list, id) {
-    const out = [];
-    (function walk(pid) { childrenOf(list, pid).forEach((c) => { out.push(c.id); walk(c.id); }); })(id);
+    const out = [], seen = {};
+    // seen で循環に強くする。自前 CRUD（setParent）は循環を作らないが、importData は外部 JSON を
+    // そのまま格納しうるため、循環データでも無限再帰しないよう ancestorsOf / tree と同じ防御を持たせる。
+    (function walk(pid) {
+      childrenOf(list, pid).forEach((c) => { if (seen[c.id]) return; seen[c.id] = true; out.push(c.id); walk(c.id); });
+    })(id);
     return out;
   }
   /**
