@@ -33,6 +33,7 @@
     wbs:       {},
     techstack: {},
     releases:  {},
+    metrics:   {},
   };
 
   // 既定（マネージャ全部入り）のゾーン割当。index.html は zones を宣言せずこれを使う（＝ここが正）。
@@ -42,7 +43,7 @@
     { label: "自分", modules: ["todo", "daily", "goals", "questions"] },
     { label: "ピープル", modules: ["skills", "resource", "oneonone"] },
     { label: "デリバリー", modules: ["dashboard", "wbs"] },
-    { label: "プロダクト", modules: ["releases"] },
+    { label: "プロダクト", modules: ["releases", "metrics"] },
     { label: "テクノロジー", modules: ["techstack"] },
   ];
 
