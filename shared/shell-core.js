@@ -230,10 +230,13 @@
 
   // ---- モジュールのマウント（global / scoped 共通の入口。§3.7.3）----
   function mountModuleView(view) {
-    const { def, dim, targetId } = scopeOf(view); // resolveTarget は読み取りのみ（副作用なし）
+    const t = scopeOf(view); // resolveTarget は読み取りのみ（副作用なし）
+    const { def, dim, targetId } = t;
     if (!dim) { // global
       appendSampleBar(view);
-      S.mountedModule = def; def.mount(main, ctxFor(view)); return;
+      S.mountedModule = def; def.mount(main, ctxFor(view));
+      sealSampleSnapshot(t); // mount 中の自動投入・正規化まで含めて「投入直後の姿」を確定させる
+      return;
     }
 
     // scoped: 縮退モード（0=作成導線 / 1=畳む / 2+=スイッチャ）で分岐する（§3.7.2）
@@ -247,6 +250,7 @@
     main.appendChild(host);
     S.mountedModule = def;
     def.mount(host, ctxFor(view));
+    sealSampleSnapshot(t);
   }
 
   // ---- サンプル投入バー（Issue #256 / spec §3.6.2）----
@@ -255,7 +259,7 @@
   // 退避はセッション内のメモリのみで localStorage に持たない。リロードで破棄されてバーは通常状態へ
   // 戻る（リロードをまたいで残す＝そのまま使うと判断した、とみなす。永続化は要求が出るまで作らない）。
   // 退避キーは ctx と同じ store 名前空間（scopeOf）にし、scoped モジュールを対象ごとに独立して扱う。
-  // 値は { before: 投入前のデータ, injected: 投入直後の JSON } の組（下の liveSnapshot を参照）。
+  // 値は { before: 投入前のデータ, injected: 投入直後の JSON（未確定なら null）} の組。
   const sampleSnapshots = {};
 
   // 有効な退避だけを返し、古くなっていれば捨てる（CONVENTIONS §2.5-3「退避した1件は、他の変更が
@@ -263,12 +267,29 @@
   // 追記・編集した／JSON を取り込んだ／設定から一括サンプルを入れた／全削除した、のいずれでも――
   // 退避を捨てて片付け導線を引っ込める。捨てないと「サンプルを片付ける」が、ユーザ自身が足した
   // データごと全置換で消してしまう（片付けは replace＝取り消し不能）。
+  // exportData の例外は canOfferSample と同様に握る（ここは main を空にした後・mount の前に
+  // 走るため、投げると画面が白いまま操作不能になる）。
   function liveSnapshot(t) {
     const snap = sampleSnapshots[t.ns];
     if (!snap) return null;
-    if (JSON.stringify(t.def.exportData(t.targetId)) === snap.injected) return snap;
+    if (snap.injected === null) return snap; // 未確定（この描画の最後に sealSampleSnapshot で確定する）
+    let now;
+    try { now = JSON.stringify(t.def.exportData(t.targetId)); }
+    catch (e) { console.warn("exportData() failed:", t.def.id, e); delete sampleSnapshots[t.ns]; return null; }
+    if (now === snap.injected) return snap;
     delete sampleSnapshots[t.ns];
     return null;
+  }
+
+  // 「投入直後の姿」は**描画が終わったあと**に確定させる。バーはモジュール本体より先に描くため、
+  // クリック時点で採ると mount 中の自動投入・正規化（daily の ensureDayInjected がルーチンを
+  // items へ投入して保存する等）を取りこぼし、その差分で退避が即座に無効になる
+  // ＝投入したサンプルを片付けられなくなる。
+  function sealSampleSnapshot(t) {
+    const snap = sampleSnapshots[t.ns];
+    if (!snap || snap.injected !== null) return;
+    try { snap.injected = JSON.stringify(t.def.exportData(t.targetId)); }
+    catch (e) { console.warn("exportData() failed:", t.def.id, e); delete sampleSnapshots[t.ns]; }
   }
 
   function appendSampleBar(view) {
@@ -296,17 +317,26 @@
       // 先に退避してから投入する（loadSample は全置換なので、後から元の状態は取り出せない）。
       const before = t.def.exportData(t.targetId);
       t.def.loadSample(t.targetId);
-      sampleSnapshots[t.ns] = { before, injected: JSON.stringify(t.def.exportData(t.targetId)) };
+      // 何も入らないことがある（oneonone は人が、releases はプロダクトが1件も無いと作れない）。
+      // そのまま退避を残すと、空のまま「サンプルを表示しています」に切り替わって、入っていないのに
+      // 片付け導線だけが出る＝投入をやり直せなくなる。退避を残さず、足りないものを伝える。
+      if (MK.isEmptyExport(t.def.exportData(t.targetId))) {
+        route(view);
+        MK.ui.toast("サンプルを作れませんでした。先に人・プロジェクト・プロダクトを登録してください", "info");
+        return;
+      }
+      sampleSnapshots[t.ns] = { before, injected: null }; // 確定は描画後（sealSampleSnapshot）
       route(view);
       MK.ui.toast("サンプルを入れました", "success");
     });
   }
 
   // scoped は投入先が「表示中の対象」なので、どこへ入るのかを文面で名指しする（§3.7.2 の主語）。
+  // 名前が取れない・空のときは接頭辞ごと落とす（「「」にはデータがありません」を出さない）。
   function sampleEmptyText(t) {
-    const name = t.dim && t.targetId && MK.scope.master(t.dim).get(t.targetId);
-    const where = name ? "「" + (name.name || "") + "」には" : "";
-    return where + "データがありません。サンプルを入れると、中身の入った状態で試せます。";
+    const entity = t.dim && t.targetId ? MK.scope.master(t.dim).get(t.targetId) : null;
+    const name = entity && entity.name ? entity.name : "";
+    return (name ? "「" + name + "」には" : "") + "データがありません。サンプルを入れると、中身の入った状態で試せます。";
   }
 
   function sampleBar(text, label, onClick) {

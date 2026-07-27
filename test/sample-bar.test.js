@@ -5,6 +5,16 @@
    バーの描画自体はシェル（shared/shell-core.js）にあり DOM を伴うため、判定だけを切り出して検証する。 */
 "use strict";
 
+// 擬似モジュールの登録は reset() の対象外でスイート全体に残る。実ロジックへ委譲する def を
+// 置きっぱなしにすると、全モジュールを走査する io.buildEnvelope / importEnvelope の既存テスト
+// （test/shared.test.js・test/wbs-scope.test.js）が同じデータを二重に通ることになるため、
+// 各テストは使い終わった def をここで外す。
+function unregister(MK, id) {
+  delete MK.modules[id];
+  const i = MK.moduleOrder.indexOf(id);
+  if (i >= 0) MK.moduleOrder.splice(i, 1);
+}
+
 // ---- MK.isEmptyExport（エクスポート形が空か）----
 
 test("isEmptyExport: スカラだけ／空の入れ物だけなら空", (MK) => {
@@ -50,6 +60,7 @@ test("canOfferSample: loadSample を持たないモジュールは false", (MK) 
   // 期待: false
   MK.registerModule("__sb_no_sample__", { exportData: () => ({ version: 1, items: [] }), importData: () => {} });
   eq(MK.canOfferSample("__sb_no_sample__"), false);
+  unregister(MK, "__sb_no_sample__");
 });
 
 test("canOfferSample: exportData / importData を欠くモジュールは false", (MK) => {
@@ -62,6 +73,7 @@ test("canOfferSample: exportData / importData を欠くモジュールは false"
   MK.registerModule("__sb_no_import__", { loadSample: () => {}, exportData: () => ({ version: 1, items: [] }) });
   eq(MK.canOfferSample("__sb_no_export__"), false);
   eq(MK.canOfferSample("__sb_no_import__"), false);
+  unregister(MK, "__sb_no_export__"); unregister(MK, "__sb_no_import__");
 });
 
 test("canOfferSample: 3契約が揃い投入先が空なら true", (MK) => {
@@ -72,6 +84,7 @@ test("canOfferSample: 3契約が揃い投入先が空なら true", (MK) => {
     exportData: () => ({ version: 1, items: [] }), importData: () => {}, loadSample: () => {},
   });
   eq(MK.canOfferSample("__sb_ok__"), true);
+  unregister(MK, "__sb_ok__");
 });
 
 test("canOfferSample: データがあるモジュールには出さない", (MK) => {
@@ -83,6 +96,7 @@ test("canOfferSample: データがあるモジュールには出さない", (MK)
     exportData: () => ({ version: 1, items: [{ id: "x" }] }), importData: () => {}, loadSample: () => {},
   });
   eq(MK.canOfferSample("__sb_has_data__"), false);
+  unregister(MK, "__sb_has_data__");
 });
 
 test("canOfferSample: exportData が例外を投げても false（呼び手へ伝播しない）", (MK) => {
@@ -93,10 +107,7 @@ test("canOfferSample: exportData が例外を投げても false（呼び手へ�
     exportData: () => { throw new Error("boom"); }, importData: () => {}, loadSample: () => {},
   });
   eq(MK.canOfferSample("__sb_throws__"), false);
-  // 後片付け: 登録は reset() の対象外でスイート全体に残るため、exportData が throw する def を
-  // 置きっぱなしにすると、全モジュールを走査する io.buildEnvelope の既存テストを巻き添えにする。
-  delete MK.modules["__sb_throws__"];
-  MK.moduleOrder.splice(MK.moduleOrder.indexOf("__sb_throws__"), 1);
+  unregister(MK, "__sb_throws__");
 });
 
 test("canOfferSample: scoped は対象ごとに判定する（他対象のデータに引きずられない）", (MK) => {
@@ -111,6 +122,7 @@ test("canOfferSample: scoped は対象ごとに判定する（他対象のデー
   });
   eq(MK.canOfferSample("__sb_scoped__", "A"), false);
   eq(MK.canOfferSample("__sb_scoped__", "B"), true);
+  unregister(MK, "__sb_scoped__");
 });
 
 test("canOfferSample: skills は People マスタに人がいても自分のデータが空なら true", (MK) => {
@@ -127,6 +139,7 @@ test("canOfferSample: skills は People マスタに人がいても自分のデ�
   });
   eq(MK.readSummary("__sb_skills__").empty, false, "summary().empty は人がいると false になる");
   eq(MK.canOfferSample("__sb_skills__"), true, "それでも自分のデータが空ならバーは出せる");
+  unregister(MK, "__sb_skills__");
 });
 
 // ---- 投入 → 片付けの往復（シェルが行う手順）----
@@ -151,6 +164,7 @@ test("サンプル投入バー: 退避→投入→片付けで投入前（空）
   def.importData(before, "replace"); // 片付け
   eq(L.tasks().length, 0);
   eq(MK.canOfferSample("__sb_roundtrip__"), true, "空へ戻ったので再び投入バーが出る");
+  unregister(MK, "__sb_roundtrip__");
 });
 
 test("サンプル投入バー: 投入後に変更が入ったら退避は無効（片付けで巻き添えにしない）", (MK) => {
@@ -166,6 +180,38 @@ test("サンプル投入バー: 投入後に変更が入ったら退避は無効
 
   L.addTask("サンプルの上に足した自分のタスク");
   eq(JSON.stringify(L.exportData()) === injected, false, "追記後は不一致＝退避を破棄する");
+});
+
+test("サンプル投入バー: 描画で自動投入するモジュール（daily）は mount 後に投入直後の姿を確定する", (MK) => {
+  // 観点: バーはモジュール本体より先に描かれるため、投入クリックの時点で「投入直後の姿」を採ると
+  //       mount 中の自動投入（daily の ensureDayInjected がその日のルーチンを items へ投入して保存）を
+  //       取りこぼす。差分が出た瞬間に退避が無効になり、daily だけ片付けが必ず失敗する
+  // 入力: loadSample 直後と、描画（ensureDayInjected）を通した後のエクスポート
+  // 期待: クリック時点の姿は描画後と一致しない＝確定は mount 後でなければならない
+  const L = MK.logic.daily;
+  L.loadSample();
+  const atClick = JSON.stringify(L.exportData());
+  L.ensureDayInjected(MK.util.todayISO()); // 描画時に走る
+  const afterMount = JSON.stringify(L.exportData());
+  eq(atClick === afterMount, false, "クリック時点で確定するとルーチン自動投入を取りこぼす");
+  assert(L.exportData().routines.length > 0, "サンプルにルーチン定義が含まれている");
+  // 確定を mount 後に遅らせれば、以降の再描画では一致し続ける（＝片付けが効く）
+  L.ensureDayInjected(MK.util.todayISO()); // 冪等なので二度目は変わらない
+  eq(JSON.stringify(L.exportData()) === afterMount, true, "確定後の再描画では差分が出ない");
+});
+
+test("サンプル投入バー: マスタが空だと oneonone / releases は投入しても空のまま", (MK) => {
+  // 観点: 両モジュールの loadSample() は人・プロダクトが1件も無いと空を保存して return する。
+  //       退避を残すと、入っていないのに「サンプルを表示しています」＋片付け導線だけが出て
+  //       投入をやり直せなくなる。シェルは投入後に空判定し直し、空なら退避を残さない
+  // 入力: マスタが空の状態で loadSample
+  // 期待: 投入後も isEmptyExport が true（＝シェルは退避を残さない分岐へ入る）
+  eq(MK.people.all().length, 0);
+  eq(MK.products.all().length, 0);
+  MK.logic.oneonone.loadSample();
+  MK.logic.releases.loadSample();
+  eq(MK.isEmptyExport(MK.logic.oneonone.exportData()), true);
+  eq(MK.isEmptyExport(MK.logic.releases.exportData()), true);
 });
 
 test("サンプル投入バー: 投入後に JSON を取り込んでも退避は無効になる", (MK) => {
