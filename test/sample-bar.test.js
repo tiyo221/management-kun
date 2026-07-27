@@ -1,9 +1,41 @@
-/* サンプル投入バーの表示条件 MK.canOfferSample（Issue #256）—
-   空のモジュールを「入れて試す → 要らなければ片付ける」で判断できるようにするための述語。
+/* サンプル投入バーの表示条件 MK.canOfferSample / MK.isEmptyExport（Issue #256・spec §3.6.2）—
+   空のモジュールを「入れて試す → 要らなければ片付ける」でその場で判断できるようにするための述語。
    各モジュールの loadSample() は例外なく全置換のため、**空のときしか true にならない**ことが
    実データ消失を防ぐ唯一の砦になる。ここが緩むと todo 等の実データが黙って吹き飛ぶ。
    バーの描画自体はシェル（shared/shell-core.js）にあり DOM を伴うため、判定だけを切り出して検証する。 */
 "use strict";
+
+// ---- MK.isEmptyExport（エクスポート形が空か）----
+
+test("isEmptyExport: スカラだけ／空の入れ物だけなら空", (MK) => {
+  // 観点: 全モジュールの空エクスポートは「version 等のスカラ＋空配列／空オブジェクト」の形。
+  //       スカラを空判定に数えると version:1 で常に非空になり、バーが永久に出なくなる
+  // 入力: 実モジュールの空エクスポートと同型の値
+  // 期待: すべて true
+  eq(MK.isEmptyExport({ version: 1, tasks: [] }), true);              // todo / wbs 系
+  eq(MK.isEmptyExport({ version: 1, uid: 1, tasks: [] }), true);      // wbs（uid つき）
+  eq(MK.isEmptyExport({ version: 1, skills: [], ratings: {} }), true); // skills（配列＋マップ）
+  eq(MK.isEmptyExport({ version: 1, startTime: "09:00", items: [], routines: [], injected: {} }), true); // daily
+});
+
+test("isEmptyExport: 中身のある配列・オブジェクトがあれば非空", (MK) => {
+  // 観点: 1件でもデータがあれば false（＝バーを出さない）。全置換の投入を防ぐ肝
+  // 入力: 配列に1件／マップに1キー
+  // 期待: どちらも false
+  eq(MK.isEmptyExport({ version: 1, tasks: [{ id: "t1" }] }), false);
+  eq(MK.isEmptyExport({ version: 1, skills: [], ratings: { "m1:s1": "3" } }), false);
+});
+
+test("isEmptyExport: null / 非オブジェクトは空扱い", (MK) => {
+  // 観点: exportData が未初期化で null 等を返しても落ちない
+  // 入力: null / undefined / 文字列
+  // 期待: true（空扱い）
+  eq(MK.isEmptyExport(null), true);
+  eq(MK.isEmptyExport(undefined), true);
+  eq(MK.isEmptyExport("x"), true);
+});
+
+// ---- MK.canOfferSample（バーを出してよいか）----
 
 test("canOfferSample: 未登録・未搭載の id は false（例外にしない）", (MK) => {
   // 観点: 着脱で外した／存在しない id を問い合わせても壊れない（spec §9.5 の作法）
@@ -14,84 +46,90 @@ test("canOfferSample: 未登録・未搭載の id は false（例外にしない
 
 test("canOfferSample: loadSample を持たないモジュールは false", (MK) => {
   // 観点: サンプルを持たないモジュール（dashboard のような横断集約ビュー）にバーを出さない
-  // 入力: summary は空を返すが loadSample が無い def
+  // 入力: エクスポートは空だが loadSample が無い def
   // 期待: false
-  MK.registerModule("__sb_no_sample__", {
-    summary: () => ({ empty: true, stats: [] }),
-    exportData: () => ({}), importData: () => {},
-  });
+  MK.registerModule("__sb_no_sample__", { exportData: () => ({ version: 1, items: [] }), importData: () => {} });
   eq(MK.canOfferSample("__sb_no_sample__"), false);
 });
 
 test("canOfferSample: exportData / importData を欠くモジュールは false", (MK) => {
   // 観点: 片付け（exportData で退避 → importData で復元）が成立しない相手には投入を勧めない。
-  //       「入れたら戻せない」バーを出すと、空だから安全という前提が崩れる
+  //       「入れたら戻せない」バーを出すと、空だから安全という前提が崩れる。実例は resource で、
+  //       実データが共有マスタ（allocations / demands）にあり loadSample が replaceAll で置き換える
   // 入力: loadSample はあるが exportData が無い def／importData が無い def
   // 期待: どちらも false
-  MK.registerModule("__sb_no_export__", {
-    summary: () => ({ empty: true, stats: [] }), loadSample: () => {}, importData: () => {},
-  });
-  MK.registerModule("__sb_no_import__", {
-    summary: () => ({ empty: true, stats: [] }), loadSample: () => {}, exportData: () => ({}),
-  });
+  MK.registerModule("__sb_no_export__", { loadSample: () => {}, importData: () => {} });
+  MK.registerModule("__sb_no_import__", { loadSample: () => {}, exportData: () => ({ version: 1, items: [] }) });
   eq(MK.canOfferSample("__sb_no_export__"), false);
   eq(MK.canOfferSample("__sb_no_import__"), false);
 });
 
-test("canOfferSample: summary 未実装は false（空か判断できないので出さない）", (MK) => {
-  // 観点: 空かどうかを問い合わせられない相手には出さない（安全側に倒す）
-  // 入力: 3契約は揃うが summary 任意契約を実装しない def
-  // 期待: false
-  MK.registerModule("__sb_no_summary__", {
-    loadSample: () => {}, exportData: () => ({}), importData: () => {},
-  });
-  eq(MK.canOfferSample("__sb_no_summary__"), false);
-});
-
-test("canOfferSample: データがあるモジュール（empty:false）には出さない", (MK) => {
-  // 観点: 本 Issue の肝。loadSample は全置換なので、実データのあるモジュールに出したら
-  //       ワンクリックでデータが消える。empty:false では絶対に true を返さないこと
-  // 入力: 3契約が揃い summary が empty:false を返す def
-  // 期待: false
-  MK.registerModule("__sb_has_data__", {
-    summary: () => ({ empty: false, stats: [{ label: "未完", value: 3 }] }),
-    loadSample: () => {}, exportData: () => ({}), importData: () => {},
-  });
-  eq(MK.canOfferSample("__sb_has_data__"), false);
-});
-
-test("canOfferSample: 3契約が揃い空（empty:true）なら true", (MK) => {
+test("canOfferSample: 3契約が揃い投入先が空なら true", (MK) => {
   // 観点: 正常系。投入と片付けが対で成立し、かつ失うものが無いときだけ出る
-  // 入力: loadSample / exportData / importData を持ち summary が empty:true の def
+  // 入力: loadSample / exportData / importData を持ち、エクスポートが空の def
   // 期待: true
   MK.registerModule("__sb_ok__", {
-    summary: () => ({ empty: true, stats: [] }),
-    loadSample: () => {}, exportData: () => ({}), importData: () => {},
+    exportData: () => ({ version: 1, items: [] }), importData: () => {}, loadSample: () => {},
   });
   eq(MK.canOfferSample("__sb_ok__"), true);
 });
 
-test("canOfferSample: empty が真偽値でない（欠落・undefined）なら false", (MK) => {
-  // 観点: summary の形が契約どおりでないモジュールを「空」と誤認しない（緩い真偽判定にしない）
-  // 入力: stats だけ返して empty を持たない summary
+test("canOfferSample: データがあるモジュールには出さない", (MK) => {
+  // 観点: 本 Issue の肝。loadSample は全置換なので、実データのあるモジュールに出したら
+  //       ワンクリックでデータが消える。1件でもあれば絶対に true を返さないこと
+  // 入力: エクスポートに1件だけ入っている def
   // 期待: false
-  MK.registerModule("__sb_no_empty_key__", {
-    summary: () => ({ stats: [] }),
-    loadSample: () => {}, exportData: () => ({}), importData: () => {},
+  MK.registerModule("__sb_has_data__", {
+    exportData: () => ({ version: 1, items: [{ id: "x" }] }), importData: () => {}, loadSample: () => {},
   });
-  eq(MK.canOfferSample("__sb_no_empty_key__"), false);
+  eq(MK.canOfferSample("__sb_has_data__"), false);
 });
 
-test("canOfferSample: summary が例外を投げても false（呼び手へ伝播しない）", (MK) => {
-  // 観点: 1モジュールの summary バグでモジュール画面全体が開けなくならない（readSummary 経由の握り）
-  // 入力: summary が必ず throw する def
+test("canOfferSample: exportData が例外を投げても false（呼び手へ伝播しない）", (MK) => {
+  // 観点: 1モジュールのバグでモジュール画面全体が開けなくならない（readSummary と同じ握り）
+  // 入力: exportData が必ず throw する def
   // 期待: 例外を握って false
   MK.registerModule("__sb_throws__", {
-    summary: () => { throw new Error("boom"); },
-    loadSample: () => {}, exportData: () => ({}), importData: () => {},
+    exportData: () => { throw new Error("boom"); }, importData: () => {}, loadSample: () => {},
   });
   eq(MK.canOfferSample("__sb_throws__"), false);
+  // 後片付け: 登録は reset() の対象外でスイート全体に残るため、exportData が throw する def を
+  // 置きっぱなしにすると、全モジュールを走査する io.buildEnvelope の既存テストを巻き添えにする。
+  delete MK.modules["__sb_throws__"];
+  MK.moduleOrder.splice(MK.moduleOrder.indexOf("__sb_throws__"), 1);
 });
+
+test("canOfferSample: scoped は対象ごとに判定する（他対象のデータに引きずられない）", (MK) => {
+  // 観点: 空判定に summary().empty（＝モジュール全体）を使わない理由そのもの。wbs は全 PJ 横断で
+  //       empty を出すため、他の PJ に1件あるだけで「空の PJ を開いてもバーが出ない」になる。
+  //       投入先は表示中の対象なので、判定も対象別でなければ主要シナリオ（新しい PJ でまず試す）が死ぬ
+  // 入力: PJ-A にだけデータがある scoped 相当の def へ、対象 id を変えて問い合わせる
+  // 期待: PJ-A は false、空の PJ-B は true
+  const data = { A: { version: 1, tasks: [{ id: 1 }] }, B: { version: 1, tasks: [] } };
+  MK.registerModule("__sb_scoped__", {
+    exportData: (targetId) => data[targetId], importData: () => {}, loadSample: () => {},
+  });
+  eq(MK.canOfferSample("__sb_scoped__", "A"), false);
+  eq(MK.canOfferSample("__sb_scoped__", "B"), true);
+});
+
+test("canOfferSample: skills は People マスタに人がいても自分のデータが空なら true", (MK) => {
+  // 観点: skills.summary().empty は People マスタが空かまで見る（ms.length === 0 && list.length === 0）。
+  //       これを空判定に使うと「人が1人でもいると skills では永久にバーが出ない」になる。
+  //       判定は投入先（自分の namespace）だけを見ること
+  // 入力: People マスタに1人いる状態で、skills の logic に委譲する def
+  // 期待: skills 自身のデータは空なので true
+  MK.people.create({ name: "佐藤 花子" });
+  const L = MK.logic.skills;
+  MK.registerModule("__sb_skills__", {
+    summary: () => L.summary(), exportData: () => L.exportData(),
+    importData: (d, m) => L.importData(d, m), loadSample: () => L.loadSample(),
+  });
+  eq(MK.readSummary("__sb_skills__").empty, false, "summary().empty は人がいると false になる");
+  eq(MK.canOfferSample("__sb_skills__"), true, "それでも自分のデータが空ならバーは出せる");
+});
+
+// ---- 投入 → 片付けの往復（シェルが行う手順）----
 
 test("サンプル投入バー: 退避→投入→片付けで投入前（空）の状態へ戻る", (MK) => {
   // 観点: シェルが行う一連の流れ（exportData で退避 → loadSample → importData(replace) で復元）が
@@ -100,20 +138,45 @@ test("サンプル投入バー: 退避→投入→片付けで投入前（空）
   // 期待: 投入でタスクが増え、片付けで 0 件（＝投入前）へ戻る
   const L = MK.logic.todo;
   MK.registerModule("__sb_roundtrip__", {
-    summary: () => L.summary(),
-    exportData: () => L.exportData(),
-    importData: (d, m) => L.importData(d, m),
-    loadSample: () => L.loadSample(),
+    exportData: () => L.exportData(), importData: (d, m) => L.importData(d, m), loadSample: () => L.loadSample(),
   });
   const def = MK.modules["__sb_roundtrip__"];
 
   eq(MK.canOfferSample("__sb_roundtrip__"), true, "空なので投入バーが出る");
-  const snapshot = def.exportData(); // シェルが投入前に取る退避
+  const before = def.exportData(); // シェルが投入前に取る退避
   def.loadSample();
   assert(L.tasks().length > 0, "サンプルが入っている");
   eq(MK.canOfferSample("__sb_roundtrip__"), false, "空でなくなったので投入バーは出ない");
 
-  def.importData(snapshot, "replace"); // 片付け
+  def.importData(before, "replace"); // 片付け
   eq(L.tasks().length, 0);
   eq(MK.canOfferSample("__sb_roundtrip__"), true, "空へ戻ったので再び投入バーが出る");
+});
+
+test("サンプル投入バー: 投入後に変更が入ったら退避は無効（片付けで巻き添えにしない）", (MK) => {
+  // 観点: CONVENTIONS §2.5-3「退避した1件は、他の変更が入った時点で破棄する」。サンプルを土台に
+  //       自分のタスクを足したあとで片付けると、片付け（replace・取り消し不能）がその追記ごと消す。
+  //       シェルは投入直後の姿を覚えておき、現在のデータと違えば退避を捨てる
+  // 入力: 投入 → 投入直後のスナップショットを取る → タスクを1件追加
+  // 期待: 追加前は一致（退避は有効）、追加後は不一致（退避は無効＝片付けを出さない）
+  const L = MK.logic.todo;
+  L.loadSample();
+  const injected = JSON.stringify(L.exportData());
+  eq(JSON.stringify(L.exportData()) === injected, true, "何もしなければ退避は有効なまま");
+
+  L.addTask("サンプルの上に足した自分のタスク");
+  eq(JSON.stringify(L.exportData()) === injected, false, "追記後は不一致＝退避を破棄する");
+});
+
+test("サンプル投入バー: 投入後に JSON を取り込んでも退避は無効になる", (MK) => {
+  // 観点: 上と同じ破棄条件の別経路。設定からの JSON 取込・一括サンプル投入で中身が入れ替わった
+  //       あとに片付けると、取り込んだ実データが投入前の空へ巻き戻る
+  // 入力: 投入 → 投入直後のスナップショット → 別データを replace で取り込む
+  // 期待: 不一致（退避は無効）
+  const L = MK.logic.todo;
+  L.loadSample();
+  const injected = JSON.stringify(L.exportData());
+
+  L.importData({ version: 1, tasks: [{ id: "t_imported", title: "取り込んだ実データ", status: "next" }] }, "replace");
+  eq(JSON.stringify(L.exportData()) === injected, false);
 });

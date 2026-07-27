@@ -146,13 +146,20 @@
     setSettings({ scope: s.scope });
   }
 
-  // ---- ctx（モジュールへ渡す契約。spec §3.5 / §3.7.3）----
-  function ctxFor(id) {
+  // ---- 現在のスコープ解決（次元・対象 id・store 名前空間）----
+  // ctx・マウント・サンプル投入バーが同じ対象／同じ名前空間を見る必要があるため1か所に集約する
+  // （別々に解決すると、片方を変えたときに黙ってズレる）。global モジュールでは dim/targetId が null。
+  function scopeOf(id) {
     const def = MK.modules[id] || {};
     const dim = MK.scope.dimOf(def.scope);                 // scoped なら次元 config、global なら null
     const targetId = dim ? MK.scope.resolveTarget(dim, getScopeTarget(dim.dim)) : null;
     // scoped は対象別 namespace（mk:module:<id>:<targetId>:v1）へ、global は従来通り（§3.7.4）
-    const ns = MK.scope.storeNsFor(id, def.scope, targetId);
+    return { def, dim, targetId, ns: MK.scope.storeNsFor(id, def.scope, targetId) };
+  }
+
+  // ---- ctx（モジュールへ渡す契約。spec §3.5 / §3.7.3）----
+  function ctxFor(id) {
+    const { def, dim, targetId, ns } = scopeOf(id);
     let scope = null;
     if (dim && targetId) scope = { dim: dim.dim, id: targetId, entity: MK.scope.master(dim).get(targetId) };
     return {
@@ -223,8 +230,7 @@
 
   // ---- モジュールのマウント（global / scoped 共通の入口。§3.7.3）----
   function mountModuleView(view) {
-    const def = MK.modules[view];
-    const dim = MK.scope.dimOf(def.scope);
+    const { def, dim, targetId } = scopeOf(view); // resolveTarget は読み取りのみ（副作用なし）
     if (!dim) { // global
       appendSampleBar(view);
       S.mountedModule = def; def.mount(main, ctxFor(view)); return;
@@ -234,7 +240,6 @@
     const entities = MK.scope.entities(dim);
     const mode = MK.scope.mode(entities.length);
     if (mode === "empty") { renderScopeEmpty(dim); return; }
-    const targetId = MK.scope.resolveTarget(dim, getScopeTarget(dim.dim));
     setScopeTarget(dim.dim, targetId); // 正規化した現在対象を保存（削除で無効化された id を先頭へ寄せる等）
     main.appendChild(renderScopeBar(view, dim, entities, targetId, mode));
     appendSampleBar(view); // スコープバーの下・モジュール本体の上（対象を切り替えてから投入先を判断できる並び）
@@ -244,21 +249,26 @@
     def.mount(host, ctxFor(view));
   }
 
-  // ---- サンプル投入バー（Issue #256）----
+  // ---- サンプル投入バー（Issue #256 / spec §3.6.2）----
   // 空のモジュールを「入れて試す → 要らなければ片付ける」でその場で判断できるようにする。投入の
   // 可否判定は DOM 非依存の述語 MK.canOfferSample（core.js）に委ね、ここは描画と退避の管理だけを持つ。
   // 退避はセッション内のメモリのみで localStorage に持たない。リロードで破棄されてバーは通常状態へ
   // 戻る（リロードをまたいで残す＝そのまま使うと判断した、とみなす。永続化は要求が出るまで作らない）。
-  // 退避キーは ctx と同じ store 名前空間にし、scoped モジュールを対象ごとに独立して扱う。
+  // 退避キーは ctx と同じ store 名前空間（scopeOf）にし、scoped モジュールを対象ごとに独立して扱う。
+  // 値は { before: 投入前のデータ, injected: 投入直後の JSON } の組（下の liveSnapshot を参照）。
   const sampleSnapshots = {};
 
-  // 投入・片付けの宛先（def と対象 id）と退避キーをまとめて解決する。
-  // targetId は global では null（def 側の実装が省略時の既定として扱う）。
-  function sampleTarget(view) {
-    const def = MK.modules[view];
-    const dim = MK.scope.dimOf(def.scope);
-    const targetId = dim ? MK.scope.resolveTarget(dim, getScopeTarget(dim.dim)) : null;
-    return { def, targetId, key: MK.scope.storeNsFor(view, def.scope, targetId) };
+  // 有効な退避だけを返し、古くなっていれば捨てる（CONVENTIONS §2.5-3「退避した1件は、他の変更が
+  // 入った時点で破棄する」）。投入直後の姿を覚えておき、現在のデータがそれと違えば――サンプルの上へ
+  // 追記・編集した／JSON を取り込んだ／設定から一括サンプルを入れた／全削除した、のいずれでも――
+  // 退避を捨てて片付け導線を引っ込める。捨てないと「サンプルを片付ける」が、ユーザ自身が足した
+  // データごと全置換で消してしまう（片付けは replace＝取り消し不能）。
+  function liveSnapshot(t) {
+    const snap = sampleSnapshots[t.ns];
+    if (!snap) return null;
+    if (JSON.stringify(t.def.exportData(t.targetId)) === snap.injected) return snap;
+    delete sampleSnapshots[t.ns];
+    return null;
   }
 
   function appendSampleBar(view) {
@@ -266,26 +276,37 @@
     if (bar) main.appendChild(bar);
   }
 
-  // 退避があれば片付けバー、無ければ（かつ空なら）投入バー。どちらでもなければ null（何も出さない）。
-  // 判定順が逆だと、投入直後は空でなくなるため片付け導線が出せない。
+  // 有効な退避があれば片付けバー、無ければ（かつ投入先が空なら）投入バー。どちらでもなければ
+  // null（何も出さない）。判定順が逆だと、投入直後は空でなくなるため片付け導線が出せない。
   function renderSampleBar(view) {
-    const t = sampleTarget(view);
-    if (Object.prototype.hasOwnProperty.call(sampleSnapshots, t.key)) {
+    const t = scopeOf(view);
+    if (liveSnapshot(t)) {
       return sampleBar("サンプルを表示しています。", "サンプルを片付ける", () => {
-        t.def.importData(sampleSnapshots[t.key], "replace", t.targetId);
-        delete sampleSnapshots[t.key];
+        // 押した時点でも確かめる（描画後にサンプルの上へ書き足されていることがある）。
+        const snap = liveSnapshot(t);
+        if (!snap) { route(view); MK.ui.toast("サンプルを入れたあとに変更があったため、片付けを取りやめました", "info"); return; }
+        t.def.importData(snap.before, "replace", t.targetId);
+        delete sampleSnapshots[t.ns];
         route(view);
         MK.ui.toast("サンプルを片付けました", "success");
       });
     }
-    if (!MK.canOfferSample(view)) return null;
-    return sampleBar("データがありません。サンプルを入れると、中身の入った状態で試せます。", "サンプルを入れて試す", () => {
+    if (!MK.canOfferSample(view, t.targetId)) return null;
+    return sampleBar(sampleEmptyText(t), "サンプルを入れて試す", () => {
       // 先に退避してから投入する（loadSample は全置換なので、後から元の状態は取り出せない）。
-      sampleSnapshots[t.key] = t.def.exportData(t.targetId);
+      const before = t.def.exportData(t.targetId);
       t.def.loadSample(t.targetId);
+      sampleSnapshots[t.ns] = { before, injected: JSON.stringify(t.def.exportData(t.targetId)) };
       route(view);
       MK.ui.toast("サンプルを入れました", "success");
     });
+  }
+
+  // scoped は投入先が「表示中の対象」なので、どこへ入るのかを文面で名指しする（§3.7.2 の主語）。
+  function sampleEmptyText(t) {
+    const name = t.dim && t.targetId && MK.scope.master(t.dim).get(t.targetId);
+    const where = name ? "「" + (name.name || "") + "」には" : "";
+    return where + "データがありません。サンプルを入れると、中身の入った状態で試せます。";
   }
 
   function sampleBar(text, label, onClick) {
