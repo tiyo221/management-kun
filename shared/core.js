@@ -51,6 +51,9 @@
   // 判定を緩めるより前提を壊さない側で守る）。DOM 非依存。
   MK.isEmptyExport = function (data) {
     if (!data || typeof data !== "object") return true;
+    // 配列そのものを返すモジュールは現状無いが、Object.keys が添字を返すため下の走査に落とすと
+    // スカラの配列（["a","b"]）が空と判定される。長さで判定して取りこぼさない。
+    if (Array.isArray(data)) return data.length === 0;
     return Object.keys(data).every((k) => {
       const v = data[k];
       if (Array.isArray(v)) return v.length === 0;

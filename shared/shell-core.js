@@ -306,7 +306,7 @@
         // 押した時点でも確かめる（描画後にサンプルの上へ書き足されていることがある）。
         const snap = liveSnapshot(t);
         if (!snap) { route(view); MK.ui.toast("サンプルを入れたあとに変更があったため、片付けを取りやめました", "info"); return; }
-        t.def.importData(snap.before, "replace", t.targetId);
+        if (!runSampleOp(view, () => t.def.importData(snap.before, "replace", t.targetId))) return;
         delete sampleSnapshots[t.ns];
         route(view);
         MK.ui.toast("サンプルを片付けました", "success");
@@ -314,9 +314,18 @@
     }
     if (!MK.canOfferSample(view, t.targetId)) return null;
     return sampleBar(sampleEmptyText(t), "サンプルを入れて試す", () => {
+      // 押した時点でも空か確かめる。バーはシェルの main 直下でモジュール本体とは兄弟のため、
+      // モジュール側の render()（root の作り直し）ではバーが消えない ── 描画後に本体のフォームから
+      // 入力していると、バーだけが「空」のまま残る。ここで確かめないと、全置換の loadSample が
+      // 入力したばかりのデータを消す（片付け側と対称にする）。
+      if (!MK.canOfferSample(view, t.targetId)) {
+        route(view);
+        MK.ui.toast("データが入ったため、サンプル投入を取りやめました", "info");
+        return;
+      }
       // 先に退避してから投入する（loadSample は全置換なので、後から元の状態は取り出せない）。
       const before = t.def.exportData(t.targetId);
-      t.def.loadSample(t.targetId);
+      if (!runSampleOp(view, () => t.def.loadSample(t.targetId))) return;
       // 何も入らないことがある（oneonone は人が、releases はプロダクトが1件も無いと作れない）。
       // そのまま退避を残すと、空のまま「サンプルを表示しています」に切り替わって、入っていないのに
       // 片付け導線だけが出る＝投入をやり直せなくなる。退避を残さず、足りないものを伝える。
@@ -331,6 +340,20 @@
     });
   }
 
+  // 破壊的な操作（loadSample / importData）を実行し、失敗したら画面を作り直して伝える。
+  // 読み取り側（canOfferSample / liveSnapshot / sealSampleSnapshot）は例外を握るのに、実際に
+  // 書き換える側だけ素通しだと、投げたときトーストも再描画も走らず「何も起きなかった」ように
+  // 見える（バーは押せるまま残る）。戻り値は成功したか。
+  function runSampleOp(view, op) {
+    try { op(); return true; }
+    catch (e) {
+      console.error("sample operation failed:", view, e);
+      route(view);
+      MK.ui.toast("サンプルの操作に失敗しました", "error");
+      return false;
+    }
+  }
+
   // scoped は投入先が「表示中の対象」なので、どこへ入るのかを文面で名指しする（§3.7.2 の主語）。
   // 名前が取れない・空のときは接頭辞ごと落とす（「「」にはデータがありません」を出さない）。
   function sampleEmptyText(t) {
@@ -342,7 +365,8 @@
   function sampleBar(text, label, onClick) {
     return el("div", { class: "mk-sample-bar" }, [
       el("span", { class: "grow sub", text }),
-      MK.ui.button(label, { onClick }),
+      // 空画面での主導線なので primary（対象未作成時の renderScopeEmpty と同じ性格）
+      MK.ui.button(label, { variant: "btn-primary", onClick }),
     ]);
   }
 

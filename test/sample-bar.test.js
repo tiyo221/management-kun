@@ -7,12 +7,17 @@
 
 // 擬似モジュールの登録は reset() の対象外でスイート全体に残る。実ロジックへ委譲する def を
 // 置きっぱなしにすると、全モジュールを走査する io.buildEnvelope / importEnvelope の既存テスト
-// （test/shared.test.js・test/wbs-scope.test.js）が同じデータを二重に通ることになるため、
-// 各テストは使い終わった def をここで外す。
-function unregister(MK, id) {
-  delete MK.modules[id];
-  const i = MK.moduleOrder.indexOf(id);
-  if (i >= 0) MK.moduleOrder.splice(i, 1);
+// （test/shared.test.js・test/wbs-scope.test.js）が同じデータを二重に通ることになる。
+// **finally で外す**のが肝で、素の呼び出しにすると assert が落ちた回だけ登録が残り、
+// 「このファイルの失敗が、後から走る無関係なテストの失敗を連れてくる」ことになる。
+function withModule(MK, id, def, fn) {
+  MK.registerModule(id, def);
+  try { fn(MK.modules[id]); }
+  finally {
+    delete MK.modules[id];
+    const i = MK.moduleOrder.indexOf(id);
+    if (i >= 0) MK.moduleOrder.splice(i, 1);
+  }
 }
 
 // ---- MK.isEmptyExport（エクスポート形が空か）----
@@ -58,9 +63,9 @@ test("canOfferSample: loadSample を持たないモジュールは false", (MK) 
   // 観点: サンプルを持たないモジュール（dashboard のような横断集約ビュー）にバーを出さない
   // 入力: エクスポートは空だが loadSample が無い def
   // 期待: false
-  MK.registerModule("__sb_no_sample__", { exportData: () => ({ version: 1, items: [] }), importData: () => {} });
-  eq(MK.canOfferSample("__sb_no_sample__"), false);
-  unregister(MK, "__sb_no_sample__");
+  withModule(MK, "__sb_no_sample__", { exportData: () => ({ version: 1, items: [] }), importData: () => {} }, () => {
+    eq(MK.canOfferSample("__sb_no_sample__"), false);
+  });
 });
 
 test("canOfferSample: exportData / importData を欠くモジュールは false", (MK) => {
@@ -69,22 +74,23 @@ test("canOfferSample: exportData / importData を欠くモジュールは false"
   //       実データが共有マスタ（allocations / demands）にあり loadSample が replaceAll で置き換える
   // 入力: loadSample はあるが exportData が無い def／importData が無い def
   // 期待: どちらも false
-  MK.registerModule("__sb_no_export__", { loadSample: () => {}, importData: () => {} });
-  MK.registerModule("__sb_no_import__", { loadSample: () => {}, exportData: () => ({ version: 1, items: [] }) });
-  eq(MK.canOfferSample("__sb_no_export__"), false);
-  eq(MK.canOfferSample("__sb_no_import__"), false);
-  unregister(MK, "__sb_no_export__"); unregister(MK, "__sb_no_import__");
+  withModule(MK, "__sb_no_export__", { loadSample: () => {}, importData: () => {} }, () => {
+    eq(MK.canOfferSample("__sb_no_export__"), false);
+  });
+  withModule(MK, "__sb_no_import__", { loadSample: () => {}, exportData: () => ({ version: 1, items: [] }) }, () => {
+    eq(MK.canOfferSample("__sb_no_import__"), false);
+  });
 });
 
 test("canOfferSample: 3契約が揃い投入先が空なら true", (MK) => {
   // 観点: 正常系。投入と片付けが対で成立し、かつ失うものが無いときだけ出る
   // 入力: loadSample / exportData / importData を持ち、エクスポートが空の def
   // 期待: true
-  MK.registerModule("__sb_ok__", {
+  withModule(MK, "__sb_ok__", {
     exportData: () => ({ version: 1, items: [] }), importData: () => {}, loadSample: () => {},
+  }, () => {
+    eq(MK.canOfferSample("__sb_ok__"), true);
   });
-  eq(MK.canOfferSample("__sb_ok__"), true);
-  unregister(MK, "__sb_ok__");
 });
 
 test("canOfferSample: データがあるモジュールには出さない", (MK) => {
@@ -92,22 +98,22 @@ test("canOfferSample: データがあるモジュールには出さない", (MK)
   //       ワンクリックでデータが消える。1件でもあれば絶対に true を返さないこと
   // 入力: エクスポートに1件だけ入っている def
   // 期待: false
-  MK.registerModule("__sb_has_data__", {
+  withModule(MK, "__sb_has_data__", {
     exportData: () => ({ version: 1, items: [{ id: "x" }] }), importData: () => {}, loadSample: () => {},
+  }, () => {
+    eq(MK.canOfferSample("__sb_has_data__"), false);
   });
-  eq(MK.canOfferSample("__sb_has_data__"), false);
-  unregister(MK, "__sb_has_data__");
 });
 
 test("canOfferSample: exportData が例外を投げても false（呼び手へ伝播しない）", (MK) => {
   // 観点: 1モジュールのバグでモジュール画面全体が開けなくならない（readSummary と同じ握り）
   // 入力: exportData が必ず throw する def
   // 期待: 例外を握って false
-  MK.registerModule("__sb_throws__", {
+  withModule(MK, "__sb_throws__", {
     exportData: () => { throw new Error("boom"); }, importData: () => {}, loadSample: () => {},
+  }, () => {
+    eq(MK.canOfferSample("__sb_throws__"), false);
   });
-  eq(MK.canOfferSample("__sb_throws__"), false);
-  unregister(MK, "__sb_throws__");
 });
 
 test("canOfferSample: scoped は対象ごとに判定する（他対象のデータに引きずられない）", (MK) => {
@@ -117,12 +123,12 @@ test("canOfferSample: scoped は対象ごとに判定する（他対象のデー
   // 入力: PJ-A にだけデータがある scoped 相当の def へ、対象 id を変えて問い合わせる
   // 期待: PJ-A は false、空の PJ-B は true
   const data = { A: { version: 1, tasks: [{ id: 1 }] }, B: { version: 1, tasks: [] } };
-  MK.registerModule("__sb_scoped__", {
+  withModule(MK, "__sb_scoped__", {
     exportData: (targetId) => data[targetId], importData: () => {}, loadSample: () => {},
+  }, () => {
+    eq(MK.canOfferSample("__sb_scoped__", "A"), false);
+    eq(MK.canOfferSample("__sb_scoped__", "B"), true);
   });
-  eq(MK.canOfferSample("__sb_scoped__", "A"), false);
-  eq(MK.canOfferSample("__sb_scoped__", "B"), true);
-  unregister(MK, "__sb_scoped__");
 });
 
 test("canOfferSample: skills は People マスタに人がいても自分のデータが空なら true", (MK) => {
@@ -133,13 +139,13 @@ test("canOfferSample: skills は People マスタに人がいても自分のデ�
   // 期待: skills 自身のデータは空なので true
   MK.people.create({ name: "佐藤 花子" });
   const L = MK.logic.skills;
-  MK.registerModule("__sb_skills__", {
+  withModule(MK, "__sb_skills__", {
     summary: () => L.summary(), exportData: () => L.exportData(),
     importData: (d, m) => L.importData(d, m), loadSample: () => L.loadSample(),
+  }, () => {
+    eq(MK.readSummary("__sb_skills__").empty, false, "summary().empty は人がいると false になる");
+    eq(MK.canOfferSample("__sb_skills__"), true, "それでも自分のデータが空ならバーは出せる");
   });
-  eq(MK.readSummary("__sb_skills__").empty, false, "summary().empty は人がいると false になる");
-  eq(MK.canOfferSample("__sb_skills__"), true, "それでも自分のデータが空ならバーは出せる");
-  unregister(MK, "__sb_skills__");
 });
 
 // ---- 投入 → 片付けの往復（シェルが行う手順）----
@@ -150,21 +156,19 @@ test("サンプル投入バー: 退避→投入→片付けで投入前（空）
   // 入力: todo の logic に委譲する def（modules/todo/view.js の登録と同じ形）
   // 期待: 投入でタスクが増え、片付けで 0 件（＝投入前）へ戻る
   const L = MK.logic.todo;
-  MK.registerModule("__sb_roundtrip__", {
+  withModule(MK, "__sb_roundtrip__", {
     exportData: () => L.exportData(), importData: (d, m) => L.importData(d, m), loadSample: () => L.loadSample(),
+  }, (def) => {
+    eq(MK.canOfferSample("__sb_roundtrip__"), true, "空なので投入バーが出る");
+    const before = def.exportData(); // シェルが投入前に取る退避
+    def.loadSample();
+    assert(L.tasks().length > 0, "サンプルが入っている");
+    eq(MK.canOfferSample("__sb_roundtrip__"), false, "空でなくなったので投入バーは出ない");
+
+    def.importData(before, "replace"); // 片付け
+    eq(L.tasks().length, 0);
+    eq(MK.canOfferSample("__sb_roundtrip__"), true, "空へ戻ったので再び投入バーが出る");
   });
-  const def = MK.modules["__sb_roundtrip__"];
-
-  eq(MK.canOfferSample("__sb_roundtrip__"), true, "空なので投入バーが出る");
-  const before = def.exportData(); // シェルが投入前に取る退避
-  def.loadSample();
-  assert(L.tasks().length > 0, "サンプルが入っている");
-  eq(MK.canOfferSample("__sb_roundtrip__"), false, "空でなくなったので投入バーは出ない");
-
-  def.importData(before, "replace"); // 片付け
-  eq(L.tasks().length, 0);
-  eq(MK.canOfferSample("__sb_roundtrip__"), true, "空へ戻ったので再び投入バーが出る");
-  unregister(MK, "__sb_roundtrip__");
 });
 
 test("サンプル投入バー: 投入後に変更が入ったら退避は無効（片付けで巻き添えにしない）", (MK) => {
@@ -198,6 +202,35 @@ test("サンプル投入バー: 描画で自動投入するモジュール（dai
   // 確定を mount 後に遅らせれば、以降の再描画では一致し続ける（＝片付けが効く）
   L.ensureDayInjected(MK.util.todayISO()); // 冪等なので二度目は変わらない
   eq(JSON.stringify(L.exportData()) === afterMount, true, "確定後の再描画では差分が出ない");
+});
+
+test("サンプル投入バー: バーが出たあとに本体へ入力されたら、投入をやめる判定になる", (MK) => {
+  // 観点: バーはシェルの main 直下でモジュール本体（root）とは兄弟のため、モジュール側の render()
+  //       ではバーが消えない。バーが出たまま下のフォームから入力すると、押した瞬間に全置換の
+  //       loadSample が入力したデータを消す。押下時に空か確かめ直せば、その回を取りやめられる
+  // 入力: 空の状態で判定 → タスクを1件入力 → もう一度判定（＝押下時の再確認）
+  // 期待: 描画時 true → 入力後 false（投入せず取りやめる）
+  const L = MK.logic.todo;
+  withModule(MK, "__sb_reguard__", {
+    exportData: () => L.exportData(), importData: (d, m) => L.importData(d, m), loadSample: () => L.loadSample(),
+  }, () => {
+    eq(MK.canOfferSample("__sb_reguard__"), true, "描画時点では空＝バーが出る");
+    L.addTask("重要なタスク");
+    eq(MK.canOfferSample("__sb_reguard__"), false, "押下時にはもう空ではない＝投入しない");
+  });
+});
+
+test("daily: サンプル投入は開始時刻（ユーザ設定）を保つ", (MK) => {
+  // 観点: startTime は画面上部の time input から設定するユーザ設定。項目が 0 件でも空判定になるため、
+  //       開始時刻だけ変えた初回状態でバーが出る。ここで既定へ書き戻すと設定が黙って 09:00 に戻る
+  // 入力: 開始時刻を 08:30 にしてから loadSample
+  // 期待: サンプルの項目・ルーチンは入るが、開始時刻は 08:30 のまま
+  const L = MK.logic.daily;
+  L.setStartTime("08:30");
+  eq(MK.isEmptyExport(L.exportData()), true, "開始時刻だけの状態は空扱い＝バーが出る");
+  L.loadSample();
+  eq(L.startTime(), "08:30");
+  assert(L.exportData().items.length > 0, "サンプルの項目は入っている");
 });
 
 test("サンプル投入バー: マスタが空だと oneonone / releases は投入しても空のまま", (MK) => {
