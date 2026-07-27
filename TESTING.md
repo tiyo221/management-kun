@@ -27,9 +27,9 @@
 | `modules/<id>/logic.js` | その `<id>` のロジック | 自動（`test/<id>.test.js`） |
 | `modules/<id>/view.js` | その `<id>` の画面 | 手動スモーク（描画・操作） |
 | `shared/core.js` / `store.js` / `io.js` | **全モジュール**（全部が依存） | 自動フルスイート＋全モジュール手動スモーク |
-| `shared/scope.js`（スコープ次元） | **wbs**（project-scoped）・**シェル**（スイッチャ / `ctx.scope`） | 自動（`scope` / `wbs-scope`）＋切替の手動確認 |
+| `shared/scope.js`（スコープ次元） | **wbs**（project-scoped）・**metrics**（product-scoped）・**シェル**（スイッチャ / `ctx.scope`） | 自動（`scope` / `wbs-scope` / `metrics`）＋切替の手動確認 |
 | `shared/people.js` / `projects.js`（マスタ） | **skills / wbs / todo / resource / oneonone**（マスタを参照） | 自動＋該当画面の手動確認 |
-| `shared/products.js`（マスタ） | **releases / dashboard**（Product マスタを参照） | 自動＋該当画面の手動確認 |
+| `shared/products.js`（マスタ） | **releases / dashboard / metrics**（Product マスタを参照。metrics は product-scoped の対象） | 自動＋該当画面の手動確認 |
 | `shared/allocations.js` / `demands.js`（共有マスタ） | **resource / dashboard**（要員計画・ダッシュボードがアロケーションを参照） | 自動（`allocations` / `demands` / `resource` / `dashboard`）＋要員計画・ダッシュボード画面の手動確認 |
 | `modules/wbs/logic.js`（進捗集計） | **dashboard**（WBS 進捗を対象別に集約する横断ビュー） | 自動（`dashboard`）＋ダッシュボード画面の手動確認 |
 | `modules/todo/logic.js`（`toggleDone` / `next` / `tasks`） | **daily**（todo の next を引き・完了を同期する） | 自動（`daily`）＋デイリー画面の手動確認 |
