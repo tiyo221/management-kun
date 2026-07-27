@@ -71,7 +71,7 @@
 
     const title = el("div", {}, [el("span", { text: m.name })]);
     // depth ぶんインデントして KGI→NSM→KPI の階層を視認できるようにする（14px/段。wbs のツリーと同じ流儀）。
-    const grow = el("div", { class: "grow", style: "cursor:pointer;padding-left:" + (depth * 16) + "px;" }, [title, el("div", { class: "sub" }, meta)]);
+    const grow = el("div", { class: "grow", style: "cursor:pointer;padding-left:" + (depth * 14) + "px;" }, [title, el("div", { class: "sub" }, meta)]);
     grow.addEventListener("click", () => openEditor(m));
     return el("li", { class: "mk-row" }, [grow]);
   }
