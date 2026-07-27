@@ -234,8 +234,11 @@
     const { def, dim, targetId } = t;
     if (!dim) { // global
       appendSampleBar(view);
-      S.mountedModule = def; def.mount(main, ctxFor(view));
-      sealSampleSnapshot(t); // mount 中の自動投入・正規化まで含めて「投入直後の姿」を確定させる
+      S.mountedModule = def;
+      // mount 中の自動投入・正規化まで含めて「投入直後の姿」を確定させる。mount が投げても必ず
+      // 確定させる（finally）。未確定の退避は liveSnapshot が検証せず有効と見なすため、飛ばすと
+      // 片付けボタンがセッション中ずっと無条件で効く状態になり、以後に入れたデータを消す。
+      try { def.mount(main, ctxFor(view)); } finally { sealSampleSnapshot(t); }
       return;
     }
 
@@ -249,8 +252,7 @@
     const host = el("div");
     main.appendChild(host);
     S.mountedModule = def;
-    def.mount(host, ctxFor(view));
-    sealSampleSnapshot(t);
+    try { def.mount(host, ctxFor(view)); } finally { sealSampleSnapshot(t); }
   }
 
   // ---- サンプル投入バー（Issue #256 / spec §3.6.2）----
