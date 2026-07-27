@@ -194,8 +194,10 @@
     // 対象別 scope（§3.7.4）: io がプロダクトごとに targetId を渡す。省略時は表示中の store。
     exportData(targetId) { return L().exportData(targetId); },
     importData(data, mode, targetId) { L().importData(data, mode, targetId); },
-    // サンプル投入先は自分の次元の既定対象（先頭プロダクト・無ければ作成）へ寄せる（§3.7.6）。
-    loadSample() {
+    // 投入先を指定できる（シェルのサンプル投入バーが表示中のプロダクトを渡す。Issue #256）。
+    // 省略時は自分の次元の既定対象（先頭プロダクト・無ければ作成）へ寄せる（§3.7.6）。
+    loadSample(targetId) {
+      if (targetId) { L().loadSample(targetId); return; }
       const dim = MK.scope.dimOf(this.scope);
       L().loadSample(dim ? MK.scope.ensureDefaultTarget(dim) : null);
     },

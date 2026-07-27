@@ -169,9 +169,12 @@ MK.registerModule("todo", {
   searchItems() { return /* [...] */; },         // 任意。グローバル検索の対象レコード（§3.5.1）
   exportData() { return /* data */; },          // JSONエンベロープ modules.<id>.data 用
   importData(data, mode) { /* "replace" | "merge" */ },
+  loadSample(targetId) { /* サンプル投入（既存データは全置換）*/ }, // §3.6.2
   migrate(data, fromVersion) { return data; }    // §4.5
 });
 ```
+
+- `exportData` / `importData` / `loadSample` は scoped モジュール（§3.7.4）では**対象 id を末尾の任意引数で受け取る**（`exportData(targetId)` / `importData(data, mode, targetId)` / `loadSample(targetId)`）。省略時は「表示中の対象」（`loadSample` は自次元の既定対象）へ寄せる。global モジュールは引数を取らず、余分な引数を渡されても無視する。
 
 #### 3.5.1 グローバル検索と `searchItems()` 契約（任意。Issue #82）
 
@@ -270,6 +273,18 @@ summaryFor(entityType, id) {
 - 横断表示・集約ビューは他モジュールをハード参照せず、必ずコアのリーダ **`MK.readEntitySummary(moduleId, entityType, entityId)`** 経由で問い合わせる。リーダは `MK.readSummary`（§9.5）と同一原則で、**未搭載（`MK_CONFIG` から外した）・`summaryFor` 未実装・`summaryFor` が例外**のいずれでも `null` を返し、呼び手（#83）を壊さない。
 - 集計は logic 側の純関数に置きテスト可能にする（リーダの契約テスト `test/read-entity-summary.test.js`、各モジュールの集約ロジックは `test/summary-for.test.js`）。
 - 消費者は**人詳細の集約ビュー**（シェルの `master-people` 詳細・#83）。`skills` / `resource` / `oneonone` / `wbs`（全 PJ 横断の担当タスク）が `summaryFor("person", id)` を実装し、詳細画面は登録済みモジュールを `MK.readEntitySummary` で走査して `null` は省き・`empty` は空状態・`stats` は集約値＋「開く →」導線で描画する。プロジェクト側の集約は `dashboard`（#78・project-scoped）に一本化し master 側へは二重実装しない（役割分担は §9.6 の判断記録）。関連プロダクト（owner）は共有マスタ `MK.products` を直接参照する（モジュールではないため契約対象外）。
+
+#### 3.6.2 空のモジュールを試すサンプル投入バー
+
+モジュールは「価値が出るまでの入力量」が大きいほど使われなくなる。空の画面と入力フォームだけを見せると、**投資が先・リターンが後**になり、使うかどうかを判断できないまま放置される。そこでシェルは、**空のモジュールを開いたときだけ**「サンプルを入れて試す」バーをモジュール本体の上に出し、その場で中身の入った状態を作れるようにする（Issue #256）。
+
+- **出す条件はコアの述語 `MK.canOfferSample(id)`**（`shared/core.js`・DOM 非依存）に集約する。`loadSample` / `exportData` / `importData` の3つを実装し、かつ `MK.readSummary(id)` が `{ empty: true }` を返すときだけ `true`。未搭載・未実装・`summary()` が例外のいずれでも `false` を返し、モジュール画面を壊さない（§9.5 と同一原則）。
+- **空のときにしか出さないことが安全装置**。各モジュールの `loadSample()` は既存データを**全置換**するため、実データのあるモジュールに出すとワンクリックで消える。判定を呼び手に散らさず述語1本に閉じる（`test/sample-bar.test.js`）。
+- **片付け導線を対で持つ**。投入前に `exportData()` の戻り値をシェルのメモリへ退避し、投入後はバーを「サンプルを片付ける」に差し替える。押すと `importData(退避, "replace")` で投入前へ戻す。**退避はセッション内のみで永続化しない**（リロードで破棄され、バーは通常状態へ戻る＝リロードをまたいで残すことは「そのまま使う」判断とみなす）。
+- **投入先はモジュール単位**。`MK.sample.load()`（設定画面の一括投入）と違い、他モジュールを巻き込まない。scoped モジュール（§3.7.4）では**表示中の対象**へ投入し、退避キーも対象別 namespace で分ける。
+- 確認ダイアログは出さない（空＝失うものが無いため。CONVENTIONS §2.5-3）。
+- **退避・復元はモジュール自身の namespace に閉じる。** `loadSample()` が `MK.people.resolveOrCreate()` 等で共通マスタへ**追記**する場合（todo＝Project、skills / wbs＝People）、追記された人・PJ は片付けても残る。マスタは共有物で、他モジュールのデータから参照されうるため一括で巻き戻さない（既存マスタは `resolveOrCreate` が名前で解決するので**失われない**）。残ったサンプルの人・PJ はマスタ管理から削除できる。
+- **共通マスタを主データとするモジュールにはバーを出さない。** `resource` は実データが `MK.allocations` / `MK.demands`（共有マスタ）にあり `exportData` / `importData` を持たない。`loadSample()` が `replaceAll` でマスタを置き換えるため、モジュール単位の退避では戻せない。3契約を条件にすることで、この「自分の namespace で完結しないモジュール」が自動的に対象外になる。
 
 ### 3.7 スコープ次元（横断 / 単位のスコープ軸）
 

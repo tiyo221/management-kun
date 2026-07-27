@@ -40,6 +40,20 @@
     catch (e) { console.warn("summaryFor() failed:", moduleId, entityType, entityId, e); return null; } // 追跡用に記録（呼び手は壊さない）
   };
 
+  // 「そのモジュールは今サンプルで試せるか」の述語（Issue #256）。シェルのサンプル投入バーが使う。
+  // 各モジュールの loadSample() は例外なく全置換のため、**空のときにしか true を返さない**ことで、
+  // 実データの入ったモジュールへ全置換が走る事故を構造的に防ぐ（判定を呼び手に散らさない）。
+  // 投入と片付け（exportData で退避 → importData で復元）が対で成立するモジュールにだけ出すので、
+  // 3つとも実装していることを条件にする。未搭載・未実装・summary が例外のいずれでも false。DOM 非依存。
+  MK.canOfferSample = function (id) {
+    const mod = MK.modules[id];
+    if (!mod) return false;
+    if (typeof mod.loadSample !== "function") return false;
+    if (typeof mod.exportData !== "function" || typeof mod.importData !== "function") return false;
+    const sum = MK.readSummary(id);
+    return !!(sum && sum.empty === true);
+  };
+
   // 軽量イベントバス（マスタ変更通知など）
   MK.bus = {
     on(event, handler) {

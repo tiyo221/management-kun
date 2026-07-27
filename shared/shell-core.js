@@ -225,7 +225,10 @@
   function mountModuleView(view) {
     const def = MK.modules[view];
     const dim = MK.scope.dimOf(def.scope);
-    if (!dim) { S.mountedModule = def; def.mount(main, ctxFor(view)); return; } // global
+    if (!dim) { // global
+      appendSampleBar(view);
+      S.mountedModule = def; def.mount(main, ctxFor(view)); return;
+    }
 
     // scoped: 縮退モード（0=作成導線 / 1=畳む / 2+=スイッチャ）で分岐する（§3.7.2）
     const entities = MK.scope.entities(dim);
@@ -234,10 +237,62 @@
     const targetId = MK.scope.resolveTarget(dim, getScopeTarget(dim.dim));
     setScopeTarget(dim.dim, targetId); // 正規化した現在対象を保存（削除で無効化された id を先頭へ寄せる等）
     main.appendChild(renderScopeBar(view, dim, entities, targetId, mode));
+    appendSampleBar(view); // スコープバーの下・モジュール本体の上（対象を切り替えてから投入先を判断できる並び）
     const host = el("div");
     main.appendChild(host);
     S.mountedModule = def;
     def.mount(host, ctxFor(view));
+  }
+
+  // ---- サンプル投入バー（Issue #256）----
+  // 空のモジュールを「入れて試す → 要らなければ片付ける」でその場で判断できるようにする。投入の
+  // 可否判定は DOM 非依存の述語 MK.canOfferSample（core.js）に委ね、ここは描画と退避の管理だけを持つ。
+  // 退避はセッション内のメモリのみで localStorage に持たない。リロードで破棄されてバーは通常状態へ
+  // 戻る（リロードをまたいで残す＝そのまま使うと判断した、とみなす。永続化は要求が出るまで作らない）。
+  // 退避キーは ctx と同じ store 名前空間にし、scoped モジュールを対象ごとに独立して扱う。
+  const sampleSnapshots = {};
+
+  // 投入・片付けの宛先（def と対象 id）と退避キーをまとめて解決する。
+  // targetId は global では null（def 側の実装が省略時の既定として扱う）。
+  function sampleTarget(view) {
+    const def = MK.modules[view];
+    const dim = MK.scope.dimOf(def.scope);
+    const targetId = dim ? MK.scope.resolveTarget(dim, getScopeTarget(dim.dim)) : null;
+    return { def, targetId, key: MK.scope.storeNsFor(view, def.scope, targetId) };
+  }
+
+  function appendSampleBar(view) {
+    const bar = renderSampleBar(view);
+    if (bar) main.appendChild(bar);
+  }
+
+  // 退避があれば片付けバー、無ければ（かつ空なら）投入バー。どちらでもなければ null（何も出さない）。
+  // 判定順が逆だと、投入直後は空でなくなるため片付け導線が出せない。
+  function renderSampleBar(view) {
+    const t = sampleTarget(view);
+    if (Object.prototype.hasOwnProperty.call(sampleSnapshots, t.key)) {
+      return sampleBar("サンプルを表示しています。", "サンプルを片付ける", () => {
+        t.def.importData(sampleSnapshots[t.key], "replace", t.targetId);
+        delete sampleSnapshots[t.key];
+        route(view);
+        MK.ui.toast("サンプルを片付けました", "success");
+      });
+    }
+    if (!MK.canOfferSample(view)) return null;
+    return sampleBar("データがありません。サンプルを入れると、中身の入った状態で試せます。", "サンプルを入れて試す", () => {
+      // 先に退避してから投入する（loadSample は全置換なので、後から元の状態は取り出せない）。
+      sampleSnapshots[t.key] = t.def.exportData(t.targetId);
+      t.def.loadSample(t.targetId);
+      route(view);
+      MK.ui.toast("サンプルを入れました", "success");
+    });
+  }
+
+  function sampleBar(text, label, onClick) {
+    return el("div", { class: "mk-sample-bar" }, [
+      el("span", { class: "grow sub", text }),
+      MK.ui.button(label, { onClick }),
+    ]);
   }
 
   // 要素数0: 「まず対象を作る」導線（§3.7.2）。到達可能ならマスタ管理へ誘導する。
