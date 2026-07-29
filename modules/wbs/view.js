@@ -17,6 +17,25 @@
   let zoomKey = "day"; // ZOOM のキー
   let ganttHost = null; // ガントのスクロール容器（「今日へスクロール」用）
   let ganttMeta = null; // { min, dayW, nameW }（スクロール位置計算用）
+  let statsNode = null; // 上部の統計行（部分更新でテキストだけ差し替える対象・CONVENTIONS §2.5-4）
+
+  // 上部の統計行を組む（全体進捗・葉数・完了・進行中）。ステータス変更時に丸ごと差し替える。
+  function buildStats() {
+    const st = L().stats();
+    return ui.statsRow([
+      { num: st.overall + "%", label: "全体進捗（葉平均）" }, { num: st.leaves, label: "葉タスク数" },
+      { num: st.done + "/" + st.leaves, label: "完了" }, { num: st.inprogress, label: "進行中" },
+    ]);
+  }
+
+  // ステータス変更は葉の完了/進行中の件数を変える（進捗は変えないので親サマリ・ガントの位置は不変）。
+  // テーブルを作り直さず統計行だけ差し替える（全再描画しない・スクロール維持・CONVENTIONS §2.5-4）。
+  function refreshStats() {
+    if (!statsNode) return;
+    const fresh = buildStats();
+    statsNode.replaceWith(fresh);
+    statsNode = fresh;
+  }
 
   function render() {
     if (!root) return;
@@ -25,17 +44,13 @@
     root.innerHTML = "";
     root.appendChild(ui.sectionTitle("WBS"));
 
-    const st = L().stats();
-    const stats = ui.statsRow([
-      { num: st.overall + "%", label: "全体進捗（葉平均）" }, { num: st.leaves, label: "葉タスク数" },
-      { num: st.done + "/" + st.leaves, label: "完了" }, { num: st.inprogress, label: "進行中" },
-    ]);
+    statsNode = buildStats();
     const bar = ui.toolbar([
       ui.button("＋ 大項目", { variant: "btn-primary", onClick: () => { L().addRoot(); render(); } }),
       ui.button("CSV 出力", { onClick: () => { MK.io.downloadText("wbs-" + MK.util.todayISO().replace(/-/g, "") + ".csv", MK.io.csv.stringify(L().buildCSVRows()), "text/csv"); MK.ui.toast("CSV を書き出しました", "success"); } }),
     ]);
 
-    if (!tasks.length) { root.appendChild(ui.stack([stats, bar, ui.emptyState({
+    if (!tasks.length) { root.appendChild(ui.stack([statsNode, bar, ui.emptyState({
       title: "まだタスクがありません",
       hint: "大項目を追加し、その下に小項目をぶら下げて WBS を組み立てます。進捗や期間はガントに反映されます。",
       action: { label: "＋ 最初の大項目を追加", onClick: () => { L().addRoot(); render(); } },
@@ -61,7 +76,7 @@
       ganttHost = null; ganttMeta = null;
       panel = el("div", { class: "wbs-wrap" }, [renderTable(tasks, nums, visible)]);
     }
-    root.appendChild(ui.stack([stats, bar, tabs, panel]));
+    root.appendChild(ui.stack([statsNode, bar, tabs, panel]));
     // 移動・インデント直後は操作した行へフォーカスを戻す（連続操作しやすく）。Issue #156。
     if (pendingFocusId != null) {
       const id = pendingFocusId; pendingFocusId = null;
@@ -149,14 +164,23 @@
   function assigneeCell(idx, t) {
     const cur = t.assigneeId ? MK.people.get(t.assigneeId) : null;
     const inputEl = el("input", { class: "cell", list: "mk-people-list", value: cur ? cur.name : "", placeholder: "—", style: "width:90px;" });
-    inputEl.addEventListener("change", () => { L().setAssignee(idx, inputEl.value); render(); });
+    // 担当は行内で完結する（他行・統計・ガントに波及しない）。全再描画せず、名寄せ後の正準名だけ反映する
+    // （resolveOrCreate が trim・既存名寄せをするため、入力値と保存名がずれることがある）。CONVENTIONS §2.5-4。
+    inputEl.addEventListener("change", () => {
+      L().setAssignee(idx, inputEl.value);
+      const nt = L().tasks()[idx];
+      const p = nt && nt.assigneeId ? MK.people.get(nt.assigneeId) : null;
+      inputEl.value = p ? p.name : "";
+    });
     return inputEl;
   }
   function statusCell(idx, t) {
     const sel = el("select", { class: "cell" });
     L().STATUS.forEach((s) => sel.appendChild(el("option", { value: s.key, text: s.label })));
     sel.value = t.status;
-    sel.addEventListener("change", () => { L().update(idx, { status: sel.value }); render(); });
+    // ステータスは進捗を変えない（logic.update は status だけ書く）ので親サマリ・ガント位置は不変。
+    // 変わるのは統計行の完了/進行中の件数だけ。テーブルを作り直さず統計行だけ差し替える（§2.5-4）。
+    sel.addEventListener("change", () => { L().update(idx, { status: sel.value }); refreshStats(); });
     return sel;
   }
   function depCell(tasks, nums, idx, t) {
@@ -304,7 +328,7 @@
       if (!document.getElementById("mk-people-list")) document.body.appendChild(el("datalist", { id: "mk-people-list" }));
       refreshPeopleDatalist(); render();
     },
-    unmount() { closeOpsMenu(); root = null; },
+    unmount() { closeOpsMenu(); root = null; statsNode = null; },
     summary() { return L().summary(); },
     // 全 PJ 横断（§3.7.4）: 検索・人単位サマリーは表示中 PJ に限らず全 PJ を走査する。
     searchItems() { return L().searchItems(); },
