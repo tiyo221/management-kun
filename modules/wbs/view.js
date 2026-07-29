@@ -164,10 +164,13 @@
   function assigneeCell(idx, t) {
     const cur = t.assigneeId ? MK.people.get(t.assigneeId) : null;
     const inputEl = el("input", { class: "cell", list: "mk-people-list", value: cur ? cur.name : "", placeholder: "—", style: "width:90px;" });
-    // 担当は行内で完結する（他行・統計・ガントに波及しない）。全再描画せず、名寄せ後の正準名だけ反映する
-    // （resolveOrCreate が trim・既存名寄せをするため、入力値と保存名がずれることがある）。CONVENTIONS §2.5-4。
+    // 既存の担当者へ寄せる場合は行内で完結する（他行・統計・ガントに波及しない）ので全再描画しない。
+    // ただし未登録名は resolveOrCreate がマスタへ新規作成し、masters:changed 経由でシェルがモジュールを
+    // 再マウントする（この場合ここは行内完結にならず inputEl は切り離される）。再マウント時は旧ノードを
+    // 触らず抜け、行内完結時だけ名寄せ後の正準名を入力欄へ反映する（trim・既存名寄せに追従）。CONVENTIONS §2.5-4。
     inputEl.addEventListener("change", () => {
       L().setAssignee(idx, inputEl.value);
+      if (!inputEl.isConnected) return; // 新規作成→シェル再マウント済みなら旧ノードへ書かない
       const nt = L().tasks()[idx];
       const p = nt && nt.assigneeId ? MK.people.get(nt.assigneeId) : null;
       inputEl.value = p ? p.name : "";
