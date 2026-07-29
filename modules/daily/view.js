@@ -21,6 +21,11 @@
   let root = null;
   let date = null; // 表示中の日（"YYYY-MM-DD"）。既定は本日
   let newMin = "30"; // 追加行で選択中の所要時間（分・文字列）
+  // 部分更新（CONVENTIONS §2.5-4）用の差し替え対象ノード。時間割は cumulative（各行の時刻が前の行の
+  // 所要時間に依存する）ため「行のみ」で閉じるのは完了チェックだけ。分数・固定時刻の変更は後続行の
+  // 時刻・空き・食い込み・合計へ波及するので、スケジュール領域（リスト＋フッタ）を差し替える。
+  let listNode = null;   // 時間割リストのカード（listCard の戻り）
+  let footerNode = null; // 合計・繰り越しのフッタ（footer の戻り。項目0件なら null）
 
   // 所要時間（分）を "1時間30分" 形式へ。0 分は "0分"。
   function fmtDur(min) {
@@ -45,8 +50,38 @@
     root.innerHTML = "";
     // 時間割は1描画につき1回だけ算出して、リストとフッタで使い回す（走査の重複を避ける）。
     const sched = L().schedule(date);
+    listNode = listCard(sched);
+    footerNode = footer(sched); // 項目0件なら null（el は null 子を飛ばす）
     root.appendChild(ui.sectionTitle("デイリー"));
-    root.appendChild(ui.stack([dayBar(), staleBar(), addBar(), listCard(sched), footer(sched)]));
+    root.appendChild(ui.stack([dayBar(), staleBar(), addBar(), listNode, footerNode]));
+  }
+
+  // スケジュール領域（リスト＋フッタ）だけを再算出して差し替える（全再描画しない・CONVENTIONS §2.5-4）。
+  // 分数・固定時刻の変更で後続行の時刻・空き・食い込み・合計が変わるため、行単位でなくこの領域を単位にする。
+  // 上（日ナビ・追加行）は触らないので、入力途中や画面のスクロール位置を保てる。
+  function refreshSchedule() {
+    if (!listNode) return;
+    const sched = L().schedule(date);
+    const newList = listCard(sched);
+    listNode.replaceWith(newList);
+    listNode = newList;
+    replaceFooter(footer(sched), newList);
+  }
+
+  // フッタ（合計・繰り越し）だけを差し替える。完了チェックは時刻に影響しないので、残り件数の更新に使う。
+  function refreshFooter() {
+    if (!listNode) return;
+    replaceFooter(footer(L().schedule(date)), listNode);
+  }
+
+  // 新しいフッタで現在のフッタを差し替える。項目の有無で null になり得るため、出現/消失の両向きを扱う。
+  function replaceFooter(newFooter, listRef) {
+    if (footerNode) {
+      if (newFooter) { footerNode.replaceWith(newFooter); footerNode = newFooter; }
+      else { footerNode.remove(); footerNode = null; }
+    } else if (newFooter) {
+      listRef.after(newFooter); footerNode = newFooter;
+    }
   }
 
   // 取り残しの拾い直し導線。夜の締めを数日忘れても、日を遡って1日ずつ繰り越し直さずに済むようにする
@@ -132,9 +167,12 @@
 
   function itemRow(r) {
     const it = r.item;
+    const title = el("div", { class: it.done ? "mk-done" : "", text: it.title }); // cb ハンドラが参照するので先に宣言する
     const cb = el("input", { type: "checkbox" });
     cb.checked = it.done;
-    cb.addEventListener("change", () => { L().toggleDone(it.id, cb.checked); render(); });
+    // 完了チェックは時刻に影響しない（schedule は done を時間計算に使わない）ので行内で完結する。
+    // 取り消し線を切り替え、残り件数だけフッタで更新する（全再描画しない・CONVENTIONS §2.5-4）。
+    cb.addEventListener("change", () => { L().toggleDone(it.id, cb.checked); title.classList.toggle("mk-done", cb.checked); refreshFooter(); });
 
     // 固定時刻に間に合わず食い込んでいる（conflict）ときは算出時刻を警告色にする。
     const time = el("div", { class: "sub", style: "min-width:92px;font-variant-numeric:tabular-nums;" + (r.conflict ? "color:var(--color-error);" : ""), text: r.start + "–" + r.end });
@@ -145,14 +183,15 @@
     chips.push(el("span", { class: "chip", text: srcLabel }));
     // ピン（固定時刻）の状態を明示する。食い込み時は警告チップ、通常固定は 📌 チップ。
     if (it.at) chips.push(el("span", { class: "chip", text: r.conflict ? "⚠ " + it.at + " に食い込み" : "📌 " + it.at }));
-    const title = el("div", { class: it.done ? "mk-done" : "", text: it.title });
     const grow = el("div", { class: "grow" }, [title, el("div", { class: "sub" }, chips)]);
 
-    const minSel = ui.select(minOptsFor(it.minutes), String(it.minutes), (v) => { L().setMinutes(it.id, Number(v)); render(); });
+    // 分数変更は後続行の時刻・合計へ波及するため、スケジュール領域だけ差し替える（全再描画しない・§2.5-4）。
+    const minSel = ui.select(minOptsFor(it.minutes), String(it.minutes), (v) => { L().setMinutes(it.id, Number(v)); refreshSchedule(); });
     minSel.style.maxWidth = "110px";
 
     // 開始時刻の固定（ピン）。空にすると解除して流動へ戻す（setAt が normAt で null へ寄せる）。
-    const atInput = ui.input({ type: "time", value: it.at || "", onChange: (v) => { L().setAt(it.id, v); render(); } });
+    // ピンの追加/解除は空き・食い込みを生むためスケジュール領域を差し替える（§2.5-4）。
+    const atInput = ui.input({ type: "time", value: it.at || "", onChange: (v) => { L().setAt(it.id, v); refreshSchedule(); } });
     atInput.style.maxWidth = "120px";
     atInput.title = "開始時刻を固定（空で解除）";
 
@@ -379,7 +418,7 @@
     mount(container) { date = MK.util.todayISO(); root = el("div"); container.appendChild(root); render(); },
     // モジュール離脱時に開きっぱなしのモーダルを畳む（overlay が残ると、破棄済み root に対して
     // 候補クリックが走り書き込みだけ効いてしまうため）。
-    unmount() { closeModal(); closeRoutineModal(); _modal = null; _routineModal = null; root = null; },
+    unmount() { closeModal(); closeRoutineModal(); _modal = null; _routineModal = null; root = null; listNode = null; footerNode = null; },
     summary() { return L().summary(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },
