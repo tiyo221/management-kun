@@ -619,6 +619,26 @@
    */
   function exportData() { return load(); }
   /**
+   * 取込 id を正規化する。欠落・重複・整数風のいずれも採番し直し、採った id を seen に記録する。
+   * items/routines で同型（唯一の差は uid 接頭辞）なので純関数へ括った。
+   * - 重複を通すと、id 一致で引く moveItem/removeItem/toggleDone が先頭にしかヒットせず
+   *   （2行目を編集すると1行目が変わる）、removeItem は両方消す。merge は mergeById が畳むので
+   *   replace 経路にも同じ保証を与える。
+   * - 整数風（"1" や 1）を通すと、mergeById が返す Object.keys が整数風キーを先頭に列挙する
+   *   ため、merge 取込でその項目がその日の先頭＝朝イチへ黙って繰り上がる（配列順＝時刻のため）。
+   *   文字列化しても "1" は整数風のままなので、採番し直すしかない（spec の id は d_<epoch>_<rand>）。
+   * @param {string} raw - 文字列化済みの元 id（欠落時は ""）
+   * @param {Object} seen - 既出 id 集合（副作用でここへ採用 id を追記する）
+   * @param {string} prefix - 採番時の uid 接頭辞（items="d" / routines="r"）
+   * @returns {string} 採用する id
+   */
+  function normalizeImportId(raw, seen, prefix) {
+    const usable = raw && !seen[raw] && !/^(0|[1-9]\d*)$/.test(raw);
+    const id = usable ? raw : MK.util.uid(prefix);
+    seen[id] = true;
+    return id;
+  }
+  /**
    * 取り込んだ項目を正規化する（外部 JSON は手書き・AI 生成もありうるため寛容に受けて寄せる）。
    * id 欠落は採番（mergeById が byId[undefined] へ集約して取りこぼすため、また id 一致で引く
    * moveItem/removeItem/toggleDone が別項目へ誤ヒットするため）。date は不正・欠落なら当日へ寄せる
@@ -636,17 +656,8 @@
       const src = it || {};
       // 既知の source（todo / routine）だけ通し、未知値は手書き扱い（todo/routine 実体を騙らせない）。
       const source = src.source === "todo" ? "todo" : src.source === "routine" ? "routine" : "manual";
-      // id は欠落・重複・整数風のいずれも採番し直す。
-      // - 重複を通すと、id 一致で引く moveItem/removeItem/toggleDone が先頭にしかヒットせず
-      //   （2行目を編集すると1行目が変わる）、removeItem は両方消す。merge は mergeById が畳むので
-      //   replace 経路にも同じ保証を与える。
-      // - 整数風（"1" や 1）を通すと、mergeById が返す Object.keys が整数風キーを先頭に列挙する
-      //   ため、merge 取込でその項目がその日の先頭＝朝イチへ黙って繰り上がる（配列順＝時刻のため）。
-      //   文字列化しても "1" は整数風のままなので、採番し直すしかない（spec の id は d_<epoch>_<rand>）。
       const raw = src.id == null ? "" : String(src.id);
-      const usable = raw && !seen[raw] && !/^(0|[1-9]\d*)$/.test(raw);
-      const id = usable ? raw : MK.util.uid("d");
-      seen[id] = true;
+      const id = normalizeImportId(raw, seen, "d"); // 欠落・重複・整数風は採番し直す（理由は normalizeImportId）
       return Object.assign({}, src, {
         id,
         date: isValidDate(src.date) ? src.date : today,
@@ -675,9 +686,7 @@
     return (list || []).map((r) => {
       const src = r || {};
       const raw = src.id == null ? "" : String(src.id);
-      const usable = raw && !seen[raw] && !/^(0|[1-9]\d*)$/.test(raw); // items と同じ理由で整数風 id も採番し直す
-      const id = usable ? raw : MK.util.uid("r");
-      seen[id] = true;
+      const id = normalizeImportId(raw, seen, "r"); // items と同じ扱い（理由は normalizeImportId）
       return {
         id,
         title: String(src.title == null ? "" : src.title),
