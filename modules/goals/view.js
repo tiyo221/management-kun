@@ -9,6 +9,36 @@
   let root = null;
   let view = "roadmap";
   let selectedId = null;
+  // 部分更新（CONVENTIONS §2.5-4）用。ステップ操作は「行」ではなく詳細ペイン（階段）を単位に差し替える
+  // （完了トグルは現在ステップ「いまここ」や頂上「到達」など他段・ヘッダへ波及するため）。左の目標リストは
+  // 作り直さず、選択中目標の進捗表示（sideSubById）だけ更新して選択・スクロールを保つ。
+  let mainPaneNode = null;   // 詳細ペイン（.mk-goals-main）
+  let sideSubById = {};      // goalId → 左リスト項目の進捗 sub 要素
+
+  // 左リスト・詳細で共用する進捗表示文言。
+  function progressText(g) {
+    const pr = L().progress(g);
+    return pr.pct + "%（" + pr.done + "/" + pr.total + "）" + (L().isAchieved(g) ? " ✅" : "");
+  }
+
+  // 詳細ペインだけ作り直す（ステップ操作後。全再描画しない）。対象目標が消えていれば全再描画へ委ねる。
+  function refreshDetail() {
+    if (!mainPaneNode) return;
+    const g = L().getGoal(selectedId);
+    if (!g) { render(); return; }
+    mainPaneNode.innerHTML = "";
+    renderGoalDetail(mainPaneNode, g);
+  }
+
+  // 左リストの該当目標の進捗表示だけ差し替える（リスト自体は作り直さない）。
+  function refreshSideProgress(id) {
+    const sub = sideSubById[id];
+    const g = L().getGoal(id);
+    if (sub && g) sub.textContent = progressText(g);
+  }
+
+  // ステップ操作後の後始末: 詳細ペインを差し替え、左リストの進捗を更新する（§2.5-4）。
+  function afterStepChange(gid) { refreshDetail(); refreshSideProgress(gid); }
 
   function render() {
     if (!root) return;
@@ -30,17 +60,20 @@
     const side = el("div", { class: "mk-goals-side" });
     side.appendChild(ui.button("＋ 大目標", { variant: "btn-primary", onClick: () => promptText("新しい大目標", "タイトル", (v) => { if (v) { selectedId = L().addGoal(v); render(); } }) }));
     if (!list.length) side.appendChild(el("div", { class: "sub mk-muted", text: "大目標がありません" }));
+    sideSubById = {}; // 部分更新（refreshSideProgress）で参照する進捗 sub の対応表を作り直す
     list.forEach((g) => {
-      const pr = L().progress(g);
+      const sub = el("div", { class: "sub", text: progressText(g) });
+      sideSubById[g.id] = sub;
       const item = el("div", { class: "mk-goal-item" + (g.id === selectedId ? " active" : "") }, [
         el("div", { text: g.title || "(無題)" }),
-        el("div", { class: "sub", text: pr.pct + "%（" + pr.done + "/" + pr.total + "）" + (L().isAchieved(g) ? " ✅" : "") }),
+        sub,
       ]);
       item.addEventListener("click", () => { selectedId = g.id; render(); });
       side.appendChild(item);
     });
 
     const mainPane = el("div", { class: "mk-goals-main" });
+    mainPaneNode = mainPane; // 詳細ペインの部分更新（refreshDetail）対象
     const g = L().getGoal(selectedId);
     if (!g && !list.length) mainPane.appendChild(ui.emptyState({
       title: "まだ大目標がありません",
@@ -70,8 +103,8 @@
       el("div", { class: "sub", text: "進捗 " + pr.pct + "%（" + pr.done + "/" + pr.total + "）" }),
     ]);
 
-    const stepInput = ui.input({ placeholder: "ステップを入力して追加", onEnter: (v) => { if (v.trim()) { L().addStep(g.id, v); render(); } } });
-    const stepCard = ui.card([ui.toolbar([stepInput, ui.button("追加", { variant: "btn-primary", onClick: () => { if (stepInput.value.trim()) { L().addStep(g.id, stepInput.value); render(); } } })])]);
+    const stepInput = ui.input({ placeholder: "ステップを入力して追加", onEnter: (v) => { if (v.trim()) { L().addStep(g.id, v); afterStepChange(g.id); } } });
+    const stepCard = ui.card([ui.toolbar([stepInput, ui.button("追加", { variant: "btn-primary", onClick: () => { if (stepInput.value.trim()) { L().addStep(g.id, stepInput.value); afterStepChange(g.id); } } })])]);
     if (!g.steps.length) stepCard.appendChild(ui.emptyState("ステップがありません"));
     else stepCard.appendChild(staircase(g));
 
@@ -102,7 +135,9 @@
     const done = s.status === "done";
     const current = s.id === curId;
     const dot = el("div", { class: "mk-step-dot", title: done ? "完了を取り消す" : "完了にする", text: done ? "✓" : String(idx + 1) });
-    dot.addEventListener("click", () => { L().toggleStep(g.id, s.id, !done); render(); });
+    // 完了トグルは「いまここ」や頂上「到達」・ヘッダの進捗へ波及するため、行でなく詳細ペイン単位で
+    // 差し替え、左リストの進捗だけ更新する（全再描画せず選択・スクロールを保つ・§2.5-4）。
+    dot.addEventListener("click", () => { L().toggleStep(g.id, s.id, !done); afterStepChange(g.id); });
 
     const titleEl = el("div", { class: done ? "mk-done" : "" }, [s.title || "(無題)", current ? el("span", { class: "mk-here", text: "いまここ" }) : null]);
     const meta = s.review ? [el("div", { class: "sub", text: "📝 " + s.review })] : [];
@@ -112,9 +147,9 @@
     // 表示は上=目標寄りのため、視覚の上/下に合わせて moveStep 方向を反転（↑=末尾方向=+1、↓=先頭方向=-1）
     return el("div", { class: "mk-stair" + (done ? " done" : "") + (current ? " current" : ""), style: indent(idx) }, [
       dot, grow,
-      ui.button("↑", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, 1); render(); } }),
-      ui.button("↓", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, -1); render(); } }),
-      ui.button("削除", { variant: "btn-ghost", onClick: () => { L().removeStep(g.id, s.id); render(); } }),
+      ui.button("↑", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, 1); afterStepChange(g.id); } }),
+      ui.button("↓", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, -1); afterStepChange(g.id); } }),
+      ui.button("削除", { variant: "btn-ghost", onClick: () => { L().removeStep(g.id, s.id); afterStepChange(g.id); } }),
     ]);
   }
 
@@ -176,7 +211,7 @@
     title: "目標", icon: "🎯",
     description: "目標を立てて達成度を追う",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; },
+    unmount() { root = null; mainPaneNode = null; sideSubById = {}; },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },
