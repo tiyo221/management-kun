@@ -167,6 +167,7 @@
 
   function itemRow(r) {
     const it = r.item;
+    const title = el("div", { class: it.done ? "mk-done" : "", text: it.title }); // cb ハンドラが参照するので先に宣言する
     const cb = el("input", { type: "checkbox" });
     cb.checked = it.done;
     // 完了チェックは時刻に影響しない（schedule は done を時間計算に使わない）ので行内で完結する。
@@ -182,7 +183,6 @@
     chips.push(el("span", { class: "chip", text: srcLabel }));
     // ピン（固定時刻）の状態を明示する。食い込み時は警告チップ、通常固定は 📌 チップ。
     if (it.at) chips.push(el("span", { class: "chip", text: r.conflict ? "⚠ " + it.at + " に食い込み" : "📌 " + it.at }));
-    const title = el("div", { class: it.done ? "mk-done" : "", text: it.title });
     const grow = el("div", { class: "grow" }, [title, el("div", { class: "sub" }, chips)]);
 
     // 分数変更は後続行の時刻・合計へ波及するため、スケジュール領域だけ差し替える（全再描画しない・§2.5-4）。
