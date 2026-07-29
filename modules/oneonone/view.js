@@ -10,6 +10,7 @@
 
   let root = null;
   let selectedMemberId = null;
+  let timelineNode = null; // タイムラインカード（部分更新でカードごと差し替える対象・CONVENTIONS §2.5-4）
 
   // 選択肢に載せるメンバー: アクティブなメンバー＋（非アクティブでも）記録が残るメンバー。
   // 退職者でも過去ログを閲覧できるようにしつつ、通常はアクティブのみが並ぶ（Issue #33 の配慮）。
@@ -45,7 +46,17 @@
     // 選択の維持（削除・退職で消えたら先頭へ）
     if (!selectedMemberId || !members.some((m) => m.id === selectedMemberId)) selectedMemberId = members[0].id;
 
-    root.appendChild(ui.stack([toolbar(members), timelineCard(), actionsCard()]));
+    timelineNode = timelineCard();
+    root.appendChild(ui.stack([toolbar(members), timelineNode, actionsCard()]));
+  }
+
+  // タイムラインカードだけを差し替える（未完アクションのチェックで各記録の「アクション N/total 未完」
+  // 表示が変わるため。項目数は不変で高さも変わらないのでスクロールは飛ばない）。CONVENTIONS §2.5-4。
+  function refreshTimeline() {
+    if (!timelineNode) return;
+    const fresh = timelineCard();
+    timelineNode.replaceWith(fresh);
+    timelineNode = fresh;
   }
 
   function toolbar(members) {
@@ -65,25 +76,41 @@
   }
 
   // ---- 未完アクション（選択メンバー） ----
+  // このカードは未完（done=false）のアクションだけを並べる。チェックで完了にした行は条件から外れる
+  // ので、全再描画せず該当行を除去し件数見出しだけ更新する（行内で完結・CONVENTIONS §2.5-4）。
   function actionsCard() {
     const open = L().openActionsOf(selectedMemberId);
-    const head = el("h3", { text: "未完アクション（" + open.length + "）" });
-    if (!open.length) return ui.card([head, ui.emptyState("未完のアクションはありません")]);
+    const head = el("h3", { text: actionsHeadText(open.length) });
+    const card = ui.card([head]);
+    if (!open.length) { card.appendChild(ui.emptyState("未完のアクションはありません")); return card; }
     const ul = el("ul", { class: "mk-list" });
-    open.forEach(({ entry, action }) => ul.appendChild(actionRow(entry, action)));
-    return ui.card([head, ul]);
+    open.forEach(({ entry, action }) => ul.appendChild(actionRow(entry, action, head, ul, card)));
+    card.appendChild(ul);
+    return card;
   }
 
-  function actionRow(entry, action) {
-    const cb = ui.checkbox(action.done);
-    cb.addEventListener("change", () => { L().toggleAction(entry.id, action.id); render(); });
-    const meta = [el("span", { class: "sub", text: entry.date })];
-    if (action.due) meta.push(el("span", { class: "chip", text: "〜" + action.due }));
+  function actionsHeadText(n) { return "未完アクション（" + n + "）"; }
+
+  function actionRow(entry, action, head, ul, card) {
     const info = el("div", { class: "grow" }, [
       el("div", { text: action.text }),
-      el("div", { class: "sub" }, meta),
+      el("div", { class: "sub" }, [el("span", { class: "sub", text: entry.date })].concat(action.due ? [el("span", { class: "chip", text: "〜" + action.due })] : [])),
     ]);
-    return el("li", { class: "mk-row" }, [cb, info]);
+    const cb = ui.checkbox(action.done);
+    const li = el("li", { class: "mk-row" }, [cb, info]);
+    cb.addEventListener("change", () => {
+      L().toggleAction(entry.id, action.id);
+      // 完了にすると未完一覧から外れる → 行を除去し見出しの件数を更新（0件なら空状態へ）。
+      const stillOpen = L().openActionsOf(selectedMemberId).some((o) => o.entry.id === entry.id && o.action.id === action.id);
+      if (!stillOpen) {
+        li.remove();
+        const remaining = ul.querySelectorAll(".mk-row").length;
+        head.textContent = actionsHeadText(remaining);
+        if (!remaining) { ul.remove(); card.appendChild(ui.emptyState("未完のアクションはありません")); }
+      }
+      refreshTimeline(); // 記録側の「アクション N/total 未完」表示を揃える
+    });
+    return li;
   }
 
   // ---- タイムライン（選択メンバー） ----
@@ -181,7 +208,7 @@
     icon: "🗣",
     description: "1on1の記録を残して振り返る",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; },
+    unmount() { root = null; timelineNode = null; },
     summary() { return L().summary(); },
     summaryFor(entityType, id) { return L().summaryFor(entityType, id); },
     searchItems() { return L().searchItems(); },
