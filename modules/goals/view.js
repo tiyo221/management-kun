@@ -154,6 +154,9 @@
   }
 
   function renderDashboard() {
+    // ダッシュボードでは詳細ペイン・左リストが無い。部分更新の参照が前回ロードマップ描画時の
+    // 切り離しノードを指したまま残らないようリセットする（afterStepChange はここでは発火しないが明確化）。
+    mainPaneNode = null; sideSubById = {};
     const d = L().dashboardData();
     const stats = ui.statsRow([
       { num: d.achieveRate + "%", label: "大目標の達成率" },
