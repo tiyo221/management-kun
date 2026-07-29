@@ -92,9 +92,11 @@
   function actionsHeadText(n) { return "未完アクション（" + n + "）"; }
 
   function actionRow(entry, action, head, ul, card) {
+    const meta = [el("span", { class: "sub", text: entry.date })];
+    if (action.due) meta.push(el("span", { class: "chip", text: "〜" + action.due }));
     const info = el("div", { class: "grow" }, [
       el("div", { text: action.text }),
-      el("div", { class: "sub" }, [el("span", { class: "sub", text: entry.date })].concat(action.due ? [el("span", { class: "chip", text: "〜" + action.due })] : [])),
+      el("div", { class: "sub" }, meta),
     ]);
     const cb = ui.checkbox(action.done);
     const li = el("li", { class: "mk-row" }, [cb, info]);
