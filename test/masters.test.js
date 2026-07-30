@@ -51,6 +51,21 @@ test("masters: 退避は replaceAll で破棄される", (MK) => {
   eq(P.all().map((m) => m.name), ["W"]);
 });
 
+test("masters: remove / undoRemove は masters:changed を発火する", (MK) => {
+  // 観点: ビューの作り直しをこの通知に一任している（shell-masters は手動再描画を持たない）ため、
+  //   発火が落ちると保存はできているのに画面だけ古いまま静かに壊れる
+  // 入力: masters:changed を購読 → 1件 create（購読前の分は数えない）→ remove → undoRemove
+  // 期待: remove と undoRemove でそれぞれ1回、domain は "people"
+  const P = MK.people;
+  const m = P.create({ name: "A" });
+  const seen = [];
+  MK.bus.on("masters:changed", (p) => seen.push(p && p.domain)); // bus に off が無いので購読は解除しない
+  P.remove(m.id);
+  eq(seen, ["people"]);
+  eq(P.undoRemove(), true);
+  eq(seen, ["people", "people"]);
+});
+
 test("masters: forgetAllUndo で全マスタの退避が捨てられる", (MK) => {
   // 観点: ストアを API の外から書き換える経路（全データ初期化・テストのリセット）用の退避破棄。
   //   これが無いと初期化後に「元に戻す」で1件だけ復活する
