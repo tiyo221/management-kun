@@ -123,18 +123,16 @@ test("ui.removeWithUndo: 削除できたときだけトーストを出し、空�
   // 観点: 空振り（remove が false）でトーストを出すと、その「元に戻す」が直前に消した別の1件を
   //       復元してしまう。一方で画面はストアに合わせ直す必要がある（消えた行を残さない）
   // 入力: remove が true を返す API と false を返す API で removeWithUndo を呼ぶ
-  // 期待: true 側は戻り値 true・トースト1つ・onChanged 1回。false 側は戻り値 false・トースト0・onChanged 1回
+  // 期待: true 側はトースト1つ・onChanged 1回。false 側はトースト0・onChanged 1回（画面は合わせ直す）
   resetDom();
   let changed = 0;
-  const ok = { remove: () => true, undoRemove: () => true };
-  eq(MK.ui.removeWithUndo(ok, "x", "削除しました", () => { changed++; }), true);
+  MK.ui.removeWithUndo({ remove: () => true, undoRemove: () => true }, "x", "削除しました", () => { changed++; });
   eq(changed, 1);
   assert(lastToast(), "削除できたら取り消しトーストを出す");
 
   resetDom(); // トーストが1つも出なければ host（#mk-toasts）自体が生えない
   let changed2 = 0;
-  const miss = { remove: () => false, undoRemove: () => true };
-  eq(MK.ui.removeWithUndo(miss, "x", "削除しました", () => { changed2++; }), false);
+  MK.ui.removeWithUndo({ remove: () => false, undoRemove: () => true }, "x", "削除しました", () => { changed2++; });
   eq(changed2, 1);
   assert(!lastToast(), "空振りではトーストを出さない");
 });

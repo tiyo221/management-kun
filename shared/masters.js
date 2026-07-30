@@ -126,9 +126,10 @@
         const { item, index } = pendingUndo;
         pendingUndo = null;
         const d = data();
-        // 元の位置へ。配列が縮む経路（削除・全置換）はどれも退避を潰すのでアプリ内で末尾超過は起きないが、
-        // ストアを外から書き替えられた場合（別タブ・手作業）に備えて末尾へ丸める。
-        d[collKey].splice(Math.min(index, d[collKey].length), 0, item);
+        // 以下2つはどちらも「ストアを外から書き替えられた場合（別タブ・手作業）」への備え。
+        // アプリ内の経路では配列が縮む操作・同 id の復活はどれも退避を潰すので起こらない。
+        if (d[collKey].some((x) => x.id === item.id)) return false; // 同 id が既に居るなら戻さない（id は再利用しない・§4.7）
+        d[collKey].splice(Math.min(index, d[collKey].length), 0, item); // 元の位置へ（末尾超過は末尾に丸める）
         persist(d);
         return true;
       },

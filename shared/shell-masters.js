@@ -172,7 +172,11 @@
       edit.addEventListener("click", () => cfg.openEdit(item));
       const del = el("button", { class: "btn btn-ghost", text: "削除" });
       // 削除も masters:changed 経由で再描画される（手動再描画は不要）。
-      del.addEventListener("click", () => MK.ui.removeWithUndo(cfg.api, item.id, cfg.deletedText(item)));
+      // 再描画は masters:changed に一任するが、空振り（既に消えている）だけは保存が無く通知も飛ばない
+      // ので、この一覧を作り直して画面をストアに合わせる（onChanged は空振りでも呼ばれる）。
+      // 通常の削除では bus が先にビュー全体を作り直すため、ここで渡す再描画は外れた古いノードに対する
+      // 空振りになる（無害。二重に描いて見た目が乱れることはない）。
+      del.addEventListener("click", () => MK.ui.removeWithUndo(cfg.api, item.id, cfg.deletedText(item), () => renderMasterList(host, cfg)));
       ul.appendChild(el("li", { class: "mk-row" }, [info, edit, del]));
     });
     host.appendChild(ul);

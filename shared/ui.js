@@ -134,14 +134,14 @@
   // `{ remove(id)→boolean, undoRemove()→boolean }` を持つ API（共有マスタ）の削除一式。
   // 空振り（既に消えている＝false）ではトーストを出さない ── 出すと、その「元に戻す」が
   // 直前に消した別の1件を復元してしまう。
-  // onChanged は再描画（省略可。masters:changed 等で勝手に描き直る画面では渡さない）。
-  // 空振りのときも呼ぶ（消えている行を表示に残さないため）。
+  // onChanged は再描画。省略できる（masters:changed 等で勝手に描き直る画面では渡さない）。
+  // 渡された場合は空振りのときも呼ぶ ── 空振り＝ストアには無いのに画面には出ている状態なので、
+  // 保存を伴わない＝通知も飛ばないぶん、ここで画面をストアに合わせ直す必要がある。
   ui.removeWithUndo = function (api, id, message, onChanged) {
     const removed = api.remove(id);
     if (onChanged) onChanged();
-    if (!removed) return false;
+    if (!removed) return;
     ui.undoDeleteToast(message, () => api.undoRemove(), onChanged);
-    return true;
   };
 
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }

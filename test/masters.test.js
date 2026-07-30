@@ -118,6 +118,19 @@ test("masters: 保持するのは直前に消した1件だけ", (MK) => {
   eq(P.all().map((m) => m.name), ["B"]);
 });
 
+test("masters: 復元先に同じ id が居たら戻さない（外から書き替えられた場合の備え）", (MK) => {
+  // 観点: ストアを API の外から書き替えられた（別タブ・手作業）ときに、同じ id を2件並べない
+  //   （id は再利用しない・spec §4.7）。アプリ内の経路では退避が破棄されるので起きない
+  // 入力: A を remove → store を直に書き戻して A を復活させる → undoRemove
+  // 期待: false を返し、件数は1件のまま（重複しない）
+  const P = MK.people;
+  const a = P.create({ name: "A" });
+  P.remove(a.id);
+  MK.store.write("people", { version: 1, members: [a] }); // API を通さない外部書き換え
+  eq(P.undoRemove(), false);
+  eq(P.all().length, 1);
+});
+
 test("masters: 存在しない id の remove は false を返し、直前の退避を潰さない", (MK) => {
   // 観点: 空振りの remove が「削除した」ことにならず（＝view がトーストを出さない）、退避も上書きしない
   //   （出してしまうと、その「元に戻す」が直前に消した別の1件を復元してしまう）
