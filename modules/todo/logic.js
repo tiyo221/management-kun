@@ -52,6 +52,8 @@
   // 削除の取り消し（CONVENTIONS §2.5-3）。保持するのは「直前に消した1件＋その位置」だけ。
   // 汎用 undo スタックは持たない（CODING.md オーバーエンジニアリング防止）。他の変更が入ったら
   // 位置がずれる／全置換でデータセットごと変わるため退避を破棄する（drop）。
+  // store を logic の外から書き換える経路（全データ初期化 `MK.store.clearAll()`）は save を通らないので、
+  // そこからも捨てられるよう drop を forgetUndo として公開する（§2.5-3 の共通契約）。
   let pendingUndo = null; // { task: TodoTask, index: number } | null
   function drop() { pendingUndo = null; }
   /**
@@ -368,7 +370,7 @@
   MK.logic = MK.logic || {};
   MK.logic.todo = {
     STATUSES, load, save, tasks, counts, filtered,
-    addTask, updateTask, setStatus, toggleDone, removeTask, undoDelete,
+    addTask, updateTask, setStatus, toggleDone, removeTask, undoDelete, forgetUndo: drop,
     projectNameOf, resolveProject, statusFromCSV, buildCSVRows, applyCSV, dueCounts, summary,
     searchItems, exportData, importData, loadSample,
   };

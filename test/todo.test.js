@@ -125,3 +125,16 @@ test("todo: CSV ラウンドトリップ（ステータス/プロジェクト名
   eq(out[0], ["タイトル", "ステータス", "プロジェクト", "コンテキスト", "期限", "メモ"]);
   eq(T.applyCSV(out).ok, 3);
 });
+
+test("todo: forgetUndo で退避が捨てられる（全データ初期化用）", (MK) => {
+  // 観点: store を logic の外から消す経路（MK.store.clearAll）は save を通らないため、
+  //       退避を明示的に捨てないと初期化後の Ctrl+Z で1件だけ復活する（CONVENTIONS §2.5-3）
+  // 入力: 1件追加 → 削除 → forgetUndo() → undoDelete()
+  // 期待: undoDelete は false を返し、件数は0のまま
+  const L = MK.logic.todo;
+  L.addTask("捨てる");
+  L.removeTask(L.tasks()[0].id);
+  L.forgetUndo();
+  eq(L.undoDelete(), false);
+  eq(L.tasks().length, 0);
+});

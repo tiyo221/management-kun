@@ -172,19 +172,11 @@
       edit.addEventListener("click", () => cfg.openEdit(item));
       const del = el("button", { class: "btn btn-ghost", text: "削除" });
       // 削除も masters:changed 経由で再描画される（手動再描画は不要）。
-      del.addEventListener("click", () => removeWithUndo(cfg.api, item.id, cfg.deletedText(item)));
+      del.addEventListener("click", () => MK.ui.removeWithUndo(cfg.api, item.id, cfg.deletedText(item)));
       ul.appendChild(el("li", { class: "mk-row" }, [info, edit, del]));
     });
     host.appendChild(ul);
   }
-  // マスタの削除。確認は挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3。confirm は
-  // 取り消し不能な操作＝全データ削除・取込の置換だけに使う）。削除・復元のどちらも masters:changed
-  // を発火するため、ビューの作り直しはその bus ハンドラに一任する（＝再描画コールバックを渡さない）。
-  function removeWithUndo(api, id, message) {
-    if (!api.remove(id)) return; // 空振り（既に消えている）ならトーストを出さない（別の1件を復元しかねない）
-    MK.ui.undoDeleteToast(message, () => api.undoRemove());
-  }
-
   // マスタ編集モーダルの共通骨格。fields=[{ label, build(f) }]（build は control を返しつつ f に参照を格納）、
   // onSave(f, close) が保存処理、extraActions(f) は「削除」等の先頭アクション（省略可）。
   function masterEditModal(spec) {
@@ -368,7 +360,7 @@
       // 削除アクションは保存/キャンセルの前に置く（従来の並び）。
       extraActions: () => [
         // 先にモーダルを閉じてから削除＋取り消しトースト（モーダルの裏にトーストが隠れないように）。
-        { label: "削除", variant: "btn-danger", onClick: (close) => { close(); removeWithUndo(MK.products, p.id, p.name + " を削除しました"); } },
+        { label: "削除", variant: "btn-danger", onClick: (close) => { close(); MK.ui.removeWithUndo(MK.products, p.id, p.name + " を削除しました"); } },
       ],
       onSave: (f, c) => {
         if (!f.name.value.trim()) { MK.ui.toast("プロダクト名を入力してください", "error"); return; }

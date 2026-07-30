@@ -59,11 +59,14 @@ test("masters: remove / undoRemove は masters:changed を発火する", (MK) =>
   const P = MK.people;
   const m = P.create({ name: "A" });
   const seen = [];
-  MK.bus.on("masters:changed", (p) => seen.push(p && p.domain)); // bus に off が無いので購読は解除しない
+  // bus に off が無いため購読は残る。フラグで実質無効化し、後続テストの発火を拾わないようにする。
+  let watching = true;
+  MK.bus.on("masters:changed", (p) => { if (watching) seen.push(p && p.domain); });
   P.remove(m.id);
   eq(seen, ["people"]);
   eq(P.undoRemove(), true);
   eq(seen, ["people", "people"]);
+  watching = false;
 });
 
 test("masters: forgetAllUndo で全マスタの退避が捨てられる", (MK) => {

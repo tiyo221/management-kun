@@ -118,3 +118,42 @@ test("ui.undoDeleteToast: onRestored 省略時も復元できれば何も出さ�
   eq(tried, 1);
   eq(global.document.getElementById("mk-toasts").children.length, 0);
 });
+
+test("ui.removeWithUndo: 削除できたときだけトーストを出し、空振りでも再描画は呼ぶ", (MK) => {
+  // 観点: 空振り（remove が false）でトーストを出すと、その「元に戻す」が直前に消した別の1件を
+  //       復元してしまう。一方で画面はストアに合わせ直す必要がある（消えた行を残さない）
+  // 入力: remove が true を返す API と false を返す API で removeWithUndo を呼ぶ
+  // 期待: true 側は戻り値 true・トースト1つ・onChanged 1回。false 側は戻り値 false・トースト0・onChanged 1回
+  resetDom();
+  let changed = 0;
+  const ok = { remove: () => true, undoRemove: () => true };
+  eq(MK.ui.removeWithUndo(ok, "x", "削除しました", () => { changed++; }), true);
+  eq(changed, 1);
+  assert(lastToast(), "削除できたら取り消しトーストを出す");
+
+  resetDom(); // トーストが1つも出なければ host（#mk-toasts）自体が生えない
+  let changed2 = 0;
+  const miss = { remove: () => false, undoRemove: () => true };
+  eq(MK.ui.removeWithUndo(miss, "x", "削除しました", () => { changed2++; }), false);
+  eq(changed2, 1);
+  assert(!lastToast(), "空振りではトーストを出さない");
+});
+
+test("ui.removeWithUndo: 「元に戻す」で undoRemove を呼び、成功時だけ再描画する", (MK) => {
+  // 観点: 復元の配線（undoDeleteToast への委譲）が効いていること
+  // 入力: undoRemove が true を返す API で Ctrl+Z ／ false を返す API で Ctrl+Z
+  // 期待: true 側は onChanged が2回目（削除時＋復元時）呼ばれる。false 側は1回のまま
+  resetDom();
+  let changed = 0;
+  MK.ui.removeWithUndo({ remove: () => true, undoRemove: () => true }, "x", "削除しました", () => { changed++; });
+  setActiveElement(null);
+  ctrlZ();
+  eq(changed, 2);
+
+  resetDom();
+  let changed2 = 0;
+  MK.ui.removeWithUndo({ remove: () => true, undoRemove: () => false }, "x", "削除しました", () => { changed2++; });
+  setActiveElement(null);
+  ctrlZ();
+  eq(changed2, 1);
+});

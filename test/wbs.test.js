@@ -81,3 +81,23 @@ test("wbs: 削除後に別の変更が入ったら undo 退避を破棄する", 
     W.setStore(MK.store.scope("module:wbs"));
   }
 });
+
+test("wbs: forgetUndo で退避が捨てられる／undoDelete は2回目に false", (MK) => {
+  // 観点: 退避は復元したら消える（1回しか戻せない）。加えて store を logic の外から消す経路
+  //       （MK.store.clearAll）向けに forgetUndo で捨てられる（CONVENTIONS §2.5-3）
+  // 入力: ルート2件 → 先頭を deleteTask → undoDelete を2回／別ケースで削除後 forgetUndo → undoDelete
+  // 期待: 1回目の undoDelete は true で2件へ戻り、2回目は false。forgetUndo 後は false で1件のまま
+  const L = MK.logic.wbs;
+  L.addRoot(); L.addRoot();
+  L.deleteTask(0);
+  eq(L.tasks().length, 1);
+  eq(L.undoDelete(), true);
+  eq(L.tasks().length, 2);
+  eq(L.undoDelete(), false); // 復元済みの退避を二重に戻さない
+  eq(L.tasks().length, 2);
+
+  L.deleteTask(0);
+  L.forgetUndo();
+  eq(L.undoDelete(), false);
+  eq(L.tasks().length, 1);
+});

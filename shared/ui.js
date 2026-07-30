@@ -131,6 +131,19 @@
     });
   };
 
+  // `{ remove(id)→boolean, undoRemove()→boolean }` を持つ API（共有マスタ）の削除一式。
+  // 空振り（既に消えている＝false）ではトーストを出さない ── 出すと、その「元に戻す」が
+  // 直前に消した別の1件を復元してしまう。
+  // onChanged は再描画（省略可。masters:changed 等で勝手に描き直る画面では渡さない）。
+  // 空振りのときも呼ぶ（消えている行を表示に残さないため）。
+  ui.removeWithUndo = function (api, id, message, onChanged) {
+    const removed = api.remove(id);
+    if (onChanged) onChanged();
+    if (!removed) return false;
+    ui.undoDeleteToast(message, () => api.undoRemove(), onChanged);
+    return true;
+  };
+
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }
   ui.modal = function (opts) {
     opts = opts || {};
