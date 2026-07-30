@@ -82,3 +82,39 @@ test("ui.undoToast: フォーカスがトースト内にある間は自動消滅
   advanceTimers(10000);
   assert(!btn.disabled, "フォーカスがトースト内に残る限り、ブラーでは消えない");
 });
+
+test("ui.undoDeleteToast: 復元できたら onRestored を呼び、できなければ失敗を伝える", (MK) => {
+  // 観点: 削除トーストの定型。tryUndo の戻り値で「再描画」と「戻せなかった案内」を振り分ける
+  //       （無言の no-op にしない・§2.5-3。失敗文言はここ1か所に持つ）
+  // 入力: tryUndo が true を返すトーストで Ctrl+Z／tryUndo が false を返すトーストで Ctrl+Z
+  // 期待: true 側は onRestored が呼ばれ追加のトーストが出ない。false 側は onRestored が呼ばれず
+  //       エラートーストが1つ出る
+  resetDom();
+  let restored = 0;
+  MK.ui.undoDeleteToast("削除しました", () => true, () => { restored++; });
+  setActiveElement(null);
+  ctrlZ();
+  eq(restored, 1);
+  eq(global.document.getElementById("mk-toasts").children.length, 0); // 成功時は何も出さない
+
+  resetDom();
+  let restored2 = 0;
+  MK.ui.undoDeleteToast("削除しました", () => false, () => { restored2++; });
+  setActiveElement(null);
+  ctrlZ();
+  eq(restored2, 0);
+  const t = lastToast();
+  assert(t && /\berror\b/.test(t.className || ""), "戻せなかったことをエラートーストで伝える");
+});
+
+test("ui.undoDeleteToast: onRestored 省略時も復元できれば何も出さない", (MK) => {
+  // 観点: 再描画を呼び出し側に任せない画面（masters:changed で勝手に描き直る）向けに onRestored は省略可
+  // 自明: 第3引数なしで Ctrl+Z を撃ち、例外にならずエラートーストも出ないことを見るだけ
+  resetDom();
+  let tried = 0;
+  MK.ui.undoDeleteToast("削除しました", () => { tried++; return true; });
+  setActiveElement(null);
+  ctrlZ();
+  eq(tried, 1);
+  eq(global.document.getElementById("mk-toasts").children.length, 0);
+});

@@ -179,13 +179,10 @@
   }
   // マスタの削除。確認は挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3。confirm は
   // 取り消し不能な操作＝全データ削除・取込の置換だけに使う）。削除・復元のどちらも masters:changed
-  // を発火するため、ビューの作り直しはその bus ハンドラに一任する（ここでは再描画しない）。
+  // を発火するため、ビューの作り直しはその bus ハンドラに一任する（＝再描画コールバックを渡さない）。
   function removeWithUndo(api, id, message) {
     if (!api.remove(id)) return; // 空振り（既に消えている）ならトーストを出さない（別の1件を復元しかねない）
-    MK.ui.undoToast(message, () => {
-      // 退避は他の変更が入った時点で破棄される。戻せなかったことは無言にしない（§2.5-3）。
-      if (!api.undoRemove()) MK.ui.toast("元に戻せませんでした（他の変更が入っています）", "error");
-    });
+    MK.ui.undoDeleteToast(message, () => api.undoRemove());
   }
 
   // マスタ編集モーダルの共通骨格。fields=[{ label, build(f) }]（build は control を返しつつ f に参照を格納）、

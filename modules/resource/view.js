@@ -19,17 +19,14 @@
   function demandMaster() { return (ctx && ctx.demands) || MK.demands; }
 
   // 削除は確認を挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3）。復元は共有マスタの
-  // undoRemove()（直前の1件を元の位置へ）。退避は他の変更で破棄されるため、戻せなかったことは
-  // 無言にせずエラートーストで伝える。表の集計が変わるのでどちらも全再描画する。
+  // undoRemove()（直前の1件を元の位置へ）。resource は scope: "global" で masters:changed の
+  // 再描画対象に入らないため、削除・復元とも自分で render() する（表の集計が変わる）。
   function removeWithUndo(master, id, message) {
     const removed = master().remove(id);
     render(); // 空振り（既に消えている）でも、消えた行を表示に残さないため再描画する
     // 空振りでトーストを出すと、その「元に戻す」が直前に消した別の1件を復元しかねない
     if (!removed) return;
-    MK.ui.undoToast(message, () => {
-      if (master().undoRemove()) render();
-      else MK.ui.toast("元に戻せませんでした（他の変更が入っています）", "error");
-    });
+    MK.ui.undoDeleteToast(message, () => master().undoRemove(), render);
   }
 
   function render() {

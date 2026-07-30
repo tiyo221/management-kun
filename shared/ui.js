@@ -119,6 +119,18 @@
     btn.addEventListener("click", undo);
   };
 
+  // 削除の取り消しトースト（undoToast の定型。CONVENTIONS §2.5-3）。
+  // tryUndo は logic 側の復元（マスタの undoRemove / モジュールの undoDelete）で、復元できたかを
+  // 返す規約。false のときは無言の no-op にせず、同じ文言で「戻せなかった」ことを伝える
+  // （退避は他の変更が入った時点で破棄されるため、この経路は普通に起きる）。
+  // onRestored は復元できたときだけ呼ぶ再描画。省略可（masters:changed 等で勝手に描き直る画面）。
+  ui.undoDeleteToast = function (message, tryUndo, onRestored) {
+    ui.undoToast(message, () => {
+      if (!tryUndo()) { ui.toast("元に戻せませんでした（他の変更が入っています）", "error"); return; }
+      if (onRestored) onRestored();
+    });
+  };
+
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }
   ui.modal = function (opts) {
     opts = opts || {};
