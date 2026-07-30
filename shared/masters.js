@@ -131,6 +131,15 @@
         return true;
       },
 
+      /**
+       * 退避を破棄する。`create` / `update` / `replaceAll` は自分で破棄するので、これを呼ぶのは
+       * **ストアを API の外から書き換える経路**だけ（全データ初期化 `MK.store.clearAll()`・テストの
+       * リセット）。呼ばないと初期化後に `Ctrl+Z` で1件だけ復活しうる。全マスタまとめては
+       * {@link MK.masters.forgetAllUndo} を使う。
+       * @returns {void}
+       */
+      forgetUndo() { dropUndo(); },
+
       replaceAll(list) {
         let arr = Array.isArray(list) ? list : [];
         if (onReplace) arr = arr.map(onReplace);
@@ -160,5 +169,12 @@
     return api;
   }
 
-  MK.masters = { define, registry };
+  /**
+   * 登録済み全マスタの削除退避を破棄する。ストアを API の外から書き換える経路（全データ初期化・
+   * テストのリセット）から呼ぶ。未ロードのマスタは registry に載らないので自然に対象外。
+   * @returns {void}
+   */
+  function forgetAllUndo() { registry.forEach((m) => m.api.forgetUndo()); }
+
+  MK.masters = { define, registry, forgetAllUndo };
 })();

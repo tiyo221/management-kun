@@ -51,6 +51,23 @@ test("masters: 退避は replaceAll で破棄される", (MK) => {
   eq(P.all().map((m) => m.name), ["W"]);
 });
 
+test("masters: forgetAllUndo で全マスタの退避が捨てられる", (MK) => {
+  // 観点: ストアを API の外から書き換える経路（全データ初期化・テストのリセット）用の退避破棄。
+  //   これが無いと初期化後に「元に戻す」で1件だけ復活する
+  // 入力: people と allocations でそれぞれ1件 remove → MK.masters.forgetAllUndo() → 各 undoRemove
+  // 期待: どちらも false で、件数は0のまま
+  const P = MK.people, A = MK.allocations;
+  const m = P.create({ name: "A" });
+  const a = A.create({ memberId: m.id, targetId: "p1", percent: 50 });
+  P.remove(m.id);
+  A.remove(a.id);
+  MK.masters.forgetAllUndo();
+  eq(P.undoRemove(), false);
+  eq(A.undoRemove(), false);
+  eq(P.all().length, 0);
+  eq(A.all().length, 0);
+});
+
 test("masters: 保持するのは直前に消した1件だけ", (MK) => {
   // 観点: 退避は1つ（汎用 undo スタックは持たない・§2.5-3）
   // 入力: A/B を作成 → A を remove → B を remove → undoRemove を2回

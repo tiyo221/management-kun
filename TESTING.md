@@ -28,6 +28,7 @@
 | `modules/<id>/view.js` | その `<id>` の画面 | 手動スモーク（描画・操作） |
 | `shared/core.js` / `store.js` / `io.js` | **全モジュール**（全部が依存） | 自動フルスイート＋全モジュール手動スモーク |
 | `shared/scope.js`（スコープ次元） | **wbs**（project-scoped）・**metrics**（product-scoped）・**シェル**（スイッチャ / `ctx.scope`） | 自動（`scope` / `wbs-scope` / `metrics`）＋切替の手動確認 |
+| `shared/masters.js`（マスタ CRUD 骨格ファクトリ） | **全マスタ**（people / projects / products / allocations / demands）**とそれを参照する全モジュール** | 自動（`masters` ＋各マスタ・`resource` / `dashboard`）＋マスタ管理画面の手動確認 |
 | `shared/people.js` / `projects.js`（マスタ） | **skills / wbs / todo / resource / oneonone**（マスタを参照） | 自動＋該当画面の手動確認 |
 | `shared/products.js`（マスタ） | **releases / dashboard / metrics**（Product マスタを参照。metrics は product-scoped の対象） | 自動＋該当画面の手動確認 |
 | `shared/allocations.js` / `demands.js`（共有マスタ） | **resource / dashboard**（要員計画・ダッシュボードがアロケーションを参照） | 自動（`allocations` / `demands` / `resource` / `dashboard`）＋要員計画・ダッシュボード画面の手動確認 |

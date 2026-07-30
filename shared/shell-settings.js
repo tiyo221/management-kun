@@ -54,6 +54,9 @@
       MK.ui.confirm("全データを削除して初期状態に戻します。取り消せません。よろしいですか？").then((ok) => {
         if (!ok) return;
         MK.store.clearAll();
+        // clearAll はストアを API の外から消すためマスタの削除退避を通らない。捨てておかないと
+        // 直前の削除の取り消しトーストが生きていた場合、初期化後に1件だけ復活する。
+        MK.masters.forgetAllUndo();
         MK.ui.toast("全データを初期化しました", "success");
         route("home");
       });
