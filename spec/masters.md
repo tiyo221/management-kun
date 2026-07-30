@@ -38,7 +38,7 @@
 - **id**: `<prefix>_<base36 epoch>_<rand>`（§4.7）。グローバル一意・**再利用しない**。
 - **必須フィールド `name`**（表示名・名寄せキー）。任意フィールドはマスタ固有。モジュール固有の属性はマスタに持たせず、モジュール側に `<domain>Id` をキーに格納する（マスタを汚さず拡張可能にするため）。
 - status 等の**列挙は `STATUSES`**（`{ key, label }` の配列・表示順もこの順）と **`normalize<Enum>()`** を持ち、未知値・未指定は既定へ正規化する。
-- 変更（`create` / `update` / `remove` / `replaceAll` / `applyCSV`）のたびに **`bus.emit("masters:changed", { domain })`** を発火する。localStorage は直接触らず必ず `MK.store` 経由。
+- 変更（`create` / `update` / `remove` / `undoRemove` / `replaceAll` / `applyCSV`）のたびに **`bus.emit("masters:changed", { domain })`** を発火する。localStorage は直接触らず必ず `MK.store` 経由。
 
 #### B. API 契約
 DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<domain>` で公開する（§3.5）。
@@ -49,7 +49,8 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 | `get(id)` | `T \| null` | id 一致 |
 | `create(attrs)` | `T` | 1件作成（id 採番・既定値・正規化・保存・emit） |
 | `update(id, patch)` | `T \| null` | 部分更新（正規化・保存・emit） |
-| `remove(id)` | `void` | 削除（保存・emit） |
+| `remove(id)` | `void` | 削除（保存・emit）。取り消し用に「消した1件＋元の位置」を退避する |
+| `undoRemove()` | `boolean` | 直前の `remove` を取り消して元の位置へ戻す（保存・emit）。退避が無ければ `false`（CONVENTIONS §2.5-3） |
 | `resolve(name)` | `T \| null` | 名寄せ（正規化キー完全一致・§8.3） |
 | `resolveOrCreate(name)` | `id \| null` | 一致なければ新規作成し id を返す（空名は `null`・§8.4） |
 | `replaceAll(list)` | `void` | 全置換（JSON バックアップ復元用） |
@@ -57,7 +58,8 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 | `applyCSV(rows)` | `number` | CSV 取込（下記 C の名寄せ upsert）・取込件数を返す |
 
 - status を持つマスタは加えて **`STATUSES` / `normalize<Enum>()` / `counts()`**（`all` ＋各 key の件数マップ）を提供する。
-- 上表の同型メソッド（`data` / `persist` / `all` / `get` / `create` / `update` / `remove` / `replaceAll`、および名寄せ `resolve` / `resolveOrCreate`）は**共有ファクトリ `MK.masters.define(ns, opts)`**（[`shared/masters.js`](../shared/masters.js)・Issue #185）が供給し、各マスタファイルは固有部分だけを足す。`opts` は `collKey`（ルート配列名）・`prefix`（id 採番）・`defaults`（既定属性。関数なら都度評価）・`domain`（既定 `ns`）・保存前フック `onCreate(item)` / `onUpdate(item, patch)`（正規化・timestamps を差し込む）・`onReplace(item)`（全置換時の整形）・`resolvable`（`name` を持つマスタ＝people/projects/products のみ名寄せを生やす。参照で成立する allocations/demands には生やさない）。`store.collection`（#139）・`renderMaster`（#138）と同じ「同型は共通化・固有だけ差し込む」方針の延長。
+- 削除の取り消しは**マスタ側が持つ**（UI 側で退避しない）。保持するのは直前に消した1件だけで、`create` / `update` / `replaceAll` が入った時点で退避を破棄する（位置がずれた配列へ古い退避を戻さないため）。退避はマスタごとに独立する。
+- 上表の同型メソッド（`data` / `persist` / `all` / `get` / `create` / `update` / `remove` / `undoRemove` / `replaceAll`、および名寄せ `resolve` / `resolveOrCreate`）は**共有ファクトリ `MK.masters.define(ns, opts)`**（[`shared/masters.js`](../shared/masters.js)・Issue #185）が供給し、各マスタファイルは固有部分だけを足す。`opts` は `collKey`（ルート配列名）・`prefix`（id 採番）・`defaults`（既定属性。関数なら都度評価）・`domain`（既定 `ns`）・保存前フック `onCreate(item)` / `onUpdate(item, patch)`（正規化・timestamps を差し込む）・`onReplace(item)`（全置換時の整形）・`resolvable`（`name` を持つマスタ＝people/projects/products のみ名寄せを生やす。参照で成立する allocations/demands には生やさない）。`store.collection`（#139）・`renderMaster`（#138）と同じ「同型は共通化・固有だけ差し込む」方針の延長。
 
 #### C. CSV 取込は「名寄せ upsert」を標準とする
 - `applyCSV(rows)` は行ごとに `name` を正規化キーで既存と照合し、**一致すれば id を保ったまま更新／なければ新規作成**する（§8.3 / §8.4）。`name` が空の行はスキップ。

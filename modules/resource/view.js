@@ -18,6 +18,18 @@
   function allocMaster() { return (ctx && ctx.allocations) || MK.allocations; }
   function demandMaster() { return (ctx && ctx.demands) || MK.demands; }
 
+  // 削除は確認を挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3）。復元は共有マスタの
+  // undoRemove()（直前の1件を元の位置へ）。退避は他の変更で破棄されるため、戻せなかったことは
+  // 無言にせずエラートーストで伝える。表の集計が変わるのでどちらも全再描画する。
+  function removeWithUndo(master, id, message) {
+    master().remove(id);
+    render();
+    MK.ui.undoToast(message, () => {
+      if (master().undoRemove()) render();
+      else MK.ui.toast("元に戻せませんでした（他の変更が入っています）", "error");
+    });
+  }
+
   function render() {
     if (!root) return;
     root.innerHTML = "";
@@ -180,7 +192,7 @@
       el("div", { class: "sub", text: L().fteLabel(a.percent) + "（" + a.percent + "%） / " + period }),
     ]);
     info.addEventListener("click", () => editAllocation(a));
-    return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("このアサインを削除しますか？").then((ok) => { if (ok) { allocMaster().remove(a.id); render(); } }) })]);
+    return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => removeWithUndo(allocMaster, a.id, "アサインを削除しました") })]);
   }
 
   function editAllocation(a) {
@@ -239,7 +251,8 @@
       ui.field("ロールで絞り込み", roleFilter), ui.field("メンバー", f.member), ui.field("プロジェクト", f.target), ui.field("人数（0.5 / 1.0 …）", f.fte),
       ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
     ]), actions: [
-      a ? { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("削除しますか？").then((ok) => { if (ok) { allocMaster().remove(a.id); c(); render(); } }) } : null,
+      // 先にモーダルを閉じてから削除＋取り消しトースト（モーダルの裏にトーストが隠れないように）。
+      a ? { label: "削除", variant: "btn-danger", onClick: (c) => { c(); removeWithUndo(allocMaster, a.id, "アサインを削除しました"); } } : null,
       { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
       { label: "保存", variant: "btn-primary", onClick: (c) => {
           if (!f.member.value) { MK.ui.toast("メンバーを選択してください（絞り込みを「すべてのロール」に戻すと選べます）", "error"); return; }
@@ -267,7 +280,7 @@
       el("div", { class: "sub", text: "必要 " + L().fteLabel(d.requiredPercent) + "（" + d.requiredPercent + "%） / " + period }),
     ]);
     info.addEventListener("click", () => editDemand(d));
-    return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("この必要人数を削除しますか？").then((ok) => { if (ok) { demandMaster().remove(d.id); render(); } }) })]);
+    return el("li", { class: "mk-row" }, [info, ui.button("削除", { variant: "btn-ghost", onClick: () => removeWithUndo(demandMaster, d.id, "必要人数を削除しました") })]);
   }
   function editDemand(d) {
     const opts = targetOptions();
@@ -287,7 +300,8 @@
       ui.field("必要人数（0.5 / 1.0 …。1人分超可）", f.fte),
       ui.field("開始日", f.start), ui.field("終了日", f.end), ui.field("メモ", f.note),
     ]), actions: [
-      d ? { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("削除しますか？").then((ok) => { if (ok) { demandMaster().remove(d.id); c(); render(); } }) } : null,
+      // 先にモーダルを閉じてから削除＋取り消しトースト（モーダルの裏にトーストが隠れないように）。
+      d ? { label: "削除", variant: "btn-danger", onClick: (c) => { c(); removeWithUndo(demandMaster, d.id, "必要人数を削除しました"); } } : null,
       { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
       { label: "保存", variant: "btn-primary", onClick: (c) => {
           if (!f.target.value) { MK.ui.toast("プロジェクトを選択してください", "error"); return; }

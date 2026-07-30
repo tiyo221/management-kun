@@ -130,7 +130,7 @@
   //   cfg.csvBase / cfg.exportToast / cfg.importToast(n) … CSV ファイル名接頭辞・トースト
   //   cfg.emptyText    … 0件時の文言
   //   cfg.renderInfo(item) … 行の左側（.grow）を作る（編集・削除ボタンは共通で付与）
-  //   cfg.confirmText(item) / cfg.openEdit(item) … 削除確認文言・編集モーダル起動
+  //   cfg.deletedText(item) / cfg.openEdit(item) … 削除トースト文言・編集モーダル起動
   //   cfg.beforeList(container) … 一覧の前に差し込む任意 UI（例: 絞り込みタブ）
   //   cfg.onImport()   … CSV 取込後の副作用（例: 絞り込みを全件へ戻す）
   function renderMaster(container, cfg) {
@@ -172,11 +172,22 @@
       edit.addEventListener("click", () => cfg.openEdit(item));
       const del = el("button", { class: "btn btn-ghost", text: "削除" });
       // 削除も masters:changed 経由で再描画される（手動再描画は不要）。
-      del.addEventListener("click", () => MK.ui.confirm(cfg.confirmText(item)).then((ok) => { if (ok) cfg.api.remove(item.id); }));
+      del.addEventListener("click", () => removeWithUndo(cfg.api, item.id, cfg.deletedText(item)));
       ul.appendChild(el("li", { class: "mk-row" }, [info, edit, del]));
     });
     host.appendChild(ul);
   }
+  // マスタの削除。確認は挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3。confirm は
+  // 取り消し不能な操作＝全データ削除・取込の置換だけに使う）。削除・復元のどちらも masters:changed
+  // を発火するため、ビューの作り直しはその bus ハンドラに一任する（ここでは再描画しない）。
+  function removeWithUndo(api, id, message) {
+    api.remove(id);
+    MK.ui.undoToast(message, () => {
+      // 退避は他の変更が入った時点で破棄される。戻せなかったことは無言にしない（§2.5-3）。
+      if (!api.undoRemove()) MK.ui.toast("元に戻せませんでした（他の変更が入っています）", "error");
+    });
+  }
+
   // マスタ編集モーダルの共通骨格。fields=[{ label, build(f) }]（build は control を返しつつ f に参照を格納）、
   // onSave(f, close) が保存処理、extraActions(f) は「削除」等の先頭アクション（省略可）。
   function masterEditModal(spec) {
@@ -199,7 +210,7 @@
       exportToast: "人マスタCSVを書き出しました",
       importToast: (n) => n + " 件のメンバーを取り込みました",
       emptyText: "メンバーがいません",
-      confirmText: (m) => m.name + " を削除しますか？",
+      deletedText: (m) => m.name + " を削除しました",
       openEdit: (m) => editMember(m),
       renderInfo: (m) => {
         // 氏名クリックで関連情報の集約ビュー（詳細）へ（Issue #83）。
@@ -244,7 +255,7 @@
       exportToast: "プロジェクトCSVを書き出しました",
       importToast: (n) => n + " 件のプロジェクトを取り込みました",
       emptyText: "プロジェクトがありません",
-      confirmText: (p) => p.name + " を削除しますか？",
+      deletedText: (p) => p.name + " を削除しました",
       openEdit: (p) => editProject(p),
       renderInfo: (p) => el("div", { class: "grow" }, [
         el("div", { text: p.name }),
@@ -294,7 +305,7 @@
         if (productFilter !== "all") list = list.filter((p) => p.status === productFilter);
         return list;
       },
-      confirmText: (p) => p.name + " を削除しますか？",
+      deletedText: (p) => p.name + " を削除しました",
       openEdit: (p) => editProduct(p),
       // ステータス絞り込みタブ（件数バッジ）を一覧の前に差し込む。
       beforeList: (container) => {
@@ -359,7 +370,8 @@
       ],
       // 削除アクションは保存/キャンセルの前に置く（従来の並び）。
       extraActions: () => [
-        { label: "削除", variant: "btn-danger", onClick: (close) => MK.ui.confirm("このプロダクトを削除しますか？").then((ok) => { if (ok) { MK.products.remove(p.id); close(); } }) },
+        // 先にモーダルを閉じてから削除＋取り消しトースト（モーダルの裏にトーストが隠れないように）。
+        { label: "削除", variant: "btn-danger", onClick: (close) => { close(); removeWithUndo(MK.products, p.id, p.name + " を削除しました"); } },
       ],
       onSave: (f, c) => {
         if (!f.name.value.trim()) { MK.ui.toast("プロダクト名を入力してください", "error"); return; }
