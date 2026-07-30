@@ -56,12 +56,8 @@
         MK.store.clearAll();
         // clearAll はストアを API の外から消すため、削除の退避（マスタ・モジュール logic）を通らない。
         // 捨てておかないと、直前の削除の取り消しトーストが生きていた場合に初期化後の Ctrl+Z で
-        // 1件だけ復活する。undo を持つ logic は forgetUndo() を生やす契約（CONVENTIONS §2.5-3）。
-        MK.masters.forgetAllUndo();
-        Object.keys(MK.logic || {}).forEach((id) => {
-          const lg = MK.logic[id];
-          if (lg && typeof lg.forgetUndo === "function") lg.forgetUndo();
-        });
+        // 1件だけ復活する（CONVENTIONS §2.5-3）。
+        MK.forgetAllUndo();
         MK.ui.toast("全データを初期化しました", "success");
         route("home");
       });

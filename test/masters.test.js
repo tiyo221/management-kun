@@ -86,6 +86,23 @@ test("masters: forgetAllUndo で全マスタの退避が捨てられる", (MK) =
   eq(A.all().length, 0);
 });
 
+test("MK.forgetAllUndo: マスタとモジュール logic の退避をまとめて捨てる", (MK) => {
+  // 観点: 全データ初期化（MK.store.clearAll）とテストのリセットが呼ぶ後始末。マスタだけ捨てて
+  //   モジュール logic を取りこぼすと、初期化後の Ctrl+Z でタスクが1件だけ復活する（§2.5-3）
+  // 入力: 人1件と todo タスク1件を削除 → MK.forgetAllUndo() → それぞれの undo
+  // 期待: どちらも false（forgetUndo を持たないモジュールがあっても例外にならない）
+  const P = MK.people, T = MK.logic.todo;
+  const m = P.create({ name: "A" });
+  T.addTask("消す");
+  P.remove(m.id);
+  T.removeTask(T.tasks()[0].id);
+  MK.forgetAllUndo();
+  eq(P.undoRemove(), false);
+  eq(T.undoDelete(), false);
+  eq(P.all().length, 0);
+  eq(T.tasks().length, 0);
+});
+
 test("masters: 保持するのは直前に消した1件だけ", (MK) => {
   // 観点: 退避は1つ（汎用 undo スタックは持たない・§2.5-3）
   // 入力: A/B を作成 → A を remove → B を remove → undoRemove を2回

@@ -224,6 +224,7 @@
    * @returns {boolean} 復元したら true、退避が無く復元しなかったら false
    * ※ store へ保存する副作用あり（除去済みの依存参照は復元されない）。
    */
+  // 復元した退避は先に手放す（この後の save も破棄するが、save の実装に依らず二重復元を防ぐ）。
   function undoDelete() { if (!lastDeleted) return false; const { index, block } = lastDeleted; lastDeleted = null; const d = load(); d.tasks.splice(index, 0, ...block); save(d); return true; }
   /**
    * 退避を破棄する（復元せず捨てる）。store を logic の外から書き換える経路＝全データ初期化
