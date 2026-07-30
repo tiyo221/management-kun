@@ -71,7 +71,7 @@ DOM 非依存の純ロジックとして `MK.<domain>` に実装し、`ctx.<doma
 
 #### D. シェル統合
 - `master-<domain>`（👤 / 📁 / 📦 …）を「マスタ」ナビグループの**特別ビュー**として持つ（§3.6・config の `masters` に載る分だけ表示。§1.5）。
-- 各ビューは共通に **一覧＋インライン追加＋編集モーダル＋削除確認＋CSV出力/CSV取込** を備える。`masters:changed` を購読し、表示中なら再描画する。
+- 各ビューは共通に **一覧＋インライン追加＋編集モーダル＋削除（確認は挟まず取り消しトースト・CONVENTIONS §2.5-3）＋CSV出力/CSV取込** を備える。`masters:changed` を購読し、表示中なら再描画する。
 - CSV は `MK.io.csv.stringify` / `MK.io.csv.parse`・`MK.io.downloadText`・ファイル選択の**共通ヘルパ**を用いる（モジュール個別実装をしない）。
 
 #### E. IO・整合

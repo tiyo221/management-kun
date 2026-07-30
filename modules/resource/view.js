@@ -22,7 +22,7 @@
   // undoRemove()（直前の1件を元の位置へ）。退避は他の変更で破棄されるため、戻せなかったことは
   // 無言にせずエラートーストで伝える。表の集計が変わるのでどちらも全再描画する。
   function removeWithUndo(master, id, message) {
-    master().remove(id);
+    if (!master().remove(id)) return; // 空振り（既に消えている）ならトーストを出さない（別の1件を復元しかねない）
     render();
     MK.ui.undoToast(message, () => {
       if (master().undoRemove()) render();

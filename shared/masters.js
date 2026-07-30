@@ -102,15 +102,18 @@
        * 1件削除して保存する。取り消し用に「消した1件＋元の位置」を退避する（{@link undoRemove}）。
        * 退避は次の削除以外の変更で破棄される。
        * @param {string} id - 対象ID
-       * @returns {void}
+       * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
+       *   ── 呼び出し側はこの戻り値で「削除しました」の取り消しトーストを出すか決める。空振りでトーストを
+       *   出すと、その「元に戻す」が直前に消した別の1件を復元してしまう。
        */
       remove(id) {
         const d = data();
         const index = d[collKey].findIndex((x) => x.id === id);
-        if (index < 0) return; // 無い id は退避も保存もしない（空振りで直前の退避を潰さない）
+        if (index < 0) return false; // 無い id は退避も保存もしない（空振りで直前の退避を潰さない）
         const item = d[collKey].splice(index, 1)[0];
         pendingUndo = { item, index };
         persist(d);
+        return true;
       },
 
       /**
