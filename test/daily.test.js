@@ -823,3 +823,20 @@ test("daily: ルーチンの自動投入は削除の退避を潰さない", (MK)
   eq(D.undoDelete(), true);
   eq(D.dayItems(today).map((x) => x.title), ["手書き", "朝会"]);
 });
+
+test("daily: 別の日を開いた状態でも、消した項目は元の日の元の位置へ戻る", (MK) => {
+  // 観点: 退避を日付の切替で捨てない設計（項目は自分の date を持つ）と、自動投入が退避の位置を
+  //       ずらさない（末尾に足す）ことの両方を固定する。view はこの性質に乗って表示日を戻す
+  // 入力: 今日に A/B/C → B を削除 → 翌日で ensureDayInjected（毎日ルーチンが投入される）→ undoDelete
+  // 期待: undoDelete は true。B は翌日ではなく**今日**の A と C の間へ戻る
+  const D = MK.logic.daily;
+  const today = MK.util.todayISO();
+  const tomorrow = MK.util.addDays(today, 1);
+  ["A", "B", "C"].forEach((t) => D.addManual(today, t, 30));
+  D.addRoutine("朝会", 15, [0, 1, 2, 3, 4, 5, 6]);
+  D.removeItem(D.dayItems(today)[1].id);
+  assert(D.ensureDayInjected(tomorrow) > 0, "翌日にルーチンが投入されること（前提）");
+  eq(D.undoDelete(), true);
+  eq(D.dayItems(today).map((x) => x.title), ["A", "B", "C"]); // 元の位置（A と C の間）へ戻る
+  eq(D.dayItems(tomorrow).map((x) => x.title), ["朝会"]);     // 翌日へは戻らない（投入ぶんだけ）
+});

@@ -357,11 +357,14 @@
         if (_routineBody && _routineBody.isConnected) rebuildRoutineBody(_routineBody);
         render(); // 背後の時間割にも反映
       };
-      const removed = L().removeRoutine(r.id);
-      refresh(); // 空振り（既に消えている）でも画面をストアへ合わせ直す
-      if (!removed) return; // 空振りでトーストを出すと、その取り消しが別の1件を復元しかねない
+      // 削除→（空振りでも）再描画→取り消しトースト、の手順は共有ヘルパに任せる（§2.5-3 の定型）。
       // 「（Ctrl+Z で取り消し）」がヘルパ側で後ろに付くため、補足は括弧を重ねず地の文で書く。
-      MK.ui.undoDeleteToast("ルーチン「" + (r.title || "無題") + "」を削除しました。投入済みの項目は残ります", () => L().undoDelete(), refresh);
+      MK.ui.removeWithUndo(
+        { remove: (id) => L().removeRoutine(id), undoRemove: () => L().undoDelete() },
+        r.id,
+        "ルーチン「" + (r.title || "無題") + "」を削除しました。投入済みの項目は残ります",
+        refresh
+      );
     } });
     return el("li", { class: "mk-row" }, [el("div", { class: "grow" }, [ui.toolbar([titleInput, minSel, atInput]), days]), del]);
   }
@@ -417,7 +420,7 @@
     _routineModal = MK.ui.modal({
       title: "🔁 ルーチン（定型業務）設定",
       body,
-      actions: [{ label: "閉じる", variant: "btn-secondary", onClick: (c) => { c(); _routineBody = null; } }],
+      actions: [{ label: "閉じる", variant: "btn-secondary", onClick: () => closeRoutineModal() }], // 後始末は1か所（本体参照も手放す）
     });
   }
   // 閉じたら本体の参照も手放す（_routineModal と同じ寿命。開き直せば openRoutineModal が入れ直す）。
