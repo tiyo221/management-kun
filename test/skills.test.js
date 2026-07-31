@@ -76,3 +76,62 @@ test("skills: radarData は評価ゼロ/存在しないメンバーを安全に�
   eq(d.series[0].rated, 0);
   eq(d.hasRating, false);
 });
+
+test("skills: 削除→undoDelete でスキルと評価が元に戻る", (MK) => {
+  // 観点: スキル削除は紐づく評価（ratings）も消す。スキルだけ戻して評価が空だと、消したときより
+  //       悪い状態（全メンバー分を入力し直し）になるので、退避に評価も含める（§2.5-3）
+  // 入力: メンバー2人×スキル3件で評価を入れ、真ん中のスキルを削除 → undoDelete
+  // 期待: 削除で該当スキルの評価が消え、undo でスキルが元の位置へ、評価も元の値へ戻る。
+  //       他スキルの評価は巻き添えにならない
+  const S = MK.logic.skills;
+  const m1 = MK.people.create({ name: "山田" }), m2 = MK.people.create({ name: "佐藤" });
+  ["A", "B", "C"].forEach((item) => S.addSkill({ domain: "共通", item }));
+  const [a, b] = S.skills();
+  S.setRating(m1.id, b.id, "3");
+  S.setRating(m2.id, b.id, "5");
+  S.setRating(m1.id, a.id, "2");
+
+  eq(S.removeSkill(b.id), true);
+  eq(S.skills().map((s) => s.item), ["A", "C"]);
+  eq(S.rating(m1.id, b.id), ""); // 評価も消える
+  eq(S.rating(m2.id, b.id), "");
+  eq(S.rating(m1.id, a.id), "2"); // 他スキルの評価は無傷
+
+  eq(S.undoDelete(), true);
+  eq(S.skills().map((s) => s.item), ["A", "B", "C"]); // 元の位置へ
+  eq(S.rating(m1.id, b.id), "3"); // 評価も元の値へ
+  eq(S.rating(m2.id, b.id), "5");
+});
+
+test("skills: 退避は他の変更で破棄され、空振り削除は false を返す", (MK) => {
+  // 観点: 削除以外の変更（追加・評価入力・全置換）で退避を捨てる。空振りでトーストを出すと、その
+  //       取り消しが直前に消した別の1件を復元してしまう
+  // 入力: 削除→スキル追加→undo／削除→評価入力→undo／削除→importData(replace)→undo／存在しない id の削除
+  // 期待: いずれの undo も false。空振り削除は false を返し、直前の退避は潰さない
+  const S = MK.logic.skills;
+  const m = MK.people.create({ name: "山田" });
+  S.addSkill({ domain: "共通", item: "A" });
+  S.removeSkill(S.skills()[0].id);
+  S.addSkill({ domain: "共通", item: "B" });
+  eq(S.undoDelete(), false);
+
+  S.removeSkill(S.skills()[0].id);
+  S.addSkill({ domain: "共通", item: "C" });
+  S.setRating(m.id, S.skills()[0].id, "4");
+  eq(S.undoDelete(), false);
+
+  S.removeSkill(S.skills()[0].id);
+  S.importData({ version: 1, skills: [{ id: "sk9", domain: "共通", item: "取込" }], ratings: {} }, "replace");
+  eq(S.undoDelete(), false);
+  eq(S.skills().map((s) => s.item), ["取込"]);
+
+  S.removeSkill(S.skills()[0].id);
+  eq(S.removeSkill("no-such-id"), false); // 空振りは退避を潰さない
+  eq(S.undoDelete(), true);
+  eq(S.skills().map((s) => s.item), ["取込"]);
+
+  S.removeSkill(S.skills()[0].id);
+  S.forgetUndo();
+  eq(S.undoDelete(), false);
+  eq(S.skills().length, 0);
+});

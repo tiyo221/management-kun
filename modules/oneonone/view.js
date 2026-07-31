@@ -188,7 +188,17 @@
     ]);
 
     const actions = [];
-    if (!isNew) actions.push({ label: "削除", variant: "btn-danger", onClick: (close) => MK.ui.confirm("この 1on1 記録を削除しますか？").then((ok) => { if (ok) { L().removeEntry(entry.id); close(); render(); } }) });
+    // 削除は確認を挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3）。先にモーダルを
+    // 閉じてから出す（モーダルの裏にトーストが隠れないように）。
+    if (!isNew) actions.push({ label: "削除", variant: "btn-danger", onClick: (close) => {
+      close();
+      MK.ui.removeWithUndo(
+        { remove: (id) => L().removeEntry(id), undoRemove: () => L().undoDelete() },
+        entry.id,
+        (entry.date || "") + " の 1on1 記録を削除しました",
+        render
+      );
+    } });
     actions.push({ label: "キャンセル", variant: "btn-secondary", onClick: (close) => close() });
     actions.push({ label: "保存", variant: "btn-primary", onClick: (close) => {
       const date = f.date.value || MK.util.todayISO();

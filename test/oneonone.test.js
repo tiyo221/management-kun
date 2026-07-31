@@ -148,3 +148,56 @@ test("oneonone: importData の replace と merge", (MK) => {
   O.importData({ entries: [{ id: "o_y", memberId: "m3", date: "2026-07-04", body: "置換のみ", actions: [] }] }, "replace");
   eq(O.entries().length, 1);
 });
+
+test("oneonone: 削除→undoDelete で元の位置へ戻る／他の変更で退避が破棄される", (MK) => {
+  // 観点: 削除は「消した1件＋元の位置」を退避し、undoDelete が同じ位置へ戻す。退避は削除以外の
+  //       変更（保存を伴う操作）で捨てる（CONVENTIONS §2.5-3）
+  // 入力: 3件登録 → 真ん中を削除 → undoDelete。別ケースで削除後に追加 → undoDelete
+  // 期待: 元の並びへ戻る（同じ id）。追加を挟んだら false
+  const O = MK.logic.oneonone;
+  const m = MK.people.create({ name: "山田" });
+  ["2026-07-01", "2026-07-08", "2026-07-15"].forEach((date) => O.addEntry({ memberId: m.id, date, body: date }));
+  const mid = O.entries()[1];
+  eq(O.removeEntry(mid.id), true);
+  eq(O.entries().length, 2);
+  eq(O.undoDelete(), true);
+  eq(O.entries().map((e) => e.body), ["2026-07-15", "2026-07-08", "2026-07-01"]); // unshift なので新しい順
+  eq(O.entries()[1].id, mid.id); // 元の位置・同じ id
+
+  O.removeEntry(O.entries()[0].id);
+  O.addEntry({ memberId: m.id, date: "2026-07-22", body: "割り込み" });
+  eq(O.undoDelete(), false);
+  eq(O.entries().length, 3);
+});
+
+test("oneonone: 退避は1件だけ／空振りは false／全置換と forgetUndo で捨てられる", (MK) => {
+  // 観点: アクティブな undo は常に1つ。空振りの削除で退避を潰すと、取り消しが別の1件を復元しうる。
+  //       全置換（取込）はデータセットごと入れ替わるので退避を捨てる
+  // 入力: 2件を続けて削除 → undoDelete を2回／空振り削除／importData(replace) 後の undo／forgetUndo 後の undo
+  // 期待: 戻るのは直前の1件だけ。空振りは false。全置換後・forgetUndo 後は false
+  const O = MK.logic.oneonone;
+  const m = MK.people.create({ name: "山田" });
+  O.addEntry({ memberId: m.id, date: "2026-07-01", body: "A" });
+  O.addEntry({ memberId: m.id, date: "2026-07-08", body: "B" });
+  const [first, second] = O.entries();
+  O.removeEntry(first.id);
+  O.removeEntry(second.id);
+  eq(O.undoDelete(), true);
+  eq(O.entries().map((e) => e.body), ["A"]);
+  eq(O.undoDelete(), false);
+
+  O.removeEntry(O.entries()[0].id);
+  eq(O.removeEntry("no-such-id"), false);
+  eq(O.undoDelete(), true);
+  eq(O.entries().map((e) => e.body), ["A"]);
+
+  O.removeEntry(O.entries()[0].id);
+  O.importData({ version: 1, entries: [{ id: "o9", memberId: m.id, date: "2026-07-20", body: "取込", actions: [] }] }, "replace");
+  eq(O.undoDelete(), false);
+  eq(O.entries().map((e) => e.body), ["取込"]);
+
+  O.removeEntry(O.entries()[0].id);
+  O.forgetUndo();
+  eq(O.undoDelete(), false);
+  eq(O.entries().length, 0);
+});
