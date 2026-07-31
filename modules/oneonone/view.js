@@ -50,6 +50,23 @@
     root.appendChild(ui.stack([toolbar(members), timelineNode, actionsCard()]));
   }
 
+  // 記録の削除（確認なし＋取り消しトースト・CONVENTIONS §2.5-3）。
+  // ピッカーは「記録があるメンバー」しか非アクティブを載せないため、退職者の最後の1件を消すと
+  // 選択が別人へ飛ぶ。復元しても選択が戻らないと、戻した記録が画面に出ない ── 削除直後に
+  // 自動選択されたメンバーがまだ選ばれているときだけ、元のメンバーへ選択を戻す（goals と同じ扱い）。
+  function removeEntryWithUndo(entry) {
+    const wasSelected = selectedMemberId === entry.memberId;
+    const removed = L().removeEntry(entry.id);
+    render(); // 空振り（既に消えている）でも画面をストアへ合わせ直す
+    if (!removed) return; // 空振りでトーストを出すと、その取り消しが別の1件を復元しかねない
+    const autoPicked = selectedMemberId; // 削除後の render が選び直したメンバー
+    const label = entry.date ? entry.date + " の 1on1 記録" : "1on1 記録"; // date 欠落でも文が崩れない
+    MK.ui.undoDeleteToast(label + "を削除しました", () => L().undoDelete(), () => {
+      if (wasSelected && selectedMemberId === autoPicked) selectedMemberId = entry.memberId;
+      render();
+    });
+  }
+
   // タイムラインカードだけを差し替える（未完アクションのチェックで各記録の「アクション N/total 未完」
   // 表示が変わるため。項目数は不変で高さも変わらないのでスクロールは飛ばない）。CONVENTIONS §2.5-4。
   function refreshTimeline() {
@@ -190,15 +207,7 @@
     const actions = [];
     // 削除は確認を挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3）。先にモーダルを
     // 閉じてから出す（モーダルの裏にトーストが隠れないように）。
-    if (!isNew) actions.push({ label: "削除", variant: "btn-danger", onClick: (close) => {
-      close();
-      MK.ui.removeWithUndo(
-        { remove: (id) => L().removeEntry(id), undoRemove: () => L().undoDelete() },
-        entry.id,
-        (entry.date || "") + " の 1on1 記録を削除しました",
-        render
-      );
-    } });
+    if (!isNew) actions.push({ label: "削除", variant: "btn-danger", onClick: (close) => { close(); removeEntryWithUndo(entry); } });
     actions.push({ label: "キャンセル", variant: "btn-secondary", onClick: (close) => close() });
     actions.push({ label: "保存", variant: "btn-primary", onClick: (close) => {
       const date = f.date.value || MK.util.todayISO();

@@ -5,6 +5,9 @@
   const el = MK.util.el;
   const ui = MK.ui;
   const L = () => MK.logic.skills;
+  // MK.ui.removeWithUndo（§2.5-3 の定型）へ渡す削除・復元の口。logic 側は削除できたか／復元できたかを
+  // boolean で返す契約なので、そのまま噛み合う。
+  const undoApi = () => ({ remove: (id) => L().removeSkill(id), undoRemove: () => L().undoDelete() });
 
   let root = null;
   let ctx = null;
@@ -70,10 +73,7 @@
       // 削除は確認を挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3）。スキルを消すと
       // 全メンバーの評価も一緒に消えるので、それが伝わる文言にする（undo は評価ごと戻す）。
       ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.removeWithUndo(
-        { remove: (id) => L().removeSkill(id), undoRemove: () => L().undoDelete() },
-        s.id,
-        "「" + (s.item || "無題") + "」をスキルと評価ごと削除しました",
-        render
+        undoApi(), s.id, "「" + (s.item || "無題") + "」をスキルと評価ごと削除しました", render
       ) }),
     ]);
   }
