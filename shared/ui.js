@@ -119,6 +119,31 @@
     btn.addEventListener("click", undo);
   };
 
+  // 削除の取り消しトースト（undoToast の定型。CONVENTIONS §2.5-3）。
+  // tryUndo は logic 側の復元（マスタの undoRemove / モジュールの undoDelete）で、復元できたかを
+  // 返す規約。false のときは無言の no-op にせず、同じ文言で「戻せなかった」ことを伝える
+  // （退避は他の変更が入った時点で破棄されるため、この経路は普通に起きる）。
+  // onRestored は復元できたときだけ呼ぶ再描画。省略可（masters:changed 等で勝手に描き直る画面）。
+  ui.undoDeleteToast = function (message, tryUndo, onRestored) {
+    ui.undoToast(message, () => {
+      if (!tryUndo()) { ui.toast("元に戻せませんでした（他の変更が入っています）", "error"); return; }
+      if (onRestored) onRestored();
+    });
+  };
+
+  // `{ remove(id)→boolean, undoRemove()→boolean }` を持つ API（共有マスタ）の削除一式。
+  // 空振り（既に消えている＝false）ではトーストを出さない ── 出すと、その「元に戻す」が
+  // 直前に消した別の1件を復元してしまう。
+  // onChanged は再描画。省略できる（masters:changed 等で勝手に描き直る画面では渡さない）。
+  // 渡された場合は空振りのときも呼ぶ ── 空振り＝ストアには無いのに画面には出ている状態なので、
+  // 保存を伴わない＝通知も飛ばないぶん、ここで画面をストアに合わせ直す必要がある。
+  ui.removeWithUndo = function (api, id, message, onChanged) {
+    const removed = api.remove(id);
+    if (onChanged) onChanged();
+    if (!removed) return;
+    ui.undoDeleteToast(message, () => api.undoRemove(), onChanged);
+  };
+
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }
   ui.modal = function (opts) {
     opts = opts || {};

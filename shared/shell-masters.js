@@ -130,7 +130,7 @@
   //   cfg.csvBase / cfg.exportToast / cfg.importToast(n) … CSV ファイル名接頭辞・トースト
   //   cfg.emptyText    … 0件時の文言
   //   cfg.renderInfo(item) … 行の左側（.grow）を作る（編集・削除ボタンは共通で付与）
-  //   cfg.confirmText(item) / cfg.openEdit(item) … 削除確認文言・編集モーダル起動
+  //   cfg.deletedText(item) / cfg.openEdit(item) … 削除トースト文言・編集モーダル起動
   //   cfg.beforeList(container) … 一覧の前に差し込む任意 UI（例: 絞り込みタブ）
   //   cfg.onImport()   … CSV 取込後の副作用（例: 絞り込みを全件へ戻す）
   function renderMaster(container, cfg) {
@@ -172,7 +172,11 @@
       edit.addEventListener("click", () => cfg.openEdit(item));
       const del = el("button", { class: "btn btn-ghost", text: "削除" });
       // 削除も masters:changed 経由で再描画される（手動再描画は不要）。
-      del.addEventListener("click", () => MK.ui.confirm(cfg.confirmText(item)).then((ok) => { if (ok) cfg.api.remove(item.id); }));
+      // 再描画は masters:changed に一任するが、空振り（既に消えている）だけは保存が無く通知も飛ばない
+      // ので、この一覧を作り直して画面をストアに合わせる（onChanged は空振りでも呼ばれる）。
+      // 通常の削除では bus が先にビュー全体を作り直すため、ここで渡す再描画は外れた古いノードに対する
+      // 空振りになる（無害。二重に描いて見た目が乱れることはない）。
+      del.addEventListener("click", () => MK.ui.removeWithUndo(cfg.api, item.id, cfg.deletedText(item), () => renderMasterList(host, cfg)));
       ul.appendChild(el("li", { class: "mk-row" }, [info, edit, del]));
     });
     host.appendChild(ul);
@@ -199,7 +203,7 @@
       exportToast: "人マスタCSVを書き出しました",
       importToast: (n) => n + " 件のメンバーを取り込みました",
       emptyText: "メンバーがいません",
-      confirmText: (m) => m.name + " を削除しますか？",
+      deletedText: (m) => m.name + " を削除しました",
       openEdit: (m) => editMember(m),
       renderInfo: (m) => {
         // 氏名クリックで関連情報の集約ビュー（詳細）へ（Issue #83）。
@@ -244,7 +248,7 @@
       exportToast: "プロジェクトCSVを書き出しました",
       importToast: (n) => n + " 件のプロジェクトを取り込みました",
       emptyText: "プロジェクトがありません",
-      confirmText: (p) => p.name + " を削除しますか？",
+      deletedText: (p) => p.name + " を削除しました",
       openEdit: (p) => editProject(p),
       renderInfo: (p) => el("div", { class: "grow" }, [
         el("div", { text: p.name }),
@@ -294,7 +298,7 @@
         if (productFilter !== "all") list = list.filter((p) => p.status === productFilter);
         return list;
       },
-      confirmText: (p) => p.name + " を削除しますか？",
+      deletedText: (p) => p.name + " を削除しました",
       openEdit: (p) => editProduct(p),
       // ステータス絞り込みタブ（件数バッジ）を一覧の前に差し込む。
       beforeList: (container) => {
@@ -359,7 +363,8 @@
       ],
       // 削除アクションは保存/キャンセルの前に置く（従来の並び）。
       extraActions: () => [
-        { label: "削除", variant: "btn-danger", onClick: (close) => MK.ui.confirm("このプロダクトを削除しますか？").then((ok) => { if (ok) { MK.products.remove(p.id); close(); } }) },
+        // 先にモーダルを閉じてから削除＋取り消しトースト（モーダルの裏にトーストが隠れないように）。
+        { label: "削除", variant: "btn-danger", onClick: (close) => { close(); MK.ui.removeWithUndo(MK.products, p.id, p.name + " を削除しました"); } },
       ],
       onSave: (f, c) => {
         if (!f.name.value.trim()) { MK.ui.toast("プロダクト名を入力してください", "error"); return; }

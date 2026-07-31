@@ -157,10 +157,8 @@
     delBtn.addEventListener("click", () => {
       L().removeTask(t.id);
       row.remove(); refreshBadges(); ensureNotEmpty();
-      MK.ui.undoToast("削除しました", () => {
-        if (L().undoDelete()) render(); // 元の位置へ戻すため全再描画（1回の明示操作なのでコスト許容）
-        else MK.ui.toast("元に戻せませんでした（他の変更が入っています）", "error");
-      });
+      // 復元は元の位置へ戻すため全再描画（1回の明示操作なのでコスト許容）
+      MK.ui.undoDeleteToast("削除しました", () => L().undoDelete(), render);
     });
 
     [cb, grow, statusSel, dueInput, detailBtn, delBtn].forEach((n) => row.appendChild(n));

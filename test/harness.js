@@ -162,10 +162,13 @@ function setup(opts) {
   return global.window.MK;
 }
 
-// テスト間のデータ分離: localStorage と store キャッシュをクリア
+// テスト間のデータ分離: localStorage と store キャッシュ、削除の退避（マスタ・モジュール logic）をクリア
+// （退避はクロージャに載るので localStorage を消しても残り、undo せずに終わったテストの1件が
+//  次のテストのストアへ復活しうる。全データ初期化と同じ後始末＝MK.forgetAllUndo）
 function reset(MK) {
   global.localStorage.clear();
   MK.store._cache = {};
+  MK.forgetAllUndo();
 }
 
 // ---- DOM/タイマーを使うテスト（ui.test.js）向けの操作ヘルパ ----

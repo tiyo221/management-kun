@@ -224,7 +224,15 @@
    * @returns {boolean} 復元したら true、退避が無く復元しなかったら false
    * ※ store へ保存する副作用あり（除去済みの依存参照は復元されない）。
    */
-  function undoDelete() { if (!lastDeleted) return false; const d = load(); d.tasks.splice(lastDeleted.index, 0, ...lastDeleted.block); save(d); return true; }
+  // 復元した退避は先に手放す（この後の save も破棄するが、save の実装に依らず二重復元を防ぐ）。
+  function undoDelete() { if (!lastDeleted) return false; const { index, block } = lastDeleted; lastDeleted = null; const d = load(); d.tasks.splice(index, 0, ...block); save(d); return true; }
+  /**
+   * 退避を破棄する（復元せず捨てる）。store を logic の外から書き換える経路＝全データ初期化
+   * （`MK.store.clearAll()`）用の共通契約（CONVENTIONS §2.5-3）。呼ばないと初期化後の Ctrl+Z で
+   * 消したはずのタスクが1件だけ復活する。
+   * @returns {void}
+   */
+  function forgetUndo() { lastDeleted = null; }
   /**
    * 指定インデックスのタスクを部分更新して保存する。start/end を含む patch を適用した結果が
    * 日付逆転（開始 > 終了）になる場合は不正入力として弾き、保存せず false を返す（TESTING.md §1）。
@@ -483,5 +491,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, isOverdue, wbsNumbers, summaryOf, hiddenFlags, datesInverted, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, projectSummaries, overduePjLabel, searchItems, summaryFor, eachProjectTasks, buildCSVRows, exportData, importData, loadSample };
+  MK.logic.wbs = { STATUS, load, save, setStore, tasks, childrenRange, subtreeEnd, isParent, isOverdue, wbsNumbers, summaryOf, hiddenFlags, datesInverted, depsCreatesCycle, addRoot, addChild, addSibling, indent, outdent, moveUp, moveDown, deleteTask, undoDelete, forgetUndo, update, toggleCollapse, setAssignee, addDep, removeDep, stats, summary, projectSummaries, overduePjLabel, searchItems, summaryFor, eachProjectTasks, buildCSVRows, exportData, importData, loadSample };
 })();

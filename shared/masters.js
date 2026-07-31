@@ -61,6 +61,17 @@
       MK.bus.emit("masters:changed", { domain });
     }
 
+    /**
+     * 直近に削除した1件＋元の位置（{@link undoRemove} 用）。CONVENTIONS §2.5-3 が言う
+     * 「保持するのは直前に消した1件だけ」の退避。削除以外の変更（create / update / replaceAll）が
+     * 入った時点で破棄する（位置がずれた配列へ古い退避を戻すとデータが壊れる）。
+     * 退避はマスタ（define の呼び出し）ごとに独立したクロージャに持つため、people の退避が
+     * projects の操作で壊れることはない。
+     * @type {{item: Object, index: number}|null}
+     */
+    let pendingUndo = null;
+    function dropUndo() { pendingUndo = null; }
+
     const api = {
       all() { return data()[collKey].slice(); },
       get(id) { return data()[collKey].find((x) => x.id === id) || null; },
@@ -71,6 +82,7 @@
         if (!item.id) item.id = MK.util.uid(prefix);
         if (onCreate) onCreate(item);
         d[collKey].push(item);
+        dropUndo();
         persist(d);
         return item;
       },
@@ -81,21 +93,62 @@
         if (!item) return null;
         Object.assign(item, patch);
         if (onUpdate) onUpdate(item, patch || {});
+        dropUndo();
         persist(d);
         return item;
       },
 
+      /**
+       * 1件削除して保存する。取り消し用に「消した1件＋元の位置」を退避する（{@link undoRemove}）。
+       * 退避は次の削除以外の変更で破棄される。
+       * @param {string} id - 対象ID
+       * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
+       *   ── 呼び出し側はこの戻り値で「削除しました」の取り消しトーストを出すか決める。空振りでトーストを
+       *   出すと、その「元に戻す」が直前に消した別の1件を復元してしまう。
+       */
       remove(id) {
         const d = data();
-        d[collKey] = d[collKey].filter((x) => x.id !== id);
+        const index = d[collKey].findIndex((x) => x.id === id);
+        if (index < 0) return false; // 無い id は退避も保存もしない（空振りで直前の退避を潰さない）
+        const item = d[collKey].splice(index, 1)[0];
+        pendingUndo = { item, index };
         persist(d);
+        return true;
       },
+
+      /**
+       * 直前の削除を取り消して元の位置へ戻す。退避が無ければ（他の変更で破棄済みなら）戻さず false を返す。
+       * 呼び出し側はこの戻り値で「戻せなかった」ことを伝える（無言の no-op にしない・CONVENTIONS §2.5-3）。
+       * @returns {boolean} 復元できたら true、退避が無ければ false
+       */
+      undoRemove() {
+        if (!pendingUndo) return false;
+        const { item, index } = pendingUndo;
+        pendingUndo = null;
+        const d = data();
+        // 以下2つはどちらも「ストアを外から書き替えられた場合（別タブ・手作業）」への備え。
+        // アプリ内の経路では配列が縮む操作・同 id の復活はどれも退避を潰すので起こらない。
+        if (d[collKey].some((x) => x.id === item.id)) return false; // 同 id が既に居るなら戻さない（id は再利用しない・§4.7）
+        d[collKey].splice(Math.min(index, d[collKey].length), 0, item); // 元の位置へ（末尾超過は末尾に丸める）
+        persist(d);
+        return true;
+      },
+
+      /**
+       * 退避を破棄する。`create` / `update` / `replaceAll` は自分で破棄するので、これを呼ぶのは
+       * **ストアを API の外から書き換える経路**だけ（全データ初期化 `MK.store.clearAll()`・テストの
+       * リセット）。呼ばないと初期化後に `Ctrl+Z` で1件だけ復活しうる。全マスタまとめては
+       * {@link MK.masters.forgetAllUndo} を使う。
+       * @returns {void}
+       */
+      forgetUndo() { dropUndo(); },
 
       replaceAll(list) {
         let arr = Array.isArray(list) ? list : [];
         if (onReplace) arr = arr.map(onReplace);
         const out = { version };
         out[collKey] = arr;
+        dropUndo();
         persist(out);
       },
     };
@@ -119,5 +172,12 @@
     return api;
   }
 
-  MK.masters = { define, registry };
+  /**
+   * 登録済み全マスタの削除退避を破棄する。ストアを API の外から書き換える経路（全データ初期化・
+   * テストのリセット）から呼ぶ。未ロードのマスタは registry に載らないので自然に対象外。
+   * @returns {void}
+   */
+  function forgetAllUndo() { registry.forEach((m) => m.api.forgetUndo()); }
+
+  MK.masters = { define, registry, forgetAllUndo };
 })();

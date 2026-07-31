@@ -40,6 +40,19 @@
     catch (e) { console.warn("summaryFor() failed:", moduleId, entityType, entityId, e); return null; } // 追跡用に記録（呼び手は壊さない）
   };
 
+  // 削除の取り消し退避（CONVENTIONS §2.5-3）をすべて捨てる。退避はマスタのファクトリ／各モジュール
+  // logic のクロージャに載るため、**ストアを API の外から書き換える経路**（全データ初期化
+  // `MK.store.clearAll()`・テストのリセット）は保存を通らず、捨てないと初期化後の `Ctrl+Z` で
+  // 1件だけ復活する。マスタは registry、モジュールは「`forgetUndo()` があれば呼ぶ」で舐める
+  // （undo を持たないモジュールは実装しなくてよい任意契約）。DOM 非依存。
+  MK.forgetAllUndo = function () {
+    if (MK.masters) MK.masters.forgetAllUndo();
+    Object.keys(MK.logic || {}).forEach((id) => {
+      const lg = MK.logic[id];
+      if (lg && typeof lg.forgetUndo === "function") lg.forgetUndo();
+    });
+  };
+
   // エクスポート形（＝モジュール自身の namespace のデータ）が空か。配列・オブジェクトの値が
   // どれも空なら空とみなし、スカラは判定に数えない。**スカラを数えないことは必須**で、
   // 全モジュールのエクスポートが `version` を持つため、数えると何一つ空にならない

@@ -64,7 +64,7 @@ modules/
 
 ### 2.3 一貫した状態表現
 - 一覧が空のときは必ず空状態メッセージ（`ui.emptyState`）を出す。
-- 破壊的操作（削除等）は**取り消し（`MK.ui.undoToast`）を既定**とし、`MK.ui.confirm` は取り消し不能な操作にだけ使う（詳細は §2.5-3）。
+- 破壊的操作（削除等）は**取り消し（`MK.ui.undoDeleteToast`）を既定**とし、`MK.ui.confirm` は取り消し不能な操作にだけ使う（詳細は §2.5-3）。
 - **ネイティブダイアログ禁止**: `confirm()` / `alert()` / `prompt()` を使わない。確認は `MK.ui.confirm(message)→Promise<bool>`、通知は `MK.ui.toast(message, type)`、入力・複雑な確認は `MK.ui.modal(...)` を使う（DESIGN トークン描画・ダークモード追従・Esc で閉じる操作性を共通化するため。[`spec.md`](spec.md) §6）。
 - テーマは `[data-theme="dark"]` に自動追従。グラフは **SVG で `var(--token)` 参照**すれば自動追従。Canvas を使う場合は描画時にトークンを読み、`MK.bus` の `theme:changed` で再描画する。
 
@@ -76,7 +76,7 @@ modules/
 
 1. **主操作は1アクション** — 各モジュールには「一番多く繰り返す操作」が1つある（todo＝Inbox の仕分け、daily＝時間の割当、skills＝評価の入力）。これを個別仕様 [`spec/modules/<id>.md`](spec/modules/) に `## 主操作` として明記し、**1アクションで完了させる**。主操作にモーダルを挟まない。
 2. **編集はインライン既定** — 一覧項目の編集はその場で行う（クリックで入力欄化、Enter 確定・Esc 取消）。モーダルを使ってよいのは「3項目以上を同時に変える」「新規作成で必須項目が複数ある」ときだけ。共通ヘルパを使い、各モジュールで自作しない（ヘルパ本体は最初の消費者と同時に `shared/ui.js` へ入れる。#244 の todo が1件目。[`CODING.md`](CODING.md)「共通化は2か所以上で必要になってから」）。
-3. **破壊的操作は undo 既定** — 削除は確認を出さず即実行し、取り消しトースト `MK.ui.undoToast(message, onUndo)` を出す。`MK.ui.confirm` を使ってよいのは**取り消し不能な操作だけ**（全データ削除・インポートの置換・旧データ移行）。undo の対象は**削除だけ**に限る（編集・ステータス変更は元に戻す操作が自明。logic 側は「直前に消した1件」だけ保持すればよく、汎用 undo スタックは [`CODING.md`](CODING.md) のオーバーエンジニアリング防止と衝突する）。**退避した1件は、他の変更が入った時点で破棄する**（別の変更で位置がずれる／scoped モジュールは対象切替でデータセットごと変わるため、古い退避を戻すとデータが壊れる）。トースト側も同時に1つしか出さない（`MK.ui.undoToast` が保証済み）。破棄後に「元に戻す」が押されうるため、**logic の undo は復元できたかを返し、view は戻せなかったことを伝える**（無言の no-op にしない）。トースト表示中は `Ctrl+Z`（Mac: `⌘Z`）でも取り消せる（キーボードのある環境では本文にもそう表記する。タッチのみの端末では到達できない案内になるため出さない。[`spec.md`](spec.md) §10.2「キーボードで到達可能」。テキスト入力中は横取りしない・フォーカスがトースト内にある間は自動消滅しない ── **この到達性は `MK.ui.undoToast` が担保するので、各モジュールで undo UI を自作しない**）。
+3. **破壊的操作は undo 既定** — 削除は確認を出さず即実行し、取り消しトースト `MK.ui.undoDeleteToast(message, tryUndo, onRestored)`（`MK.ui.undoToast` の定型。失敗時の文言もここで1本化する）を出す。`MK.ui.confirm` を使ってよいのは**取り消し不能な操作だけ**（全データ削除・インポートの置換・旧データ移行）。undo の対象は**削除だけ**に限る（編集・ステータス変更は元に戻す操作が自明。logic 側は「直前に消した1件」だけ保持すればよく、汎用 undo スタックは [`CODING.md`](CODING.md) のオーバーエンジニアリング防止と衝突する）。**退避した1件は、他の変更が入った時点で破棄する**（別の変更で位置がずれる／scoped モジュールは対象切替でデータセットごと変わるため、古い退避を戻すとデータが壊れる）。**退避を持つ logic は `forgetUndo()` を生やす**（退避を復元せず捨てる）── store を logic の外から書き換える経路（全データ初期化 `MK.store.clearAll()`）は保存を通らないので、そこから捨てないと初期化後の `Ctrl+Z` で1件だけ復活する。捨てる側は `MK.forgetAllUndo()`（マスタ＋`forgetUndo()` を持つ全 logic を舐める）を呼ぶ。トースト側も同時に1つしか出さない（`MK.ui.undoToast` が保証済み）。破棄後に「元に戻す」が押されうるため、**logic の undo は復元できたかを返し、view は戻せなかったことを伝える**（無言の no-op にしない。伝える文言は `undoDeleteToast` が持つので view で書かない）。トースト表示中は `Ctrl+Z`（Mac: `⌘Z`）でも取り消せる（キーボードのある環境では本文にもそう表記する。タッチのみの端末では到達できない案内になるため出さない。[`spec.md`](spec.md) §10.2「キーボードで到達可能」。テキスト入力中は横取りしない・フォーカスがトースト内にある間は自動消滅しない ── **この到達性は `MK.ui.undoToast` が担保するので、各モジュールで undo UI を自作しない**）。
 4. **行内で完結する操作は行だけ更新する** — チェック・ステータス変更・インライン編集は該当行のみ差し替え、`render()` で画面全体を作り直さない（スクロール位置・フォーカスを失わないため）。フィルタ変更・タブ切替・データ取込など**画面の意味が変わる操作は全再描画でよい**（全再描画という割り切りが view を小さく保っている。差分管理を各 view に持たせるとミニフレームワークの内製になる）。
 5. **画面上部は使用頻度順** — 最上段には主操作に必要なものだけを置く。CSV 入出力・サンプル投入など低頻度の操作は画面最下部へ置く。
 
@@ -99,7 +99,7 @@ modules/
 ### `MK.ui`（描画部品 / `shared/ui.js`）
 - レイアウト: `sectionTitle(text)` / `stack(children)` / `toolbar(children)` / `card(children, {flush})` / `emptyState(text)` / `statsRow([{num,label}])`
 - フォーム: `button(label, {variant,onClick,title})` / `field(label,control)` / `input({type,value,placeholder,onChange,onEnter})` / `textarea(value)` / `checkbox(checked)` / `select(options=[{value,label}], value, onChange)` / `pillTabs(tabs=[{key,label}], activeKey, onChange)` / `inlineEdit({value, onCommit(next)→false で拒否, placeholder})`（クリックでその場編集・Enter/blur 確定・Esc 取消。§2.5-2）
-- オーバーレイ: `modal({title, body, actions:[{label,variant,onClick(close)}]})` / `toast(message, type)` / `undoToast(message, onUndo)`（削除の取り消し。6秒表示・「元に戻す」または `Ctrl+Z` で `onUndo`。§2.5-3） / `confirm(message)→Promise<bool>`
+- オーバーレイ: `modal({title, body, actions:[{label,variant,onClick(close)}]})` / `toast(message, type)` / `undoToast(message, onUndo)`（削除の取り消し。6秒表示・「元に戻す」または `Ctrl+Z` で `onUndo`。§2.5-3） / `undoDeleteToast(message, tryUndo, onRestored)`（削除の定型。`tryUndo` は復元可否を返す logic 側の undo＝マスタの `undoRemove` / モジュールの `undoDelete`。false なら共通文言で失敗を伝え、true なら `onRestored`（省略可）で再描画する。**削除の取り消しはこれを使い、`undoToast` を直に呼ばない**） / `confirm(message)→Promise<bool>`
 - 方針: **view は部品を自作しない**（`btn/fld/inp` 等をモジュール内に再定義しない）。**ネイティブ `confirm/alert/prompt` は使わず**、上記オーバーレイ部品で代替する。
 
 ### `MK.util`（純粋ヘルパ / `shared/core.js`）
@@ -112,9 +112,9 @@ modules/
 - `MK.store.scope("module:<id>")` → `{ get(), set(v) }`。破損時も個別 try/parse で他へ波及させない。
 - `MK.store.collection("module:<id>", { key, version, stamp })` → `{ load(), save(d) }`（Issue #139）。**配列キー1本を持つモジュール**の load（store 読取→`key` 配列検証→既定 `{ version, [key]: [] }` 返却）と save（`stamp:true` なら `exportedAt` 付与→`set`）の定型を集約する。複数キーや読込時の fixup が要るモジュール（skills / wbs 等）は `scope()` 直叩きで各自 load/save を書く。
 - **マスタ**（共通契約は [`spec/masters.md`](spec/masters.md) §4.4.1 B）:
-  - `MK.people` / `MK.projects` / `MK.products`: `all() / get(id) / create(attrs) / update(id,patch) / remove(id) / resolve(name) / resolveOrCreate(name) / replaceAll(list) / buildCSVRows() / applyCSV(rows)`。status を持つマスタ（projects / products）は加えて `STATUSES / normalize<Enum>() / counts()`。
-  - `MK.allocations`（アロケーション共有マスタ・人×器×期間×%）: `all() / get(id) / of(memberId) / forTarget(targetId) / create / update / remove / replaceAll / percentOn(list, memberId, date)`。
-  - `MK.demands`（需要共有マスタ・器×期間×必要%）: `all() / get(id) / forTarget(targetId) / create / update / remove / replaceAll / demandOn(list, targetId, date) / totalDemandOn(list, date)`。
+  - `MK.people` / `MK.projects` / `MK.products`: `all() / get(id) / create(attrs) / update(id,patch) / remove(id) / undoRemove() / resolve(name) / resolveOrCreate(name) / replaceAll(list) / buildCSVRows() / applyCSV(rows)`。status を持つマスタ（projects / products）は加えて `STATUSES / normalize<Enum>() / counts()`。
+  - `MK.allocations`（アロケーション共有マスタ・人×器×期間×%）: `all() / get(id) / of(memberId) / forTarget(targetId) / create / update / remove / undoRemove / replaceAll / percentOn(list, memberId, date)`。
+  - `MK.demands`（需要共有マスタ・器×期間×必要%）: `all() / get(id) / forTarget(targetId) / create / update / remove / undoRemove / replaceAll / demandOn(list, targetId, date) / totalDemandOn(list, date)`。
   - ※ allocations / demands は `memberId` / `targetId` の複合参照で成立するため CSV 取込対象外（JSON 入出力と要員計画 UI を正とする）。
 - **スコープ次元** `MK.scope`（[`spec.md`](spec.md) §3.7・`"project"` 決め打ち禁止）: `dims() / dimOf(scopeAttr) / master(dim) / entities(dim) / mode(count) / resolveTarget(dim, storedId) / storeNsFor(moduleId, scopeAttr, targetId) / ensureDefaultTarget(dim)`。scoped モジュールは `ctx.scope` の対象内に閉じる。
 - `MK.io`: `buildEnvelope(scope) / download(name,obj) / downloadText(name,text,mime) / importEnvelope(env,mode) / csv.parse(text) / csv.stringify(rows) / pickCsvFile(onRows)`。`pickCsvFile` はファイル選択→読込→パースを共通化し、失敗時はエラートーストを出す（view の「CSV取込」から使う。§4.6.2）。
@@ -158,7 +158,8 @@ modules/
 **操作コスト（§2.5）**
 - [ ] 主操作が [`spec/modules/<id>.md`](spec/modules/) に書かれ、1アクションで完了する。
 - [ ] 一覧項目の編集がインラインで、モーダルは3項目以上の同時編集にだけ使っている。
-- [ ] 削除が undo トースト（`MK.ui.undoToast`）で、`confirm` は取り消し不能な操作にだけ使っている。
+- [ ] 削除が undo トースト（`MK.ui.undoDeleteToast`。`undoToast` を直に呼ばない）で、`confirm` は取り消し不能な操作にだけ使っている。
+- [ ] undo の退避を持つ logic に `forgetUndo()` があり、全データ初期化で退避が捨てられる。
 - [ ] 行内で完結する操作で全再描画していない（操作してもスクロール位置が飛ばない）。
 - [ ] 画面最上段に低頻度操作（CSV 入出力・サンプル投入）を置いていない。
 
