@@ -12,6 +12,11 @@
   // 保存はすべてここを通す。削除の退避は「削除以外の変更が入った時点で破棄する」規約（CONVENTIONS
   // §2.5-3）なので、保存のたびに捨てる。削除自身は保存後に退避を積む（wbs と同じ形）。
   function save(d) { const ok = col.save(d); pendingUndo = null; return ok; }
+  // 退避を残したまま保存する（ルーチンの自動投入だけが使う）。§2.5-3 が捨てろと言っているのは
+  // 「ユーザーが入れた別の変更」で、自動投入はその日を開いただけで走る副作用。削除直後の再描画が
+  // これを踏むと、出したばかりの取り消しトーストが必ず失敗するようになる。
+  // 安全なのは投入が items の末尾に足すだけだから（退避した位置より前がずれない）。
+  function persistKeepingUndo(d) { return col.save(d); }
 
   // 削除の取り消し（§2.5-3）。保持するのは「直前に消した1件＋その位置」だけで、項目とルーチンで
   // 枠を共有する（アクティブな undo は常に1つ）。
@@ -342,7 +347,7 @@
    * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
    *   ── view はこの戻り値で取り消しトーストを出すか決める。空振りで出すと、その「元に戻す」が
    *   直前に消した別の1件を復元しかねない。
-   * ※ store へ保存する副作用あり。
+   * ※ 削除できたときのみ store へ保存する副作用あり。
    */
   function removeItem(id) {
     const d = load();
@@ -362,10 +367,11 @@
   function undoDelete() {
     if (!pendingUndo) return false;
     const { kind, entry, index } = pendingUndo;
+    pendingUndo = null; // 復元した退避は先に手放す（save 側の破棄に依らず二重復元を防ぐ・todo/wbs と同じ）
     const d = load();
     const list = kind === "routine" ? (d.routines = d.routines || []) : d.items;
     list.splice(Math.min(index, list.length), 0, entry); // 元の位置へ（末尾超過は末尾に丸める）
-    save(d); // 退避は save が捨てる（同じ undo を2回効かせない）
+    save(d);
     return true;
   }
   /**
@@ -489,7 +495,7 @@
    * 取り消し用に「消した1件＋元の位置」を退避する（{@link undoDelete}）。
    * @param {string} id - 対象ルーチンID
    * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
-   * ※ store へ保存する副作用あり。
+   * ※ 削除できたときのみ store へ保存する副作用あり。
    */
   function removeRoutine(id) {
     const d = load();
@@ -528,7 +534,7 @@
       d.items.push({ id: MK.util.uid("d"), date, title: String(r.title == null ? "" : r.title), minutes: normMinutes(r.minutes), done: false, source: "routine", todoId: null, routineId: r.id, at: normAt(r.at), createdAt: now, updatedAt: now });
       added += 1;
     });
-    if (added) save(d);
+    if (added) persistKeepingUndo(d); // 自動投入は「ユーザーの変更」ではないので削除の退避を潰さない
     return added;
   }
 

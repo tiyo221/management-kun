@@ -201,7 +201,7 @@
       ui.button("↑", { variant: "btn-ghost", title: "1つ前へ移動", onClick: () => { L().moveItem(it.id, -1); render(); } }),
       ui.button("↓", { variant: "btn-ghost", title: "1つ後ろへ移動", onClick: () => { L().moveItem(it.id, 1); render(); } }),
       ui.button("↧", { variant: "btn-ghost", title: "末尾へ移動", onClick: () => { L().moveItemToEnd(it.id); render(); } }),
-      ui.button("✕", { variant: "btn-ghost", title: "デイリーから外す", onClick: () => removeItem(it) }),
+      ui.button("✕", { variant: "btn-ghost", title: "デイリーから外す", onClick: () => removeItemWithUndo(it) }),
     ]);
   }
 
@@ -218,15 +218,17 @@
   // undo 既定のもとでは復旧しにくいものほど取り消し導線を出すべきで、判断の向きが逆だった。
   // 同じ ✕ が項目によって挙動を変えるのは予測もしづらい（Issue #280）。
   // 復元は元の位置へ戻すため全再描画する（1回の明示操作なのでコスト許容・§2.5-4 の但し書き）。
-  function removeItem(it) {
+  function removeItemWithUndo(it) {
     const removed = L().removeItem(it.id);
     render(); // 空振り（既に消えている）でも画面をストアへ合わせ直す（幽霊行を残さない）
     if (!removed) return; // 空振りでトーストを出すと、その取り消しが別の1件を復元しかねない
     // 復元先は消した項目が持つ日。別の日を開いている間に戻すと画面に何も出ず「戻せなかった」ように
-    // 見えるため、戻すときは表示中の日をその日へ合わせる。
+    // 見えるため、戻すときは表示中の日をその日へ合わせる（飛んだことが分かるよう一言出す）。
     MK.ui.undoDeleteToast("「" + (it.title || "無題") + "」を削除しました", () => L().undoDelete(), () => {
+      const jumped = it.date && it.date !== date;
       if (it.date) date = it.date;
       render();
+      if (jumped) MK.ui.toast(dateLabel(date) + " へ戻しました", "info");
     });
   }
 
@@ -415,10 +417,14 @@
     _routineModal = MK.ui.modal({
       title: "🔁 ルーチン（定型業務）設定",
       body,
-      actions: [{ label: "閉じる", variant: "btn-secondary", onClick: (c) => c() }],
+      actions: [{ label: "閉じる", variant: "btn-secondary", onClick: (c) => { c(); _routineBody = null; } }],
     });
   }
-  function closeRoutineModal() { if (_routineModal && typeof _routineModal.close === "function") _routineModal.close(); }
+  // 閉じたら本体の参照も手放す（_routineModal と同じ寿命。開き直せば openRoutineModal が入れ直す）。
+  function closeRoutineModal() {
+    if (_routineModal && typeof _routineModal.close === "function") _routineModal.close();
+    _routineBody = null;
+  }
 
   MK.registerModule("daily", {
     title: "デイリー",

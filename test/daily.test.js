@@ -807,3 +807,19 @@ test("daily: forgetUndo で退避が捨てられる（全データ初期化用�
   eq(D.undoDelete(), false);
   eq(D.dayItems(today).length, 0);
 });
+
+test("daily: ルーチンの自動投入は削除の退避を潰さない", (MK) => {
+  // 観点: ensureDayInjected は「その日を開いただけ」で走る自動処理で、ユーザーが入れた変更ではない。
+  //       ここで退避を捨てると、削除直後の再描画（view の render が投入を呼ぶ）で取り消しトーストが
+  //       必ず失敗するようになる（CONVENTIONS §2.5-3 が捨てろと言うのは他の「変更」）
+  // 入力: 今日のルーチンを1件登録 → 手書き項目を削除 → ensureDayInjected(today)（投入が起きる）→ undoDelete
+  // 期待: 投入が1件以上起きても undoDelete は true で、消した項目が元の位置へ戻る
+  const D = MK.logic.daily;
+  const today = MK.util.todayISO();
+  D.addManual(today, "手書き", 30);
+  D.addRoutine("朝会", 15, [0, 1, 2, 3, 4, 5, 6]); // 曜日を問わず今日に該当する
+  D.removeItem(D.dayItems(today)[0].id);
+  assert(D.ensureDayInjected(today) > 0, "この日にルーチンが投入されること（前提）");
+  eq(D.undoDelete(), true);
+  eq(D.dayItems(today).map((x) => x.title), ["手書き", "朝会"]);
+});
