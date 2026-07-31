@@ -73,3 +73,78 @@ test("goals: 進捗・いまここ・全完了で達成", (MK) => {
   assert(G.isAchieved(g), "全完了で達成");
   assert(!!g.achievedAt, "達成日が記録される");
 });
+
+test("goals: 目標削除→undoDelete で元の位置へ戻る／他の変更で退避が破棄される", (MK) => {
+  // 観点: 削除は「消した1件＋元の位置」を退避し、undoDelete が同じ位置へ戻す（末尾ではない）。
+  //       退避は削除以外の変更（commit を通る保存）で捨てる（CONVENTIONS §2.5-3）
+  // 入力: A/B/C を作成 → 真ん中の B を削除 → undoDelete。別ケースで削除後に目標追加 → undoDelete
+  // 期待: 戻すと A/B/C の並び。追加を挟んだら false で B は戻らない
+  const G = MK.logic.goals;
+  ["A", "B", "C"].forEach((t) => G.addGoal(t));
+  const b = G.goals()[1];
+  eq(G.removeGoal(b.id), true);
+  eq(G.goals().map((g) => g.title), ["A", "C"]);
+  eq(G.undoDelete(), true);
+  eq(G.goals().map((g) => g.title), ["A", "B", "C"]);
+  eq(G.goals()[1].id, b.id); // 同じ id が戻る（作り直しではない）
+
+  G.removeGoal(G.goals()[0].id);
+  G.addGoal("割り込み");
+  eq(G.undoDelete(), false);
+  eq(G.goals().map((g) => g.title), ["B", "C", "割り込み"]);
+});
+
+test("goals: ステップ削除も undo できる（目標と退避枠を共有し、後勝ちになる）", (MK) => {
+  // 観点: 退避は1枠（アクティブな undo は常に1つ）。ステップは所属目標と位置を覚えて戻す
+  // 入力: 目標1件にステップ3件 → 真ん中を削除 → undoDelete。別ケースで目標削除の直後にステップ削除 → undoDelete
+  // 期待: ステップが元の位置へ戻る。後勝ちでステップだけが戻り、先に消した目標は戻らない
+  const G = MK.logic.goals;
+  const gid = G.addGoal("目標");
+  ["s1", "s2", "s3"].forEach((t) => G.addStep(gid, t));
+  const s2 = G.getGoal(gid).steps[1];
+  eq(G.removeStep(gid, s2.id), true);
+  eq(G.getGoal(gid).steps.map((s) => s.title), ["s1", "s3"]);
+  eq(G.undoDelete(), true);
+  eq(G.getGoal(gid).steps.map((s) => s.title), ["s1", "s2", "s3"]);
+
+  const other = G.addGoal("消される目標");
+  G.removeGoal(other);
+  G.removeStep(gid, G.getGoal(gid).steps[0].id); // 退避はこちらで上書きされる
+  eq(G.undoDelete(), true);
+  eq(G.getGoal(gid).steps.map((s) => s.title), ["s1", "s2", "s3"]);
+  eq(G.goals().map((g) => g.title), ["目標"]); // 先に消した目標は戻らない（退避は1件だけ）
+});
+
+test("goals: 戻し先の目標が消えているステップは復元しない", (MK) => {
+  // 観点: ステップの退避は所属目標を前提にする。目標ごと消えたあとに戻すと宙に浮くので false を返す
+  //       （消えた目標ごと戻すのは undo の単位＝直前の1件を超える）
+  // 入力: 目標＋ステップ → ステップ削除 → 目標削除 → undoDelete
+  // 期待: 目標削除で退避は上書きされるため、undo が戻すのは目標（ステップは戻らない）
+  const G = MK.logic.goals;
+  const gid = G.addGoal("目標");
+  G.addStep(gid, "s1");
+  G.removeStep(gid, G.getGoal(gid).steps[0].id);
+  G.removeGoal(gid);
+  eq(G.undoDelete(), true);          // 直前の削除＝目標が戻る
+  eq(G.goals().length, 1);
+  eq(G.getGoal(G.goals()[0].id).steps.length, 0); // ステップは戻らない（退避は1件だけ）
+});
+
+test("goals: 空振り削除は false を返し、forgetUndo で退避が捨てられる", (MK) => {
+  // 観点: 空振りでトーストを出すと、その取り消しが直前に消した別の1件を復元してしまう。
+  //       forgetUndo は全データ初期化（MK.store.clearAll は commit を通らない）用の後始末
+  // 入力: A を削除 → 存在しない id を削除 → undoDelete／別ケースで削除 → forgetUndo → undoDelete
+  // 期待: 空振りは false で退避を潰さず A は戻る。forgetUndo 後は false
+  const G = MK.logic.goals;
+  const gid = G.addGoal("A");
+  G.removeGoal(gid);
+  eq(G.removeGoal("no-such-id"), false);
+  eq(G.removeStep("no-such-goal", "no-such-step"), false);
+  eq(G.undoDelete(), true);
+  eq(G.goals().map((g) => g.title), ["A"]);
+
+  G.removeGoal(G.goals()[0].id);
+  G.forgetUndo();
+  eq(G.undoDelete(), false);
+  eq(G.goals().length, 0);
+});

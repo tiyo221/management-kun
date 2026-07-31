@@ -159,3 +159,48 @@ test("questions: importData の replace と merge", (MK) => {
   Q.importData({ items: [{ id: "q_y", title: "置換のみ", status: "open", tags: [] }] }, "replace");
   eq(Q.counts().all, 1);
 });
+
+test("questions: 削除→undoDelete で元の位置へ戻る／他の変更で退避が破棄される", (MK) => {
+  // 観点: 削除は「消した1件＋元の位置」を退避し、undoDelete が同じ位置へ戻す。退避は削除以外の
+  //       変更（保存を伴う操作）で捨てる（CONVENTIONS §2.5-3）
+  // 入力: 3件追加 → 真ん中を削除 → undoDelete。別ケースで削除後に追加 → undoDelete
+  // 期待: 元の並びへ戻る。追加を挟んだら false で戻らない
+  const Q = MK.logic.questions;
+  ["A", "B", "C"].forEach((t) => Q.addItem(t)); // unshift なので並びは C/B/A
+  const mid = Q.items()[1];
+  eq(Q.removeItem(mid.id), true);
+  eq(Q.items().map((x) => x.title), ["C", "A"]);
+  eq(Q.undoDelete(), true);
+  eq(Q.items().map((x) => x.title), ["C", "B", "A"]);
+  eq(Q.items()[1].id, mid.id); // 同じ id が戻る
+
+  Q.removeItem(Q.items()[0].id);
+  Q.addItem("割り込み");
+  eq(Q.undoDelete(), false);
+  eq(Q.items().map((x) => x.title), ["割り込み", "B", "A"]);
+});
+
+test("questions: 退避は1件だけ／空振りは false／forgetUndo で捨てられる", (MK) => {
+  // 観点: アクティブな undo は常に1つ。空振りの削除で退避を潰すと、取り消しが別の1件を復元しうる。
+  //       forgetUndo は全データ初期化（save を通らない経路）用の後始末
+  // 入力: 2件を続けて削除 → undoDelete を2回／空振り削除を挟む／forgetUndo 後に undoDelete
+  // 期待: 戻るのは直前の1件だけ。空振りは false で退避を潰さない。forgetUndo 後は false
+  const Q = MK.logic.questions;
+  ["A", "B"].forEach((t) => Q.addItem(t));
+  const [first, second] = Q.items();
+  Q.removeItem(first.id);
+  Q.removeItem(second.id);
+  eq(Q.undoDelete(), true);
+  eq(Q.items().map((x) => x.title), ["A"]);
+  eq(Q.undoDelete(), false);
+
+  Q.removeItem(Q.items()[0].id);
+  eq(Q.removeItem("no-such-id"), false);
+  eq(Q.undoDelete(), true);
+  eq(Q.items().map((x) => x.title), ["A"]);
+
+  Q.removeItem(Q.items()[0].id);
+  Q.forgetUndo();
+  eq(Q.undoDelete(), false);
+  eq(Q.items().length, 0);
+});

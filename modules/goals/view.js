@@ -53,6 +53,21 @@
     if (view === "dashboard") renderDashboard(); else renderRoadmap();
   }
 
+  // 削除は確認を挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3）。復元は元の位置へ
+  // 戻すため全再描画する（1回の明示操作なのでコスト許容）。
+  // 目標を消したら詳細ペインの選択を外し、戻したらその目標を選び直す（消す前の画面へ戻す）。
+  function removeGoalWithUndo(g) {
+    const wasSelected = selectedId === g.id;
+    if (wasSelected) selectedId = null;
+    const removed = L().removeGoal(g.id);
+    render(); // 空振り（既に消えている）でも画面をストアへ合わせ直す
+    if (!removed) return; // 空振りでトーストを出すと、その取り消しが別の1件を復元しかねない
+    MK.ui.undoDeleteToast("「" + (g.title || "無題") + "」を削除しました", () => L().undoDelete(), () => {
+      if (wasSelected) selectedId = g.id;
+      render();
+    });
+  }
+
   function renderRoadmap() {
     const list = L().goals();
     if (selectedId == null && list.length) selectedId = list[0].id;
@@ -95,7 +110,7 @@
           el("div", { class: "sub", text: (g.deadline ? "期限 " + g.deadline + " / " : "") + "作成 " + g.createdAt + (g.achievedAt ? " / 達成 " + g.achievedAt : "") }),
         ]),
         ui.button("編集", { variant: "btn-ghost", onClick: () => editGoal(g) }),
-        ui.button("削除", { variant: "btn-ghost", onClick: () => MK.ui.confirm("「" + (g.title || "無題") + "」を削除しますか？").then((ok) => { if (ok) { if (selectedId === g.id) selectedId = null; L().removeGoal(g.id); render(); } }) }),
+        ui.button("削除", { variant: "btn-ghost", onClick: () => removeGoalWithUndo(g) }),
       ]),
       g.description ? el("p", { class: "sub", text: g.description }) : null,
       L().isAchieved(g) ? el("div", { class: "mk-goal-done-banner", text: "🎉 ゴール到達！全ステップ完了" }) : null,
@@ -196,7 +211,16 @@
   function editStep(g, s) {
     const f = { title: ui.input({ value: s.title }), desc: ui.textarea(s.description), review: ui.textarea(s.review) };
     MK.ui.modal({ title: "ステップを編集", body: ui.stack([ui.field("タイトル", f.title), ui.field("説明", f.desc), ui.field("振り返りメモ", f.review)]), actions: [
-      { label: "削除", variant: "btn-danger", onClick: (c) => MK.ui.confirm("このステップを削除しますか？").then((ok) => { if (ok) { L().removeStep(g.id, s.id); c(); render(); } }) },
+      // 先にモーダルを閉じてから削除＋取り消しトースト（モーダルの裏にトーストが隠れないように）。
+      { label: "削除", variant: "btn-danger", onClick: (c) => {
+        c();
+        MK.ui.removeWithUndo(
+          { remove: (id) => L().removeStep(g.id, id), undoRemove: () => L().undoDelete() },
+          s.id,
+          "ステップ「" + (s.title || "無題") + "」を削除しました",
+          render
+        );
+      } },
       { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
       { label: "保存", variant: "btn-primary", onClick: (c) => { if (!f.title.value.trim()) { MK.ui.toast("タイトルを入力してください", "error"); return; } L().updateStep(g.id, s.id, { title: f.title.value.trim(), description: f.desc.value, review: f.review.value }); c(); render(); } },
     ] });
