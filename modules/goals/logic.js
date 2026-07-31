@@ -36,7 +36,11 @@
 
   // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→goals 配列検証→既定返却、
   // save＝store.set（goals は exportedAt を付与しない・返り値は保存成否）。仕様は MK.store.collection を参照。
-  const { load, save } = col;
+  const { load } = col;
+  // 保存はすべてここを通す。削除の退避は「削除以外の変更が入った時点で破棄する」規約（CONVENTIONS
+  // §2.5-3）なので、保存のたびに捨てる。commit を経由しない取込・サンプル投入（全置換）も
+  // ここを通るため、データセットごと入れ替わった先へ古い退避を戻すことがない。
+  function save(d) { const ok = col.save(d); pendingUndo = null; return ok; }
   /**
    * 全目標の配列を返す。
    * @returns {Goal[]} 目標一覧
@@ -86,11 +90,11 @@
    * @returns {void}
    * ※ recompute で achievedAt を更新し store へ保存する副作用あり。描画は view の責務。
    */
-  function commit(d) { recompute(d); save(d); pendingUndo = null; } // 描画は view の責務（ここでは render しない）
+  function commit(d) { recompute(d); save(d); } // 描画は view の責務（ここでは render しない）
 
   // 削除の取り消し（CONVENTIONS §2.5-3）。保持するのは「直前に消した1件＋その位置」だけで、
-  // 目標とステップで枠を共有する（アクティブな undo は常に1つ）。退避は commit（＝削除以外の変更も
-  // 通る唯一の保存経路）で捨て、削除自身は保存後に積む。
+  // 目標とステップで枠を共有する（アクティブな undo は常に1つ）。退避は保存経路（save）で捨て、
+  // 削除自身は保存後に積む。
   /** @type {{kind: "goal", entry: Object, index: number}|{kind: "step", entry: Object, index: number, goalId: string}|null} */
   let pendingUndo = null;
 

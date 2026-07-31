@@ -68,6 +68,17 @@
     });
   }
 
+  // ステップ削除（一覧の行・編集モーダルの両方から使う）。削除・復元とも詳細ペインの部分更新で足りる
+  // （afterStepChange はストアから描き直すので、位置を戻す復元にもそのまま追随する・§2.5-4）。
+  function removeStepWithUndo(g, s) {
+    MK.ui.removeWithUndo(
+      { remove: (id) => L().removeStep(g.id, id), undoRemove: () => L().undoDelete() },
+      s.id,
+      "ステップ「" + (s.title || "無題") + "」を削除しました",
+      () => afterStepChange(g.id)
+    );
+  }
+
   function renderRoadmap() {
     const list = L().goals();
     if (selectedId == null && list.length) selectedId = list[0].id;
@@ -164,7 +175,7 @@
       dot, grow,
       ui.button("↑", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, 1); afterStepChange(g.id); } }),
       ui.button("↓", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, -1); afterStepChange(g.id); } }),
-      ui.button("削除", { variant: "btn-ghost", onClick: () => { L().removeStep(g.id, s.id); afterStepChange(g.id); } }),
+      ui.button("削除", { variant: "btn-ghost", onClick: () => removeStepWithUndo(g, s) }),
     ]);
   }
 
@@ -212,15 +223,7 @@
     const f = { title: ui.input({ value: s.title }), desc: ui.textarea(s.description), review: ui.textarea(s.review) };
     MK.ui.modal({ title: "ステップを編集", body: ui.stack([ui.field("タイトル", f.title), ui.field("説明", f.desc), ui.field("振り返りメモ", f.review)]), actions: [
       // 先にモーダルを閉じてから削除＋取り消しトースト（モーダルの裏にトーストが隠れないように）。
-      { label: "削除", variant: "btn-danger", onClick: (c) => {
-        c();
-        MK.ui.removeWithUndo(
-          { remove: (id) => L().removeStep(g.id, id), undoRemove: () => L().undoDelete() },
-          s.id,
-          "ステップ「" + (s.title || "無題") + "」を削除しました",
-          render
-        );
-      } },
+      { label: "削除", variant: "btn-danger", onClick: (c) => { c(); removeStepWithUndo(g, s); } },
       { label: "キャンセル", variant: "btn-secondary", onClick: (c) => c() },
       { label: "保存", variant: "btn-primary", onClick: (c) => { if (!f.title.value.trim()) { MK.ui.toast("タイトルを入力してください", "error"); return; } L().updateStep(g.id, s.id, { title: f.title.value.trim(), description: f.desc.value, review: f.review.value }); c(); render(); } },
     ] });

@@ -148,3 +148,26 @@ test("goals: 空振り削除は false を返し、forgetUndo で退避が捨て�
   eq(G.undoDelete(), false);
   eq(G.goals().length, 0);
 });
+
+test("goals: 全置換（取込・サンプル投入・CSV取込）で退避が破棄される", (MK) => {
+  // 観点: 全置換はデータセットごと入れ替わるので、古い退避を戻すと消えたはずの目標が新しいデータへ
+  //       混入する。commit を通らない保存経路（importData / loadSample / applyCSV）も塞ぐ（§2.5-3）
+  // 入力: 削除 → importData(replace) / loadSample / applyCSV をそれぞれ挟んで undoDelete
+  // 期待: いずれも false（復元しない）
+  const G = MK.logic.goals;
+  G.addGoal("消す");
+  G.removeGoal(G.goals()[0].id);
+  G.importData({ version: 1, goals: [{ id: "g9", title: "取込", steps: [] }] }, "replace");
+  eq(G.undoDelete(), false);
+  eq(G.goals().map((g) => g.title), ["取込"]);
+
+  G.removeGoal(G.goals()[0].id);
+  G.loadSample();
+  eq(G.undoDelete(), false);
+
+  const before = G.goals().length;
+  G.removeGoal(G.goals()[0].id);
+  G.applyCSV([["種別", "目標", "ステップ"], ["goal", "CSV目標", ""]]);
+  eq(G.undoDelete(), false);
+  assert(before >= 1);
+});

@@ -204,3 +204,24 @@ test("questions: 退避は1件だけ／空振りは false／forgetUndo で捨て
   eq(Q.undoDelete(), false);
   eq(Q.items().length, 0);
 });
+
+test("questions: 全置換（取込・サンプル投入・CSV取込）で退避が破棄される", (MK) => {
+  // 観点: 全置換はデータセットごと入れ替わるので、古い退避を戻すと消えたはずの項目が新しいデータへ
+  //       混入する（§2.5-3「全置換でデータセットごと変わるため退避を破棄」）
+  // 入力: 削除 → importData(replace) / loadSample / applyCSV をそれぞれ挟んで undoDelete
+  // 期待: いずれも false（復元しない）
+  const Q = MK.logic.questions;
+  Q.addItem("消す");
+  Q.removeItem(Q.items()[0].id);
+  Q.importData({ version: 1, items: [{ id: "q9", title: "取込", status: "open" }] }, "replace");
+  eq(Q.undoDelete(), false);
+  eq(Q.items().map((x) => x.title), ["取込"]);
+
+  Q.removeItem(Q.items()[0].id);
+  Q.loadSample();
+  eq(Q.undoDelete(), false);
+
+  Q.removeItem(Q.items()[0].id);
+  Q.applyCSV([["わからないこと", "ステータス"], ["CSV項目", "未解決"]]);
+  eq(Q.undoDelete(), false);
+});

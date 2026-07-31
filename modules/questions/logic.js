@@ -57,11 +57,13 @@
     return statusSet.normalize(status);
   }
 
-  // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→items 配列検証→既定返却、
-  // save＝exportedAt 付与→store.set（返り値は保存成否）。仕様は MK.store.collection を参照。
+  // load は共有ヘルパへ集約（Issue #139）。load＝store 読取→items 配列検証→既定返却。
+  // 仕様は MK.store.collection を参照。
   const { load } = col;
-  // 保存はすべてここを通す。削除の退避は「削除以外の変更が入った時点で破棄する」規約（CONVENTIONS
-  // §2.5-3）なので、保存のたびに捨てる。削除自身は保存後に退避を積む。
+  // 保存はすべてここを通す（共有ヘルパの save＝exportedAt 付与→store.set の薄いラッパ）。削除の退避は
+  // 「削除以外の変更が入った時点で破棄する」規約（CONVENTIONS §2.5-3）なので、保存のたびに捨てる。
+  // 全置換（取込・サンプル投入）もここを通るため、入れ替わった先へ古い退避を戻すことがない。
+  // 削除自身は保存後に退避を積む。
   function save(d) { const ok = col.save(d); pendingUndo = null; return ok; }
 
   // 削除の取り消し（§2.5-3）。保持するのは「直前に消した1件＋その位置」だけ（汎用 undo スタックは
