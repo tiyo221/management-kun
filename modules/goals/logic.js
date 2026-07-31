@@ -199,7 +199,9 @@
       d.goals.splice(Math.min(index, d.goals.length), 0, entry); // 元の位置へ（末尾超過は末尾に丸める）
     } else {
       const g = d.goals.find((x) => x.id === goalId);
-      if (!g) return false; // 戻し先の目標が無い
+      // 戻し先の目標が無い場合の防御。目標を消せば退避はそちらで上書きされるため現在の経路からは
+      // 到達しないが、保存を伴わない経路が増えたときに宙に浮いたステップを差し込まないようにする。
+      if (!g) return false;
       g.steps.splice(Math.min(index, g.steps.length), 0, entry);
     }
     commit(d);

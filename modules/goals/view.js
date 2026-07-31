@@ -62,8 +62,11 @@
     const removed = L().removeGoal(g.id);
     render(); // 空振り（既に消えている）でも画面をストアへ合わせ直す
     if (!removed) return; // 空振りでトーストを出すと、その取り消しが別の1件を復元しかねない
+    // 削除後の render が選び直した目標（先頭）を覚えておく。復元時にまだそれが選ばれていれば
+    // 消す前の選択へ戻し、利用者がトースト表示中に別の目標を選んでいたらその選択を尊重する。
+    const autoPicked = selectedId;
     MK.ui.undoDeleteToast("「" + (g.title || "無題") + "」を削除しました", () => L().undoDelete(), () => {
-      if (wasSelected) selectedId = g.id;
+      if (wasSelected && selectedId === autoPicked) selectedId = g.id;
       render();
     });
   }

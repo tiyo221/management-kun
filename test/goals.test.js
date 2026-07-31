@@ -115,11 +115,12 @@ test("goals: ステップ削除も undo できる（目標と退避枠を共有�
   eq(G.goals().map((g) => g.title), ["目標"]); // 先に消した目標は戻らない（退避は1件だけ）
 });
 
-test("goals: 戻し先の目標が消えているステップは復元しない", (MK) => {
-  // 観点: ステップの退避は所属目標を前提にする。目標ごと消えたあとに戻すと宙に浮くので false を返す
-  //       （消えた目標ごと戻すのは undo の単位＝直前の1件を超える）
+test("goals: ステップを消したあとに目標を消すと、戻るのは目標だけ（退避は1枠・後勝ち）", (MK) => {
+  // 観点: ステップの退避は所属目標を前提にするが、その目標を消すと退避は目標の方で上書きされる。
+  //       結果として「宙に浮いたステップを戻す」状況自体が起きない（logic の戻し先なしガードは
+  //       この経路からは到達しない防御）
   // 入力: 目標＋ステップ → ステップ削除 → 目標削除 → undoDelete
-  // 期待: 目標削除で退避は上書きされるため、undo が戻すのは目標（ステップは戻らない）
+  // 期待: undo が戻すのは目標。中のステップは削除時点の状態（0件）のまま
   const G = MK.logic.goals;
   const gid = G.addGoal("目標");
   G.addStep(gid, "s1");
@@ -165,9 +166,8 @@ test("goals: 全置換（取込・サンプル投入・CSV取込）で退避が�
   G.loadSample();
   eq(G.undoDelete(), false);
 
-  const before = G.goals().length;
   G.removeGoal(G.goals()[0].id);
   G.applyCSV([["種別", "目標", "ステップ"], ["goal", "CSV目標", ""]]);
   eq(G.undoDelete(), false);
-  assert(before >= 1);
+  eq(G.goals().map((g) => g.title), ["CSV目標"]); // 取込後のデータセットに旧目標が混ざらない
 });
