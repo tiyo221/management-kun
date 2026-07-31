@@ -36,7 +36,11 @@
 
   // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→goals 配列検証→既定返却、
   // save＝store.set（goals は exportedAt を付与しない・返り値は保存成否）。仕様は MK.store.collection を参照。
-  const { load, save } = col;
+  const { load } = col;
+  // 保存はすべてここを通す。削除の退避は「削除以外の変更が入った時点で破棄する」規約（CONVENTIONS
+  // §2.5-3）なので、保存のたびに捨てる。commit を経由しない取込・サンプル投入（全置換）も
+  // ここを通るため、データセットごと入れ替わった先へ古い退避を戻すことがない。
+  function save(d) { const ok = col.save(d); pendingUndo = null; return ok; }
   /**
    * 全目標の配列を返す。
    * @returns {Goal[]} 目標一覧
@@ -88,6 +92,12 @@
    */
   function commit(d) { recompute(d); save(d); } // 描画は view の責務（ここでは render しない）
 
+  // 削除の取り消し（CONVENTIONS §2.5-3）。保持するのは「直前に消した1件＋その位置」だけで、
+  // 目標とステップで枠を共有する（アクティブな undo は常に1つ）。退避は保存経路（save）で捨て、
+  // 削除自身は保存後に積む。
+  /** @type {{kind: "goal", entry: Object, index: number}|{kind: "step", entry: Object, index: number, goalId: string}|null} */
+  let pendingUndo = null;
+
   /**
    * 目標を1件追加して保存する。
    * @param {string} title - 目標名（前後空白は trim される）
@@ -108,12 +118,22 @@
    */
   function updateGoal(id, patch) { const d = load(); const g = d.goals.find((x) => x.id === id); if (g) Object.assign(g, patch); commit(d); }
   /**
-   * 指定目標を削除して保存する。
+   * 指定目標を削除して保存する。取り消し用に「消した1件＋元の位置」を退避する（{@link undoDelete}）。
    * @param {string} id - 対象目標ID
-   * @returns {void}
-   * ※ commit 経由で store へ保存する副作用あり。
+   * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
+   *   ── view はこの戻り値で取り消しトーストを出すか決める。空振りで出すと、その「元に戻す」が
+   *   直前に消した別の1件を復元しかねない。
+   * ※ 削除できたときのみ commit 経由で store へ保存する副作用あり。
    */
-  function removeGoal(id) { const d = load(); d.goals = d.goals.filter((g) => g.id !== id); commit(d); }
+  function removeGoal(id) {
+    const d = load();
+    const index = d.goals.findIndex((g) => g.id === id);
+    if (index < 0) return false;
+    const entry = d.goals.splice(index, 1)[0];
+    commit(d);
+    pendingUndo = { kind: "goal", entry, index }; // commit が破棄するため保存後に置く
+    return true;
+  }
 
   /**
    * 指定目標にステップを1件追加して保存する。目標が存在しなければ何もしない。
@@ -145,13 +165,54 @@
    */
   function toggleStep(goalId, stepId, done) { updateStep(goalId, stepId, done ? { status: "done", completedAt: MK.util.todayISO() } : { status: "todo", completedAt: null }); }
   /**
-   * 指定ステップを削除して保存する。
+   * 指定ステップを削除して保存する。取り消し用に「消した1件＋元の位置＋所属目標」を退避する
+   * （{@link undoDelete}）。
    * @param {string} goalId - 対象目標ID
    * @param {string} stepId - 対象ステップID
-   * @returns {void}
-   * ※ commit 経由で store へ保存する副作用あり。
+   * @returns {boolean} 削除したら true、対象が無ければ false（何も変えない）
+   * ※ 削除できたときのみ commit 経由で store へ保存する副作用あり。
    */
-  function removeStep(goalId, stepId) { const d = load(); const g = d.goals.find((x) => x.id === goalId); if (g) g.steps = g.steps.filter((s) => s.id !== stepId); commit(d); }
+  function removeStep(goalId, stepId) {
+    const d = load();
+    const g = d.goals.find((x) => x.id === goalId);
+    if (!g) return false;
+    const index = g.steps.findIndex((s) => s.id === stepId);
+    if (index < 0) return false;
+    const entry = g.steps.splice(index, 1)[0];
+    commit(d);
+    pendingUndo = { kind: "step", entry, index, goalId }; // commit が破棄するため保存後に置く
+    return true;
+  }
+  /**
+   * 直前の削除（目標・ステップのどちらか）を取り消して元の位置へ戻す。退避が無ければ（他の変更で
+   * 破棄済みなら）戻さず false を返す。view はこの戻り値で「戻せなかった」ことを伝える（§2.5-3）。
+   * ステップの復元先の目標が消えている場合も false（消えた目標ごと戻すのは undo の単位を超える）。
+   * @returns {boolean} 復元できたら true、復元しなかったら false
+   * ※ 復元時のみ commit 経由で store へ保存する副作用あり。
+   */
+  function undoDelete() {
+    if (!pendingUndo) return false;
+    const { kind, entry, index, goalId } = pendingUndo;
+    pendingUndo = null; // 復元した退避は先に手放す（commit の破棄に依らず二重復元を防ぐ）
+    const d = load();
+    if (kind === "goal") {
+      d.goals.splice(Math.min(index, d.goals.length), 0, entry); // 元の位置へ（末尾超過は末尾に丸める）
+    } else {
+      const g = d.goals.find((x) => x.id === goalId);
+      // 戻し先の目標が無い場合の防御。目標を消せば退避はそちらで上書きされるため現在の経路からは
+      // 到達しないが、保存を伴わない経路が増えたときに宙に浮いたステップを差し込まないようにする。
+      if (!g) return false;
+      g.steps.splice(Math.min(index, g.steps.length), 0, entry);
+    }
+    commit(d);
+    return true;
+  }
+  /**
+   * 退避を破棄する（復元せず捨てる）。store を logic の外から書き換える経路＝全データ初期化
+   * （`MK.store.clearAll()`）用の共通契約（§2.5-3。`MK.forgetAllUndo()` が呼ぶ）。
+   * @returns {void}
+   */
+  function forgetUndo() { pendingUndo = null; }
   /**
    * ステップの並び順を1つ上/下へ移動して保存する。範囲外になる移動は無視する。
    * @param {string} goalId - 対象目標ID
@@ -323,5 +384,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.goals = { load, save, goals, getGoal, progress, isAchieved, currentStepId, addGoal, updateGoal, removeGoal, addStep, updateStep, toggleStep, removeStep, moveStep, dashboardData, summary, searchItems, buildCSVRows, applyCSV, exportData, importData, loadSample };
+  MK.logic.goals = { load, save, goals, getGoal, progress, isAchieved, currentStepId, addGoal, updateGoal, removeGoal, addStep, updateStep, toggleStep, removeStep, undoDelete, forgetUndo, moveStep, dashboardData, summary, searchItems, buildCSVRows, applyCSV, exportData, importData, loadSample };
 })();

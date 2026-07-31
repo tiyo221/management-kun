@@ -57,9 +57,19 @@
     return statusSet.normalize(status);
   }
 
-  // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→items 配列検証→既定返却、
-  // save＝exportedAt 付与→store.set（返り値は保存成否）。仕様は MK.store.collection を参照。
-  const { load, save } = col;
+  // load は共有ヘルパへ集約（Issue #139）。load＝store 読取→items 配列検証→既定返却。
+  // 仕様は MK.store.collection を参照。
+  const { load } = col;
+  // 保存はすべてここを通す（共有ヘルパの save＝exportedAt 付与→store.set の薄いラッパ）。削除の退避は
+  // 「削除以外の変更が入った時点で破棄する」規約（CONVENTIONS §2.5-3）なので、保存のたびに捨てる。
+  // 全置換（取込・サンプル投入）もここを通るため、入れ替わった先へ古い退避を戻すことがない。
+  // 削除自身は保存後に退避を積む。
+  function save(d) { const ok = col.save(d); pendingUndo = null; return ok; }
+
+  // 削除の取り消し（§2.5-3）。保持するのは「直前に消した1件＋その位置」だけ（汎用 undo スタックは
+  // 持たない）。
+  /** @type {{entry: Object, index: number}|null} */
+  let pendingUndo = null;
   /**
    * 全アイテムの配列を返す。
    * @returns {QuestionItem[]} わからないこと一覧
@@ -171,12 +181,43 @@
   }
 
   /**
-   * 指定アイテムを削除して保存する。
+   * 指定アイテムを削除して保存する。取り消し用に「消した1件＋元の位置」を退避する（{@link undoDelete}）。
    * @param {string} id - 対象アイテムID
-   * @returns {void}
-   * ※ store へ保存する副作用あり。
+   * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
+   *   ── view はこの戻り値で取り消しトーストを出すか決める。空振りで出すと、その「元に戻す」が
+   *   直前に消した別の1件を復元しかねない。
+   * ※ 削除できたときのみ store へ保存する副作用あり。
    */
-  function removeItem(id) { const d = load(); d.items = d.items.filter((it) => it.id !== id); save(d); }
+  function removeItem(id) {
+    const d = load();
+    const index = d.items.findIndex((it) => it.id === id);
+    if (index < 0) return false;
+    const entry = d.items.splice(index, 1)[0];
+    save(d);
+    pendingUndo = { entry, index }; // save が破棄するため保存後に置く
+    return true;
+  }
+  /**
+   * 直前の削除を取り消して元の位置へ戻す。退避が無ければ（他の変更で破棄済みなら）戻さず false を返す。
+   * view はこの戻り値で「戻せなかった」ことを伝える（§2.5-3）。
+   * @returns {boolean} 復元できたら true、退避が無ければ false
+   * ※ 復元時のみ store へ保存する副作用あり。
+   */
+  function undoDelete() {
+    if (!pendingUndo) return false;
+    const { entry, index } = pendingUndo;
+    pendingUndo = null; // 復元した退避は先に手放す（save の破棄に依らず二重復元を防ぐ）
+    const d = load();
+    d.items.splice(Math.min(index, d.items.length), 0, entry); // 元の位置へ（末尾超過は末尾に丸める）
+    save(d);
+    return true;
+  }
+  /**
+   * 退避を破棄する（復元せず捨てる）。store を logic の外から書き換える経路＝全データ初期化
+   * （`MK.store.clearAll()`）用の共通契約（§2.5-3。`MK.forgetAllUndo()` が呼ぶ）。
+   * @returns {void}
+   */
+  function forgetUndo() { pendingUndo = null; }
 
   /**
    * 今週（月曜起点）以降に解決したアイテム件数を数える。
@@ -320,7 +361,7 @@
   MK.logic = MK.logic || {};
   MK.logic.questions = {
     STATUSES, normalizeStatus, load, save, items, counts, filtered, knowledge, isKnowledge,
-    addItem, updateItem, removeItem, resolve, resolvedThisWeek, staleCount, summary,
+    addItem, updateItem, removeItem, undoDelete, forgetUndo, resolve, resolvedThisWeek, staleCount, summary,
     searchItems, buildCSVRows, applyCSV, exportData, importData, loadSample,
   };
 })();

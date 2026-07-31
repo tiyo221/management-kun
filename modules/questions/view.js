@@ -156,7 +156,17 @@
     MK.ui.modal({
       title: "わからないことを編集", body,
       actions: [
-        { label: "削除", variant: "btn-danger", onClick: (close) => MK.ui.confirm("この項目を削除しますか？").then((ok) => { if (ok) { L().removeItem(it.id); close(); render(); } }) },
+        // 先にモーダルを閉じてから削除＋取り消しトースト（確認は挟まない・CONVENTIONS §2.5-3。
+        // モーダルの裏にトーストが隠れないよう閉じる方を先にする）。
+        { label: "削除", variant: "btn-danger", onClick: (close) => {
+          close();
+          MK.ui.removeWithUndo(
+            { remove: (id) => L().removeItem(id), undoRemove: () => L().undoDelete() },
+            it.id,
+            "「" + (it.title || "無題") + "」を削除しました",
+            render
+          );
+        } },
         { label: "キャンセル", variant: "btn-secondary", onClick: (close) => close() },
         { label: "保存", variant: "btn-primary", onClick: (close) => {
             const title = f.title.value.trim();
