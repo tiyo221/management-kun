@@ -729,3 +729,81 @@ test("daily: 取り込みは at を正規化する（妥当は HH:MM・不正/�
   eq(D.exportData().items.find((x) => x.id === "d_1").at, "09:05");     // 往復する
   eq(D.exportData().routines.find((r) => r.id === "r_1").at, "08:30");
 });
+
+test("daily: 項目削除→undoDelete で元の位置へ戻る／退避は他の変更で破棄される", (MK) => {
+  // 観点: 削除は「消した1件＋元の位置」を退避し、undoDelete が同じ位置へ戻す（末尾ではない）。
+  //       退避は削除以外の変更（保存を伴う操作）が入った時点で捨てる（CONVENTIONS §2.5-3）
+  // 入力: 手書き3件（A/B/C）→ 真ん中の B を削除 → undoDelete。別ケースで削除後に項目追加 → undoDelete
+  // 期待: 戻すと並びは A/B/C。追加を挟んだ場合は false を返し B は戻らない
+  const D = MK.logic.daily;
+  const today = MK.util.todayISO();
+  ["A", "B", "C"].forEach((t) => D.addManual(today, t, 30));
+  const b = D.dayItems(today)[1];
+  eq(D.removeItem(b.id), true);
+  eq(D.dayItems(today).map((x) => x.title), ["A", "C"]);
+  eq(D.undoDelete(), true);
+  eq(D.dayItems(today).map((x) => x.title), ["A", "B", "C"]);
+  eq(D.dayItems(today)[1].id, b.id); // 同じ id が戻る（作り直しではない）
+
+  D.removeItem(D.dayItems(today)[0].id);
+  D.addManual(today, "割り込み", 30); // 削除以外の変更
+  eq(D.undoDelete(), false);
+  eq(D.dayItems(today).map((x) => x.title), ["B", "C", "割り込み"]);
+});
+
+test("daily: 削除の退避は1件だけ／空振り削除は false を返し退避を潰さない", (MK) => {
+  // 観点: アクティブな undo は常に1つ（汎用 undo スタックは持たない）。空振りの削除で
+  //       「削除しました」を出すと、その取り消しが直前に消した別の1件を復元してしまう
+  // 入力: A/B を削除（2回）→ undoDelete を2回。別ケースで削除後に存在しない id を削除
+  // 期待: 戻るのは直前に消した B だけ（2回目は false）。空振りの removeItem は false を返し、
+  //       そのあとの undoDelete は直前の1件を戻せる
+  const D = MK.logic.daily;
+  const today = MK.util.todayISO();
+  ["A", "B"].forEach((t) => D.addManual(today, t, 30));
+  const [a, b] = D.dayItems(today);
+  D.removeItem(a.id);
+  D.removeItem(b.id);
+  eq(D.undoDelete(), true);
+  eq(D.dayItems(today).map((x) => x.title), ["B"]);
+  eq(D.undoDelete(), false);
+
+  D.removeItem(D.dayItems(today)[0].id);
+  eq(D.removeItem("no-such-id"), false);
+  eq(D.undoDelete(), true);
+  eq(D.dayItems(today).map((x) => x.title), ["B"]);
+});
+
+test("daily: ルーチン削除も undo できる（項目と退避枠を共有する）", (MK) => {
+  // 観点: 削除の作法を項目とルーチンで揃える。退避は1枠なので、後から消した方だけが戻る
+  // 入力: ルーチン2件 → 2件目を削除 → undoDelete。別ケースで項目削除の直後にルーチンを削除 → undoDelete
+  // 期待: ルーチンが元の位置へ戻る。後勝ちでルーチンだけが戻り、先に消した項目は戻らない
+  const D = MK.logic.daily;
+  const today = MK.util.todayISO();
+  D.addRoutine("朝会", 15, [1, 2, 3, 4, 5]);
+  D.addRoutine("メール", 30, [0, 1, 2, 3, 4, 5, 6]);
+  const second = D.routines()[1];
+  eq(D.removeRoutine(second.id), true);
+  eq(D.routines().map((r) => r.title), ["朝会"]);
+  eq(D.undoDelete(), true);
+  eq(D.routines().map((r) => r.title), ["朝会", "メール"]);
+
+  D.addManual(today, "手書き", 30);
+  D.removeItem(D.dayItems(today)[0].id);
+  D.removeRoutine(D.routines()[0].id); // 退避はこちらで上書きされる
+  eq(D.undoDelete(), true);
+  eq(D.routines().map((r) => r.title), ["朝会", "メール"]);
+  eq(D.dayItems(today).length, 0); // 先に消した項目は戻らない（退避は1件だけ）
+});
+
+test("daily: forgetUndo で退避が捨てられる（全データ初期化用）", (MK) => {
+  // 観点: store を logic の外から消す経路（MK.store.clearAll）は save を通らないため、
+  //       退避を明示的に捨てないと初期化後の Ctrl+Z で1件だけ復活する（§2.5-3）
+  // 自明: 削除 → forgetUndo() → undoDelete() が false になるだけ
+  const D = MK.logic.daily;
+  const today = MK.util.todayISO();
+  D.addManual(today, "捨てる", 30);
+  D.removeItem(D.dayItems(today)[0].id);
+  D.forgetUndo();
+  eq(D.undoDelete(), false);
+  eq(D.dayItems(today).length, 0);
+});

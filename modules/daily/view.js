@@ -201,7 +201,7 @@
       ui.button("↑", { variant: "btn-ghost", title: "1つ前へ移動", onClick: () => { L().moveItem(it.id, -1); render(); } }),
       ui.button("↓", { variant: "btn-ghost", title: "1つ後ろへ移動", onClick: () => { L().moveItem(it.id, 1); render(); } }),
       ui.button("↧", { variant: "btn-ghost", title: "末尾へ移動", onClick: () => { L().moveItemToEnd(it.id); render(); } }),
-      ui.button("✕", { variant: "btn-ghost", title: "デイリーから外す", onClick: () => removeWithConfirm(it) }),
+      ui.button("✕", { variant: "btn-ghost", title: "デイリーから外す", onClick: () => removeItem(it) }),
     ]);
   }
 
@@ -213,20 +213,15 @@
     ]);
   }
 
-  // 削除は「その日には取り消せない項目のときだけ」確認する。手書きはデイリーが唯一の実体なので消すと
-  // 復旧できない（CONVENTIONS §6）。ルーチン由来も、外すと投入台帳（injected）が同日の再投入を止める
-  // ため当日は復活しない（＝実質その日限りで復旧不能）。一方 todo 由来は todo に実体が残り再度引ける＝
-  // 「今日やらない」の取り消しが容易なので、日々の組み替えを妨げないよう確認を挟まない。
-  function removeWithConfirm(it) {
-    if (it.source === "todo") { L().removeItem(it.id); render(); return; }
-    const msg = it.source === "routine"
-      ? "「" + (it.title || "無題") + "」を外しますか？（ルーチン由来。この日には再投入されません）"
-      : "「" + (it.title || "無題") + "」を削除しますか？（デイリーにしかない項目です）";
-    MK.ui.confirm(msg).then((ok) => {
-      if (!ok) return;
-      L().removeItem(it.id);
-      render();
-    });
+  // 削除は由来（手書き / ルーチン / todo）で作法を分けず、確認を挟まず即実行して取り消しトーストを
+  // 出す（CONVENTIONS §2.5-3）。以前は「その日には取り消せない項目だけ確認する」と分岐していたが、
+  // undo 既定のもとでは復旧しにくいものほど取り消し導線を出すべきで、判断の向きが逆だった。
+  // 同じ ✕ が項目によって挙動を変えるのは予測もしづらい（Issue #280）。
+  // 復元は元の位置へ戻すため全再描画する（1回の明示操作なのでコスト許容・§2.5-4 の但し書き）。
+  function removeItem(it) {
+    if (!L().removeItem(it.id)) return; // 空振り（既に消えている）ならトーストを出さない
+    render();
+    MK.ui.undoDeleteToast("「" + (it.title || "無題") + "」を削除しました", () => L().undoDelete(), render);
   }
 
   // 合計・終了時刻・はみ出し警告＋「残りを明日へ送る」（その日に項目があるときだけ出す）
@@ -344,13 +339,14 @@
       if (!next.length) { MK.ui.toast("曜日を1つ以上選んでください", "error"); rebuildRoutineBody(host); return; }
       L().updateRoutine(r.id, { days: next }); rebuildRoutineBody(host); render();
     });
+    // 削除は確認なしで即実行し、取り消しトーストを出す（§2.5-3）。投入済みの項目は残るので、
+    // 消えるのは定義だけ ── その旨はトースト本文で伝える（従来 confirm 文言が担っていた情報）。
     const del = ui.button("✕", { variant: "btn-ghost", title: "ルーチンを削除", onClick: () => {
-      MK.ui.confirm("ルーチン「" + (r.title || "無題") + "」を削除しますか？（投入済みの項目は残ります）").then((ok) => {
-        if (!ok) return;
-        L().removeRoutine(r.id);
-        rebuildRoutineBody(host);
-        render(); // 背後の時間割にも反映（投入済み項目は残るが、定義は消える）
-      });
+      if (!L().removeRoutine(r.id)) return; // 空振り（既に消えている）ならトーストを出さない
+      const refresh = () => { rebuildRoutineBody(host); render(); }; // 背後の時間割にも反映
+      refresh();
+      // 「（Ctrl+Z で取り消し）」がヘルパ側で後ろに付くため、補足は括弧を重ねず地の文で書く。
+      MK.ui.undoDeleteToast("ルーチン「" + (r.title || "無題") + "」を削除しました。投入済みの項目は残ります", () => L().undoDelete(), refresh);
     } });
     return el("li", { class: "mk-row" }, [el("div", { class: "grow" }, [ui.toolbar([titleInput, minSel, atInput]), days]), del]);
   }

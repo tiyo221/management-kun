@@ -8,7 +8,18 @@
   // 相乗りする単一の開始起点（記憶する）。store.collection の既定は { version, items:[] } を返し、
   // startTime 未設定時は startTime() が既定値へフォールバックする。
   const col = MK.store.collection("module:daily", { key: "items" });
-  const { load, save } = col;
+  const { load } = col;
+  // 保存はすべてここを通す。削除の退避は「削除以外の変更が入った時点で破棄する」規約（CONVENTIONS
+  // §2.5-3）なので、保存のたびに捨てる。削除自身は保存後に退避を積む（wbs と同じ形）。
+  function save(d) { const ok = col.save(d); pendingUndo = null; return ok; }
+
+  // 削除の取り消し（§2.5-3）。保持するのは「直前に消した1件＋その位置」だけで、項目とルーチンで
+  // 枠を共有する（アクティブな undo は常に1つ）。
+  // 日付をまたいでも退避は捨てない ── 項目は自分の date を持ち、ルーチンは日付に属さないため、
+  // 別の日を開いてから戻しても元の日へ正しく復元される（対象別 store を持つ wbs と違い、daily は
+  // 単一 namespace なのでデータセットが入れ替わらない）。
+  /** @type {{kind: "item"|"routine", entry: Object, index: number}|null} */
+  let pendingUndo = null;
 
   const DEFAULT_START = "09:00"; // 時間割の既定の開始時刻（開始起点は記憶する・未設定時のみ使う）
   const DEFAULT_MIN = 30;        // 所要時間の既定（分）
@@ -326,11 +337,43 @@
   }
   /**
    * 指定項目をデイリーから外して保存する（削除＝今日やらない。todo 実体には手を触れない）。
+   * 取り消し用に「消した1件＋元の位置」を退避する（{@link undoDelete}）。
    * @param {string} id - 対象項目ID
-   * @returns {void}
+   * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
+   *   ── view はこの戻り値で取り消しトーストを出すか決める。空振りで出すと、その「元に戻す」が
+   *   直前に消した別の1件を復元しかねない。
    * ※ store へ保存する副作用あり。
    */
-  function removeItem(id) { const d = load(); d.items = d.items.filter((it) => it.id !== id); save(d); }
+  function removeItem(id) {
+    const d = load();
+    const index = d.items.findIndex((it) => it.id === id);
+    if (index < 0) return false;
+    const entry = d.items.splice(index, 1)[0];
+    save(d);
+    pendingUndo = { kind: "item", entry, index }; // save が破棄するため保存後に置く
+    return true;
+  }
+  /**
+   * 直前の削除（項目・ルーチンのどちらか）を取り消して元の位置へ戻す。退避が無ければ（他の変更で
+   * 破棄済みなら）戻さず false を返す。view はこの戻り値で「戻せなかった」ことを伝える（§2.5-3）。
+   * @returns {boolean} 復元できたら true、退避が無ければ false
+   * ※ 復元時のみ store へ保存する副作用あり。
+   */
+  function undoDelete() {
+    if (!pendingUndo) return false;
+    const { kind, entry, index } = pendingUndo;
+    const d = load();
+    const list = kind === "routine" ? (d.routines = d.routines || []) : d.items;
+    list.splice(Math.min(index, list.length), 0, entry); // 元の位置へ（末尾超過は末尾に丸める）
+    save(d); // 退避は save が捨てる（同じ undo を2回効かせない）
+    return true;
+  }
+  /**
+   * 退避を破棄する（復元せず捨てる）。store を logic の外から書き換える経路＝全データ初期化
+   * （`MK.store.clearAll()`）用の共通契約（§2.5-3。`MK.forgetAllUndo()` が呼ぶ）。
+   * @returns {void}
+   */
+  function forgetUndo() { pendingUndo = null; }
   /**
    * 同じ日の中で項目の並び順を1つ前/後ろへ動かして保存する（時間割の前後移動）。
    * 端で範囲外になる移動は無視する。
@@ -443,14 +486,20 @@
   }
   /**
    * ルーチン定義を削除して保存する（投入済み項目には手を触れない＝スナップショットとして残る）。
+   * 取り消し用に「消した1件＋元の位置」を退避する（{@link undoDelete}）。
    * @param {string} id - 対象ルーチンID
-   * @returns {void}
+   * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
    * ※ store へ保存する副作用あり。
    */
   function removeRoutine(id) {
     const d = load();
-    d.routines = (d.routines || []).filter((x) => x.id !== id);
+    const routines = d.routines = d.routines || [];
+    const index = routines.findIndex((x) => x.id === id);
+    if (index < 0) return false;
+    const entry = routines.splice(index, 1)[0];
     save(d);
+    pendingUndo = { kind: "routine", entry, index }; // save が破棄するため保存後に置く
+    return true;
   }
   /**
    * 指定日にその曜日のルーチンを自動投入する（その日を開いたときに呼ぶ・ボタン/確認なし）。
@@ -759,7 +808,7 @@
     load, save, items, dayItems, startTime, setStartTime,
     addManual, pullableTodos, pullFromTodo,
     routines, addRoutine, updateRoutine, removeRoutine, ensureDayInjected,
-    setMinutes, setAt, toggleDone, removeItem, moveItem, moveItemToTop, moveItemToEnd, rolloverTo, rolloverStaleTo, staleCount,
+    setMinutes, setAt, toggleDone, removeItem, undoDelete, forgetUndo, moveItem, moveItemToTop, moveItemToEnd, rolloverTo, rolloverStaleTo, staleCount,
     schedule, summary, exportData, importData, loadSample,
   };
 })();
