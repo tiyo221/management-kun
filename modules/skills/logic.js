@@ -36,7 +36,14 @@
    * @returns {void}
    * ※ store（localStorage）へ書き込む副作用あり。
    */
-  function save(d) { store.set(d); }
+  function save(d) { store.set(d); pendingUndo = null; }
+
+  // 削除の取り消し（CONVENTIONS §2.5-3）。保持するのは「直前に消した1件」だけ。スキルは
+  // **紐づく評価（ratings）も一緒に消える**ため、退避にも評価を含める ── スキルだけ戻して評価が
+  // 空だと、消したときより悪い状態（全メンバー分を入力し直し）になる。
+  // 退避は保存のたびに捨て（削除以外の変更が入った時点で破棄する規約）、削除自身は保存後に積む。
+  /** @type {{skill: Object, index: number, ratings: Object}|null} */
+  let pendingUndo = null;
   /**
    * 全スキルの配列を返す。
    * @returns {Skill[]} スキル一覧
@@ -130,12 +137,51 @@
    */
   function updateSkill(id, patch) { const d = load(); const s = d.skills.find((x) => x.id === id); if (s) Object.assign(s, patch); save(d); }
   /**
-   * 指定スキルを削除し、関連する評価も併せて削除して保存する。
+   * 指定スキルを削除し、関連する評価も併せて削除して保存する。取り消し用に「消したスキル＋元の位置
+   * ＋一緒に消した評価」を退避する（{@link undoDelete}）。
    * @param {string} id - 対象スキルID
-   * @returns {void}
-   * ※ store へ保存する副作用あり。
+   * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
+   *   ── view はこの戻り値で取り消しトーストを出すか決める。空振りで出すと、その「元に戻す」が
+   *   直前に消した別の1件を復元しかねない。
+   * ※ 削除できたときのみ store へ保存する副作用あり。
    */
-  function removeSkill(id) { const d = load(); d.skills = d.skills.filter((s) => s.id !== id); Object.keys(d.ratings).forEach((k) => { if (k.split(":")[1] === id) delete d.ratings[k]; }); save(d); }
+  function removeSkill(id) {
+    const d = load();
+    const index = d.skills.findIndex((s) => s.id === id);
+    if (index < 0) return false;
+    const skill = d.skills.splice(index, 1)[0];
+    const ratings = {};
+    Object.keys(d.ratings).forEach((k) => {
+      if (k.split(":")[1] !== id) return;
+      ratings[k] = d.ratings[k]; // 戻すときに同じキーへ書き戻す（キーは "memberId:skillId"）
+      delete d.ratings[k];
+    });
+    save(d);
+    pendingUndo = { skill, index, ratings }; // save が破棄するため保存後に置く
+    return true;
+  }
+  /**
+   * 直前の削除を取り消し、スキルを元の位置へ、評価を元のキーへ戻す。退避が無ければ（他の変更で
+   * 破棄済みなら）戻さず false を返す。view はこの戻り値で「戻せなかった」ことを伝える（§2.5-3）。
+   * @returns {boolean} 復元できたら true、退避が無ければ false
+   * ※ 復元時のみ store へ保存する副作用あり。
+   */
+  function undoDelete() {
+    if (!pendingUndo) return false;
+    const { skill, index, ratings } = pendingUndo;
+    pendingUndo = null; // 復元した退避は先に手放す（save の破棄に依らず二重復元を防ぐ）
+    const d = load();
+    d.skills.splice(Math.min(index, d.skills.length), 0, skill); // 元の位置へ（末尾超過は末尾に丸める）
+    Object.keys(ratings).forEach((k) => { d.ratings[k] = ratings[k]; });
+    save(d);
+    return true;
+  }
+  /**
+   * 退避を破棄する（復元せず捨てる）。store を logic の外から書き換える経路＝全データ初期化
+   * （`MK.store.clearAll()`）用の共通契約（§2.5-3。`MK.forgetAllUndo()` が呼ぶ）。
+   * @returns {void}
+   */
+  function forgetUndo() { pendingUndo = null; }
 
   // ---- CSV（整形・取込はロジック。ファイル選択/DLは view）----
   /**
@@ -321,5 +367,5 @@
   }
 
   MK.logic = MK.logic || {};
-  MK.logic.skills = { load, save, skills, visibleSkills, members, rating, setRating, domainsOrder, avgLevel, countAtLeast, gapOf, clampLv, addSkill, updateSkill, removeSkill, buildSkillsCSVRows, applySkillsCSV, buildRatingsCSVRows, applyRatingsCSV, radarData, summary, summaryFor, exportData, importData, loadSample };
+  MK.logic.skills = { load, save, skills, visibleSkills, members, rating, setRating, domainsOrder, avgLevel, countAtLeast, gapOf, clampLv, addSkill, updateSkill, removeSkill, undoDelete, forgetUndo, buildSkillsCSVRows, applySkillsCSV, buildRatingsCSVRows, applyRatingsCSV, radarData, summary, summaryFor, exportData, importData, loadSample };
 })();
