@@ -201,7 +201,7 @@
       ui.button("↑", { variant: "btn-ghost", title: "1つ前へ移動", onClick: () => { L().moveItem(it.id, -1); render(); } }),
       ui.button("↓", { variant: "btn-ghost", title: "1つ後ろへ移動", onClick: () => { L().moveItem(it.id, 1); render(); } }),
       ui.button("↧", { variant: "btn-ghost", title: "末尾へ移動", onClick: () => { L().moveItemToEnd(it.id); render(); } }),
-      ui.button("✕", { variant: "btn-ghost", title: "デイリーから外す", onClick: () => removeWithConfirm(it) }),
+      ui.button("✕", { variant: "btn-ghost", title: "デイリーから外す", onClick: () => removeItemWithUndo(it) }),
     ]);
   }
 
@@ -213,19 +213,22 @@
     ]);
   }
 
-  // 削除は「その日には取り消せない項目のときだけ」確認する。手書きはデイリーが唯一の実体なので消すと
-  // 復旧できない（CONVENTIONS §6）。ルーチン由来も、外すと投入台帳（injected）が同日の再投入を止める
-  // ため当日は復活しない（＝実質その日限りで復旧不能）。一方 todo 由来は todo に実体が残り再度引ける＝
-  // 「今日やらない」の取り消しが容易なので、日々の組み替えを妨げないよう確認を挟まない。
-  function removeWithConfirm(it) {
-    if (it.source === "todo") { L().removeItem(it.id); render(); return; }
-    const msg = it.source === "routine"
-      ? "「" + (it.title || "無題") + "」を外しますか？（ルーチン由来。この日には再投入されません）"
-      : "「" + (it.title || "無題") + "」を削除しますか？（デイリーにしかない項目です）";
-    MK.ui.confirm(msg).then((ok) => {
-      if (!ok) return;
-      L().removeItem(it.id);
+  // 削除は由来（手書き / ルーチン / todo）で作法を分けず、確認を挟まず即実行して取り消しトーストを
+  // 出す（CONVENTIONS §2.5-3）。以前は「その日には取り消せない項目だけ確認する」と分岐していたが、
+  // undo 既定のもとでは復旧しにくいものほど取り消し導線を出すべきで、判断の向きが逆だった。
+  // 同じ ✕ が項目によって挙動を変えるのは予測もしづらい（Issue #280）。
+  // 復元は元の位置へ戻すため全再描画する（1回の明示操作なのでコスト許容・§2.5-4 の但し書き）。
+  function removeItemWithUndo(it) {
+    const removed = L().removeItem(it.id);
+    render(); // 空振り（既に消えている）でも画面をストアへ合わせ直す（幽霊行を残さない）
+    if (!removed) return; // 空振りでトーストを出すと、その取り消しが別の1件を復元しかねない
+    // 復元先は消した項目が持つ日。別の日を開いている間に戻すと画面に何も出ず「戻せなかった」ように
+    // 見えるため、戻すときは表示中の日をその日へ合わせる（飛んだことが分かるよう一言出す）。
+    MK.ui.undoDeleteToast("「" + (it.title || "無題") + "」を削除しました", () => L().undoDelete(), () => {
+      const jumped = it.date && it.date !== date;
+      if (it.date) date = it.date;
       render();
+      if (jumped) MK.ui.toast(dateLabel(date) + " へ戻しました", "info");
     });
   }
 
@@ -305,6 +308,7 @@
 
   // ---- ルーチン（定型業務）設定 ----
   let _routineModal = null;
+  let _routineBody = null;           // 表示中のモーダル本体（開き直すと作り直されるので都度差し替える）
   let newRoutineTitle = "";          // 追加フォームの入力途中タイトル（rebuild で消えないよう退避）
   let newRoutineMin = "30";          // 追加フォームの所要時間（分・文字列）
   let newRoutineDays = [1, 2, 3, 4, 5]; // 追加フォームの選択曜日（既定は平日。0=日〜6=土）
@@ -344,13 +348,23 @@
       if (!next.length) { MK.ui.toast("曜日を1つ以上選んでください", "error"); rebuildRoutineBody(host); return; }
       L().updateRoutine(r.id, { days: next }); rebuildRoutineBody(host); render();
     });
+    // 削除は確認なしで即実行し、取り消しトーストを出す（§2.5-3）。投入済みの項目は残るので、
+    // 消えるのは定義だけ ── その旨はトースト本文で伝える（従来 confirm 文言が担っていた情報）。
     const del = ui.button("✕", { variant: "btn-ghost", title: "ルーチンを削除", onClick: () => {
-      MK.ui.confirm("ルーチン「" + (r.title || "無題") + "」を削除しますか？（投入済みの項目は残ります）").then((ok) => {
-        if (!ok) return;
-        L().removeRoutine(r.id);
-        rebuildRoutineBody(host);
-        render(); // 背後の時間割にも反映（投入済み項目は残るが、定義は消える）
-      });
+      // 組み直すのは「今表示しているモーダル本体」。削除時点の host をクロージャで掴むと、トースト
+      // 表示中（6秒）に閉じて開き直してから取り消したとき、外れた古いノードを組み直すだけになる。
+      const refresh = () => {
+        if (_routineBody && _routineBody.isConnected) rebuildRoutineBody(_routineBody);
+        render(); // 背後の時間割にも反映
+      };
+      // 削除→（空振りでも）再描画→取り消しトースト、の手順は共有ヘルパに任せる（§2.5-3 の定型）。
+      // 「（Ctrl+Z で取り消し）」がヘルパ側で後ろに付くため、補足は括弧を重ねず地の文で書く。
+      MK.ui.removeWithUndo(
+        { remove: (id) => L().removeRoutine(id), undoRemove: () => L().undoDelete() },
+        r.id,
+        "ルーチン「" + (r.title || "無題") + "」を削除しました。投入済みの項目は残ります",
+        refresh
+      );
     } });
     return el("li", { class: "mk-row" }, [el("div", { class: "grow" }, [ui.toolbar([titleInput, minSel, atInput]), days]), del]);
   }
@@ -401,14 +415,19 @@
     newRoutineTitle = ""; // 開くたびに入力途中の退避はクリア（前回の閉じ残りを持ち込まない）
     newRoutineAt = "";    // 固定時刻の入力途中もクリア
     const body = el("div");
+    _routineBody = body;
     rebuildRoutineBody(body);
     _routineModal = MK.ui.modal({
       title: "🔁 ルーチン（定型業務）設定",
       body,
-      actions: [{ label: "閉じる", variant: "btn-secondary", onClick: (c) => c() }],
+      actions: [{ label: "閉じる", variant: "btn-secondary", onClick: () => closeRoutineModal() }], // 後始末は1か所（本体参照も手放す）
     });
   }
-  function closeRoutineModal() { if (_routineModal && typeof _routineModal.close === "function") _routineModal.close(); }
+  // 閉じたら本体の参照も手放す（_routineModal と同じ寿命。開き直せば openRoutineModal が入れ直す）。
+  function closeRoutineModal() {
+    if (_routineModal && typeof _routineModal.close === "function") _routineModal.close();
+    _routineBody = null;
+  }
 
   MK.registerModule("daily", {
     title: "デイリー",
@@ -418,7 +437,7 @@
     mount(container) { date = MK.util.todayISO(); root = el("div"); container.appendChild(root); render(); },
     // モジュール離脱時に開きっぱなしのモーダルを畳む（overlay が残ると、破棄済み root に対して
     // 候補クリックが走り書き込みだけ効いてしまうため）。
-    unmount() { closeModal(); closeRoutineModal(); _modal = null; _routineModal = null; root = null; listNode = null; footerNode = null; },
+    unmount() { closeModal(); closeRoutineModal(); _modal = null; _routineModal = null; _routineBody = null; root = null; listNode = null; footerNode = null; },
     summary() { return L().summary(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },
