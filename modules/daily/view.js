@@ -219,9 +219,15 @@
   // 同じ ✕ が項目によって挙動を変えるのは予測もしづらい（Issue #280）。
   // 復元は元の位置へ戻すため全再描画する（1回の明示操作なのでコスト許容・§2.5-4 の但し書き）。
   function removeItem(it) {
-    if (!L().removeItem(it.id)) return; // 空振り（既に消えている）ならトーストを出さない
-    render();
-    MK.ui.undoDeleteToast("「" + (it.title || "無題") + "」を削除しました", () => L().undoDelete(), render);
+    const removed = L().removeItem(it.id);
+    render(); // 空振り（既に消えている）でも画面をストアへ合わせ直す（幽霊行を残さない）
+    if (!removed) return; // 空振りでトーストを出すと、その取り消しが別の1件を復元しかねない
+    // 復元先は消した項目が持つ日。別の日を開いている間に戻すと画面に何も出ず「戻せなかった」ように
+    // 見えるため、戻すときは表示中の日をその日へ合わせる。
+    MK.ui.undoDeleteToast("「" + (it.title || "無題") + "」を削除しました", () => L().undoDelete(), () => {
+      if (it.date) date = it.date;
+      render();
+    });
   }
 
   // 合計・終了時刻・はみ出し警告＋「残りを明日へ送る」（その日に項目があるときだけ出す）
@@ -300,6 +306,7 @@
 
   // ---- ルーチン（定型業務）設定 ----
   let _routineModal = null;
+  let _routineBody = null;           // 表示中のモーダル本体（開き直すと作り直されるので都度差し替える）
   let newRoutineTitle = "";          // 追加フォームの入力途中タイトル（rebuild で消えないよう退避）
   let newRoutineMin = "30";          // 追加フォームの所要時間（分・文字列）
   let newRoutineDays = [1, 2, 3, 4, 5]; // 追加フォームの選択曜日（既定は平日。0=日〜6=土）
@@ -342,9 +349,15 @@
     // 削除は確認なしで即実行し、取り消しトーストを出す（§2.5-3）。投入済みの項目は残るので、
     // 消えるのは定義だけ ── その旨はトースト本文で伝える（従来 confirm 文言が担っていた情報）。
     const del = ui.button("✕", { variant: "btn-ghost", title: "ルーチンを削除", onClick: () => {
-      if (!L().removeRoutine(r.id)) return; // 空振り（既に消えている）ならトーストを出さない
-      const refresh = () => { rebuildRoutineBody(host); render(); }; // 背後の時間割にも反映
-      refresh();
+      // 組み直すのは「今表示しているモーダル本体」。削除時点の host をクロージャで掴むと、トースト
+      // 表示中（6秒）に閉じて開き直してから取り消したとき、外れた古いノードを組み直すだけになる。
+      const refresh = () => {
+        if (_routineBody && _routineBody.isConnected) rebuildRoutineBody(_routineBody);
+        render(); // 背後の時間割にも反映
+      };
+      const removed = L().removeRoutine(r.id);
+      refresh(); // 空振り（既に消えている）でも画面をストアへ合わせ直す
+      if (!removed) return; // 空振りでトーストを出すと、その取り消しが別の1件を復元しかねない
       // 「（Ctrl+Z で取り消し）」がヘルパ側で後ろに付くため、補足は括弧を重ねず地の文で書く。
       MK.ui.undoDeleteToast("ルーチン「" + (r.title || "無題") + "」を削除しました。投入済みの項目は残ります", () => L().undoDelete(), refresh);
     } });
@@ -397,6 +410,7 @@
     newRoutineTitle = ""; // 開くたびに入力途中の退避はクリア（前回の閉じ残りを持ち込まない）
     newRoutineAt = "";    // 固定時刻の入力途中もクリア
     const body = el("div");
+    _routineBody = body;
     rebuildRoutineBody(body);
     _routineModal = MK.ui.modal({
       title: "🔁 ルーチン（定型業務）設定",
@@ -414,7 +428,7 @@
     mount(container) { date = MK.util.todayISO(); root = el("div"); container.appendChild(root); render(); },
     // モジュール離脱時に開きっぱなしのモーダルを畳む（overlay が残ると、破棄済み root に対して
     // 候補クリックが走り書き込みだけ効いてしまうため）。
-    unmount() { closeModal(); closeRoutineModal(); _modal = null; _routineModal = null; root = null; listNode = null; footerNode = null; },
+    unmount() { closeModal(); closeRoutineModal(); _modal = null; _routineModal = null; _routineBody = null; root = null; listNode = null; footerNode = null; },
     summary() { return L().summary(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },
