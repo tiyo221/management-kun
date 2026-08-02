@@ -181,3 +181,80 @@ test("metrics: importData の replace と merge", (MK) => {
   eq(M.metrics().length, 1);
   eq(M.metrics()[0].name, "置換のみ");
 });
+
+test("metrics: 削除の取り消しは指標と実績を戻し、引き上げた子の parentId も巻き戻す", (MK) => {
+  // 観点: 削除は子を親へ引き上げるため、指標だけ戻すと木が削除前と違う形になる（「元に戻す」が嘘に
+  //       なる）。退避には引き上げで書き換えた子の元の parentId も含める（CONVENTIONS §2.5-3・#283）
+  // 入力: KGI←NSM←(KPI1, KPI2) の木で、実績を持つ NSM を削除 → undoDelete
+  // 期待: NSM が元の位置・実績つきで戻り、KPI1/KPI2 の親が KGI から NSM へ巻き戻る
+  const M = MK.logic.metrics;
+  const kgi = M.addMetric({ name: "KGI" });
+  const nsm = M.addMetric({ name: "NSM", targetValue: 5000 });
+  M.setParent(nsm.id, kgi.id);
+  const kpi1 = M.addMetric({ name: "KPI1" });
+  const kpi2 = M.addMetric({ name: "KPI2" });
+  M.setParent(kpi1.id, nsm.id);
+  M.setParent(kpi2.id, nsm.id);
+  M.setRecord(nsm.id, "2026-07", 4200);
+
+  eq(M.removeMetric(nsm.id), true);
+  eq(M.metrics().length, 3);
+  eq(M.metrics().find((x) => x.id === kpi1.id).parentId, kgi.id); // 引き上げ済み
+  eq(M.metrics().find((x) => x.id === kpi2.id).parentId, kgi.id);
+
+  eq(M.undoDelete(), true);
+  eq(M.metrics().map((x) => x.name), ["KGI", "NSM", "KPI1", "KPI2"]); // 元の位置へ
+  const back = M.metrics().find((x) => x.id === nsm.id);
+  eq(back.parentId, kgi.id);
+  eq(back.targetValue, 5000);
+  eq(M.latestRecord(back).value, 4200);                            // 実績も指標ごと戻る
+  eq(M.metrics().find((x) => x.id === kpi1.id).parentId, nsm.id);  // 引き上げが巻き戻る
+  eq(M.metrics().find((x) => x.id === kpi2.id).parentId, nsm.id);
+  eq(M.undoDelete(), false);                                       // 同じ退避は二度効かない
+});
+
+test("metrics: 退避は他の変更・対象切替で破棄され、空振り削除は false を返す", (MK) => {
+  // 観点: 削除以外の変更（追加・実績記録・全置換）と対象プロダクトの切替で退避を捨てる。空振りで
+  //       トーストを出すと、その取り消しが直前に消した別の1件を復元してしまう
+  // 入力: 削除→追加→undo／削除→setRecord→undo／削除→importData(replace)→undo／
+  //       削除→setStore で別プロダクトへ→undo／空振り削除／forgetUndo
+  // 期待: いずれの undo も false。空振り削除は false を返し、直前の退避は潰さない
+  const M = MK.logic.metrics;
+  M.addMetric({ name: "A" });
+  M.removeMetric(M.metrics()[0].id);
+  M.addMetric({ name: "B" });
+  eq(M.undoDelete(), false);
+
+  M.removeMetric(M.metrics()[0].id);
+  const c = M.addMetric({ name: "C" });
+  M.setRecord(c.id, "2026-07", 1);
+  eq(M.undoDelete(), false);
+
+  M.removeMetric(M.metrics()[0].id);
+  M.importData({ metrics: [{ id: "m_z", name: "取込", kind: "kpi", unit: "", direction: "up", parentId: null, targetValue: null, records: [], note: "" }] }, "replace");
+  eq(M.undoDelete(), false);
+  eq(M.metrics().map((x) => x.name), ["取込"]);
+
+  M.removeMetric(M.metrics()[0].id);
+  try {
+    M.setStore(MK.store.scope("module:metrics:p_other")); // 対象（プロダクト）切替
+    const other = M.metrics().length;
+    eq(M.undoDelete(), false, "対象切替をまたいで復元しない");
+    eq(M.metrics().length, other);
+  } finally {
+    // setStore は logic のモジュール変数を書き換える。reset() では戻らないため、
+    // 後続テストへ漏らさないよう既定ストアへ戻す（wbs のテストと同じ後始末）。
+    M.setStore(MK.store.scope("module:metrics"));
+  }
+
+  M.addMetric({ name: "D" });
+  M.removeMetric(M.metrics()[0].id);
+  eq(M.removeMetric("no-such-id"), false); // 空振りは退避を潰さない
+  eq(M.undoDelete(), true);
+  eq(M.metrics().map((x) => x.name), ["D"]);
+
+  M.removeMetric(M.metrics()[0].id);
+  M.forgetUndo();
+  eq(M.undoDelete(), false);
+  eq(M.metrics().length, 0);
+});

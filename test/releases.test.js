@@ -136,3 +136,57 @@ test("releases: loadSample はプロダクト未登録なら空で保存する",
   // 全件が実在プロダクトを指す
   assert(R.releases().every((r) => R.productName(r) !== ""));
 });
+
+test("releases: 削除は元の位置へ戻せる／退避は1件だけ", (MK) => {
+  // 観点: 削除は「消した1件＋元の位置」を退避し、undoDelete で元の並びへ戻る（CONVENTIONS §2.5-3）。
+  //       退避は常に直前の1件だけ（アクティブな undo トーストが1つという前提と揃える）
+  // 入力: A/B/C を作り B を削除 → undo／その後 A→C を続けて削除 → undoDelete を2回
+  // 期待: B は真ん中へ戻る。連続削除では直前の C だけ戻り、2回目の undoDelete は false
+  const R = MK.logic.releases;
+  const p = MK.products.create({ name: "P" });
+  ["A", "B", "C"].forEach((v) => R.addRelease({ productId: p.id, version: v }));
+  eq(R.removeRelease(R.releases()[1].id), true);
+  eq(R.releases().map((r) => r.version), ["A", "C"]);
+  eq(R.undoDelete(), true);
+  eq(R.releases().map((r) => r.version), ["A", "B", "C"]); // 元の位置（真ん中）へ
+
+  R.removeRelease(R.releases()[0].id); // A
+  R.removeRelease(R.releases()[1].id); // C
+  eq(R.releases().map((r) => r.version), ["B"]);
+  eq(R.undoDelete(), true);
+  eq(R.releases().map((r) => r.version), ["B", "C"]); // 戻るのは直前の1件だけ
+  eq(R.undoDelete(), false);                          // 同じ退避は二度効かない
+});
+
+test("releases: 退避は他の変更で破棄され、空振り削除は false を返す", (MK) => {
+  // 観点: 削除以外の変更（追加・更新・全置換）で退避を捨てる。空振りでトーストを出すと、その
+  //       取り消しが直前に消した別の1件を復元してしまう。forgetUndo は全データ初期化用の後始末
+  // 入力: 削除→追加→undo／削除→更新→undo／削除→importData(replace)→undo／空振り削除／forgetUndo
+  // 期待: いずれの undo も false。空振り削除は false を返し、直前の退避は潰さない
+  const R = MK.logic.releases;
+  const p = MK.products.create({ name: "P" });
+  R.addRelease({ productId: p.id, version: "A" });
+  R.removeRelease(R.releases()[0].id);
+  R.addRelease({ productId: p.id, version: "B" });
+  eq(R.undoDelete(), false);
+
+  R.removeRelease(R.releases()[0].id);
+  R.addRelease({ productId: p.id, version: "C" });
+  R.updateRelease(R.releases()[0].id, { note: "編集" });
+  eq(R.undoDelete(), false);
+
+  R.removeRelease(R.releases()[0].id);
+  R.importData({ releases: [{ id: "rel_z", productId: p.id, version: "取込", plannedDate: "", actualDate: "", status: "planned", note: "" }] }, "replace");
+  eq(R.undoDelete(), false);
+  eq(R.releases().map((r) => r.version), ["取込"]);
+
+  R.removeRelease(R.releases()[0].id);
+  eq(R.removeRelease("no-such-id"), false); // 空振りは退避を潰さない
+  eq(R.undoDelete(), true);
+  eq(R.releases().map((r) => r.version), ["取込"]);
+
+  R.removeRelease(R.releases()[0].id);
+  R.forgetUndo();
+  eq(R.undoDelete(), false);
+  eq(R.counts().all, 0);
+});

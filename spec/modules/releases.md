@@ -9,6 +9,8 @@
 ## 役割
 Product マスタと紐づくリリースの履歴・予定を1件1レコードで管理する台帳。プロダクトで絞り込んだ時系列一覧（ロードマップの簡易形）で「何をいつ出したか／いつ出すか」を把握できるようにする。まず台帳として成立させ、ロードマップ的な見え方の強化は将来枠。
 
+リリースの削除は確認を出さず即実行し、`MK.ui.undoDeleteToast` で取り消せる（CONVENTIONS §2.5-3）。`removeRelease` は**削除できたかを返す**（その id が無ければ `false`）ので、view は空振りではトーストを出さない。
+
 ## 共通マスタ関係
 - **Product マスタ（§4.4）を参照する**（各リリースは `productId` 必須）。People / Project マスタは使わない。
 - **スコープは global（横断）**。product-scoped（`mk:module:releases:<productId>:v1`）にはしない設計判断（Issue #84 着手時）:

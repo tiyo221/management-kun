@@ -7,7 +7,7 @@
   // 既定は従来の単一 namespace。scoped 化（§3.7.4）に伴い、シェルが mount 時に対象別 store
   // （mk:module:metrics:<productId>:v1）を渡してくるので setStore で差し替える（表示中のプロダクト文脈）。
   let store = MK.store.scope("module:metrics");
-  function setStore(s) { if (s) store = s; }
+  function setStore(s) { if (s) { store = s; pendingUndo = null; } } // 対象切替をまたいで undo させない
   // 表示中の store（setStore で束ねたプロダクト）とは独立に、指定プロダクトの対象別 store を引く。
   // export/import/サンプル投入・HOME 横断集計が「現在表示中でないプロダクト」も扱えるようにするため（§3.7.4）。
   // targetId 未指定なら表示中の store を返す（テスト時の従来動作）。
@@ -66,7 +66,16 @@
    * @returns {boolean} 保存成否（容量超過などで false）
    * ※ store（localStorage）へ書き込む副作用あり。
    */
-  function save(d, s) { d.exportedAt = MK.util.nowISO(); return (s || store).set(d); }
+  function save(d, s) { d.exportedAt = MK.util.nowISO(); const ok = (s || store).set(d); pendingUndo = null; return ok; }
+
+  // 削除の取り消し（CONVENTIONS §2.5-3）。保持するのは「直前に消した1件」だけ。指標の削除は
+  // **子を親へ引き上げる**（`parentId` の付け替え）連鎖を伴うため、退避には書き換えた子の元の
+  // `parentId` も含める ── 指標だけ戻すと木が削除前と違う形になり「元に戻す」が嘘になる。
+  // 実績（`records`）は指標に内包されるので、指標ごと退避すれば一緒に戻る。
+  // 退避は保存のたびに捨て（削除以外の変更が入った時点で破棄する規約）、削除自身は保存後に積む。
+  // 他プロダクトの store への保存（取込・サンプル投入）でも捨てる ── 対象を跨いだ復元を残さない。
+  /** @type {{metric: Metric, index: number, children: {id: string, parentId: (string|null)}[]}|null} */
+  let pendingUndo = null;
   /**
    * 全指標の配列を返す（表示中の store）。
    * @returns {Metric[]}
@@ -280,19 +289,54 @@
   }
   /**
    * 指標を削除して保存する。子は削除ノードの親へ引き上げる（サブツリーごと消さない＝葉を失わない）。
+   * 取り消し用に「消した指標＋元の位置＋引き上げた子の元の `parentId`」を退避する（{@link undoDelete}）。
    * @param {string} id - 対象指標ID
-   * @returns {void}
-   * ※ store へ保存する副作用あり。
+   * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
+   *   ── view はこの戻り値で取り消しトーストを出すか決める。空振りで出すと、その「元に戻す」が
+   *   直前に消した別の1件を復元しかねない。
+   * ※ 削除できたときのみ store へ保存する副作用あり。
    */
   function removeMetric(id) {
     const d = load();
-    const m = d.metrics.find((x) => x.id === id);
-    if (!m) return;
+    const index = d.metrics.findIndex((x) => x.id === id);
+    if (index < 0) return false;
+    const m = d.metrics[index];
     const newParent = m.parentId || null;
-    d.metrics.forEach((x) => { if (x.parentId === id) x.parentId = newParent; }); // 子を引き上げる
-    d.metrics = d.metrics.filter((x) => x.id !== id);
+    const children = [];
+    d.metrics.forEach((x) => {
+      if (x.parentId !== id) return;
+      children.push({ id: x.id, parentId: x.parentId }); // 引き上げる前の親（＝削除した指標）を控える
+      x.parentId = newParent;                            // 子を引き上げる
+    });
+    d.metrics.splice(index, 1);
     save(d);
+    pendingUndo = { metric: m, index, children }; // save が破棄するため保存後に置く
+    return true;
   }
+  /**
+   * 直前の削除を取り消し、指標を元の位置へ、引き上げた子の `parentId` を元へ戻す（木が削除前と
+   * 同じ形に戻る）。退避が無ければ（他の変更で破棄済みなら）戻さず false を返す。view はこの戻り値で
+   * 「戻せなかった」ことを伝える（§2.5-3）。
+   * @returns {boolean} 復元できたら true、退避が無ければ false
+   * ※ 復元時のみ store へ保存する副作用あり。
+   */
+  function undoDelete() {
+    if (!pendingUndo) return false;
+    const { metric, index, children } = pendingUndo;
+    pendingUndo = null; // 復元した退避は先に手放す（save の破棄に依らず二重復元を防ぐ）
+    const d = load();
+    d.metrics.splice(Math.min(index, d.metrics.length), 0, metric); // 元の位置へ（末尾超過は末尾に丸める）
+    const by = indexById(d.metrics);
+    children.forEach((c) => { if (by[c.id]) by[c.id].parentId = c.parentId; }); // 引き上げを巻き戻す
+    save(d);
+    return true;
+  }
+  /**
+   * 退避を破棄する（復元せず捨てる）。store を logic の外から書き換える経路＝全データ初期化
+   * （`MK.store.clearAll()`）用の共通契約（§2.5-3。`MK.forgetAllUndo()` が呼ぶ）。
+   * @returns {void}
+   */
+  function forgetUndo() { pendingUndo = null; }
 
   // ---- 実績の記録 ----
   /**
@@ -450,7 +494,7 @@
     normalizeKind, normalizeDirection, toNumOrNull,
     childrenOf, roots, ancestorsOf, descendantsOf, tree,
     sortedRecords, latestRecord, achievement,
-    addMetric, updateMetric, setParent, removeMetric, setRecord, removeRecord,
+    addMetric, updateMetric, setParent, removeMetric, undoDelete, forgetUndo, setRecord, removeRecord,
     eachProductMetrics, summary, searchItems, exportData, importData, loadSample,
   };
 })();

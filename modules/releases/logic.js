@@ -43,9 +43,17 @@
   // ラベル解決 / 正規化 / 件数集計の定型は共有ヘルパへ集約（Issue #188）。
   const statusSet = MK.util.statusSet(STATUSES, { fallback: "planned" });
 
-  // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→releases 配列検証→既定返却、
-  // save＝exportedAt 付与→store.set（返り値は保存成否）。仕様は MK.store.collection を参照。
-  const { load, save } = col;
+  // load は共有ヘルパへ集約（Issue #139）。load＝store 読取→releases 配列検証→既定返却。
+  // 仕様は MK.store.collection を参照。
+  const { load } = col;
+  // 保存はすべてここを通す（共有ヘルパの save＝exportedAt 付与→store.set の薄いラッパ）。削除の退避は
+  // 「削除以外の変更が入った時点で破棄する」規約（CONVENTIONS §2.5-3）なので、保存のたびに捨てる。
+  // 全置換（取込・サンプル投入）もここを通るため、入れ替わった先へ古い退避を戻すことがない。
+  function save(d) { const ok = col.save(d); pendingUndo = null; return ok; }
+
+  // 削除の取り消し（§2.5-3）。保持するのは「直前に消した1件＋その位置」だけ。
+  /** @type {{release: Release, index: number}|null} */
+  let pendingUndo = null;
   /**
    * 全リリースの配列を返す。
    * @returns {Release[]} リリース一覧
@@ -146,12 +154,43 @@
   }
 
   /**
-   * 指定リリースを削除して保存する。
+   * 指定リリースを削除して保存する。取り消し用に「消した1件＋元の位置」を退避する（{@link undoDelete}）。
    * @param {string} id - 対象リリースID
-   * @returns {void}
-   * ※ store へ保存する副作用あり。
+   * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
+   *   ── view はこの戻り値で取り消しトーストを出すか決める。空振りで出すと、その「元に戻す」が
+   *   直前に消した別の1件を復元しかねない。
+   * ※ 削除できたときのみ store へ保存する副作用あり。
    */
-  function removeRelease(id) { const d = load(); d.releases = d.releases.filter((r) => r.id !== id); save(d); }
+  function removeRelease(id) {
+    const d = load();
+    const index = d.releases.findIndex((r) => r.id === id);
+    if (index < 0) return false;
+    const release = d.releases.splice(index, 1)[0];
+    save(d);
+    pendingUndo = { release, index }; // save が破棄するため保存後に置く
+    return true;
+  }
+  /**
+   * 直前の削除を取り消して元の位置へ戻す。退避が無ければ（他の変更で破棄済みなら）戻さず false を返す。
+   * view はこの戻り値で「戻せなかった」ことを伝える（§2.5-3）。
+   * @returns {boolean} 復元できたら true、退避が無ければ false
+   * ※ 復元時のみ store へ保存する副作用あり。
+   */
+  function undoDelete() {
+    if (!pendingUndo) return false;
+    const { release, index } = pendingUndo;
+    pendingUndo = null; // 復元した退避は先に手放す（save の破棄に依らず二重復元を防ぐ）
+    const d = load();
+    d.releases.splice(Math.min(index, d.releases.length), 0, release); // 元の位置へ（末尾超過は末尾に丸める）
+    save(d);
+    return true;
+  }
+  /**
+   * 退避を破棄する（復元せず捨てる）。store を logic の外から書き換える経路＝全データ初期化
+   * （`MK.store.clearAll()`）用の共通契約（§2.5-3。`MK.forgetAllUndo()` が呼ぶ）。
+   * @returns {void}
+   */
+  function forgetUndo() { pendingUndo = null; }
 
   /**
    * 対象プロダクト名を返す（Product 削除後の表示破綻防止ガード。products.relatedProjects と同じ方針）。
@@ -264,7 +303,7 @@
   MK.logic = MK.logic || {};
   MK.logic.releases = {
     STATUSES, load, save, releases, normalizeStatus, effectiveDate, timeline, counts,
-    addRelease, updateRelease, removeRelease, productName, upcoming,
+    addRelease, updateRelease, removeRelease, undoDelete, forgetUndo, productName, upcoming,
     summary, searchItems, exportData, importData, loadSample,
   };
 })();

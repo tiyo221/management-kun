@@ -5,6 +5,9 @@
   const el = MK.util.el;
   const ui = MK.ui;
   const L = () => MK.logic.releases;
+  // MK.ui.removeWithUndo（§2.5-3 の定型）へ渡す削除・復元の口。logic 側は削除できたか／復元できたかを
+  // boolean で返す契約なので、そのまま噛み合う。
+  const undoApi = () => ({ remove: (id) => L().removeRelease(id), undoRemove: () => L().undoDelete() });
 
   let root = null;
   let productId = "all";
@@ -117,7 +120,12 @@
 
     const actions = [];
     if (!isNew) {
-      actions.push({ label: "削除", variant: "btn-danger", onClick: (close) => MK.ui.confirm("このリリースを削除しますか？").then((ok) => { if (ok) { L().removeRelease(rel.id); close(); render(); } }) });
+      // 削除は確認を挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3）。先にモーダルを
+      // 閉じてから出す（モーダルの裏にトーストが隠れないように）。
+      actions.push({ label: "削除", variant: "btn-danger", onClick: (close) => {
+        close();
+        MK.ui.removeWithUndo(undoApi(), rel.id, "「" + rel.version + "」を削除しました", render);
+      } });
     }
     actions.push({ label: "キャンセル", variant: "btn-secondary", onClick: (close) => close() });
     actions.push({ label: "保存", variant: "btn-primary", onClick: (close) => {
