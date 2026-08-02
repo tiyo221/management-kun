@@ -43,6 +43,18 @@
     root.appendChild(ui.stack([stats, bar, listHost]));
   }
 
+  // 指標の削除（確認なし＋取り消しトースト・CONVENTIONS §2.5-3）。
+  // confirm で伝えていた「子指標は親へ引き上げます」は、事後のトースト本文で伝える（#283）。
+  // 引き上げ件数は削除前にしか数えられないので先に取る。undo は引き上げも巻き戻す。
+  function removeMetricWithUndo(metric) {
+    const lifted = L().childrenOf(L().metrics(), metric.id).length;
+    const removed = L().removeMetric(metric.id);
+    render(); // 空振り（既に消えている）でも画面をストアへ合わせ直す
+    if (!removed) return; // 空振りでトーストを出すと、その取り消しが別の1件を復元しかねない
+    const suffix = lifted ? "（子指標" + lifted + "件を親へ移動）" : "";
+    MK.ui.undoDeleteToast("「" + metric.name + "」を削除しました" + suffix, () => L().undoDelete(), render);
+  }
+
   function renderTree(host, list) {
     host.innerHTML = "";
     const ul = el("ul", { class: "mk-list" });
@@ -122,7 +134,9 @@
 
     const actions = [];
     if (!isNew) {
-      actions.push({ label: "削除", variant: "btn-danger", onClick: (close) => MK.ui.confirm("この指標を削除しますか？（子指標は親へ引き上げます）").then((ok) => { if (ok) { L().removeMetric(metric.id); close(); render(); } }) });
+      // 削除は確認を挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3）。先にモーダルを
+      // 閉じてから出す（モーダルの裏にトーストが隠れないように）。
+      actions.push({ label: "削除", variant: "btn-danger", onClick: (close) => { close(); removeMetricWithUndo(metric); } });
     }
     actions.push({ label: "キャンセル", variant: "btn-secondary", onClick: (close) => close() });
     actions.push({ label: "保存", variant: "btn-primary", onClick: (close) => {
