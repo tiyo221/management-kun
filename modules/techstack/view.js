@@ -5,6 +5,9 @@
   const el = MK.util.el;
   const ui = MK.ui;
   const L = () => MK.logic.techstack;
+  // MK.ui.removeWithUndo（§2.5-3 の定型）へ渡す削除・復元の口。logic 側は削除できたか／復元できたかを
+  // boolean で返す契約なので、そのまま噛み合う。
+  const undoApi = () => ({ remove: (id) => L().removeItem(id), undoRemove: () => L().undoDelete() });
 
   let root = null;
   let ring = "all";
@@ -118,7 +121,12 @@
     MK.ui.modal({
       title: "技術を編集", body,
       actions: [
-        { label: "削除", variant: "btn-danger", onClick: (close) => MK.ui.confirm("この技術を削除しますか？").then((ok) => { if (ok) { L().removeItem(it.id); close(); render(); } }) },
+        // 削除は確認を挟まず即実行し、取り消しトーストを出す（CONVENTIONS §2.5-3）。先にモーダルを
+        // 閉じてから出す（モーダルの裏にトーストが隠れないように）。
+        { label: "削除", variant: "btn-danger", onClick: (close) => {
+            close();
+            MK.ui.removeWithUndo(undoApi(), it.id, "「" + it.name + "」を削除しました", render);
+          } },
         { label: "キャンセル", variant: "btn-secondary", onClick: (close) => close() },
         { label: "保存", variant: "btn-primary", onClick: (close) => {
             const name = f.name.value.trim();
