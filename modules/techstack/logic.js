@@ -46,9 +46,18 @@
   /** 見直し期限が「接近」とみなされる残日数の閾値（この日数以内で soon）。 */
   const DEADLINE_SOON_DAYS = 90;
 
-  // load/save は共有ヘルパへ集約（Issue #139）。load＝store 読取→items 配列検証→既定返却、
-  // save＝exportedAt 付与→store.set（返り値は保存成否）。仕様は MK.store.collection を参照。
-  const { load, save } = col;
+  // load は共有ヘルパへ集約（Issue #139）。load＝store 読取→items 配列検証→既定返却。
+  // 仕様は MK.store.collection を参照。
+  const { load } = col;
+  // 保存はすべてここを通す（共有ヘルパの save＝exportedAt 付与→store.set の薄いラッパ）。削除の退避は
+  // 「削除以外の変更が入った時点で破棄する」規約（CONVENTIONS §2.5-3）なので、保存のたびに捨てる。
+  // 全置換（取込・サンプル投入・CSV）もここを通るため、入れ替わった先へ古い退避を戻すことがない。
+  function save(d) { const ok = col.save(d); pendingUndo = null; return ok; }
+
+  // 削除の取り消し（§2.5-3）。保持するのは「直前に消した1件＋その位置」だけ。
+  /** @type {{item: TechItem, index: number}|null} */
+  let pendingUndo = null;
+
   /**
    * 全アイテムの配列を返す。
    * @returns {TechItem[]} 技術スタック一覧
@@ -181,12 +190,43 @@
     save(d);
   }
   /**
-   * 指定アイテムを削除して保存する。
+   * 指定アイテムを削除して保存する。取り消し用に「消した1件＋元の位置」を退避する（{@link undoDelete}）。
    * @param {string} id - 対象アイテムID
-   * @returns {void}
-   * ※ store へ保存する副作用あり。
+   * @returns {boolean} 削除したら true、その id が無ければ false（何も変えない）
+   *   ── view はこの戻り値で取り消しトーストを出すか決める。空振りで出すと、その「元に戻す」が
+   *   直前に消した別の1件を復元しかねない。
+   * ※ 削除できたときのみ store へ保存する副作用あり。
    */
-  function removeItem(id) { const d = load(); d.items = d.items.filter((it) => it.id !== id); save(d); }
+  function removeItem(id) {
+    const d = load();
+    const index = d.items.findIndex((it) => it.id === id);
+    if (index < 0) return false;
+    const item = d.items.splice(index, 1)[0];
+    save(d);
+    pendingUndo = { item, index }; // save が破棄するため保存後に置く
+    return true;
+  }
+  /**
+   * 直前の削除を取り消して元の位置へ戻す。退避が無ければ（他の変更で破棄済みなら）戻さず false を返す。
+   * view はこの戻り値で「戻せなかった」ことを伝える（§2.5-3）。
+   * @returns {boolean} 復元できたら true、退避が無ければ false
+   * ※ 復元時のみ store へ保存する副作用あり。
+   */
+  function undoDelete() {
+    if (!pendingUndo) return false;
+    const { item, index } = pendingUndo;
+    pendingUndo = null; // 復元した退避は先に手放す（save の破棄に依らず二重復元を防ぐ）
+    const d = load();
+    d.items.splice(Math.min(index, d.items.length), 0, item); // 元の位置へ（末尾超過は末尾に丸める）
+    save(d);
+    return true;
+  }
+  /**
+   * 退避を破棄する（復元せず捨てる）。store を logic の外から書き換える経路＝全データ初期化
+   * （`MK.store.clearAll()`）用の共通契約（§2.5-3。`MK.forgetAllUndo()` が呼ぶ）。
+   * @returns {void}
+   */
+  function forgetUndo() { pendingUndo = null; }
 
   // ---- CSV（整形・取込はロジック。ファイル選択/DLは view）----
   /**
@@ -313,7 +353,7 @@
   MK.logic.techstack = {
     RINGS, DEADLINE_SOON_DAYS, load, save, items, normalizeRing, normalizeDate,
     deadlineStatus, deadlineCounts, counts, categories, filtered,
-    addItem, updateItem, removeItem, buildCSVRows, applyCSV,
+    addItem, updateItem, removeItem, undoDelete, forgetUndo, buildCSVRows, applyCSV,
     summary, searchItems, exportData, importData, loadSample,
   };
 })();

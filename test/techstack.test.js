@@ -142,3 +142,63 @@ test("techstack: importData の replace と merge", (MK) => {
   T.importData({ items: [{ id: "ts_y", name: "置換のみ", ring: "adopt", tags: [] }] }, "replace");
   eq(T.counts().all, 1);
 });
+
+test("techstack: 削除は元の位置へ戻せる／退避は1件だけ", (MK) => {
+  // 観点: 削除は「消した1件＋元の位置」を退避し、undoDelete で元の並びへ戻る（CONVENTIONS §2.5-3）。
+  //       退避は常に直前の1件だけ（アクティブな undo トーストが1つという前提と揃える）
+  // 入力: A/B/C を追加（unshift なので並びは C,B,A）→ 真ん中の B を削除 → undo／
+  //       その後 C→A を続けて削除 → undoDelete を2回
+  // 期待: B は真ん中へ戻る。連続削除では直前の A だけ戻り、2回目の undoDelete は false
+  const T = MK.logic.techstack;
+  ["A", "B", "C"].forEach((n) => T.addItem(n));
+  eq(T.items().map((it) => it.name), ["C", "B", "A"]);
+  eq(T.removeItem(T.items()[1].id), true); // B
+  eq(T.items().map((it) => it.name), ["C", "A"]);
+  eq(T.undoDelete(), true);
+  eq(T.items().map((it) => it.name), ["C", "B", "A"]); // 元の位置（真ん中）へ
+
+  T.removeItem(T.items()[0].id); // C
+  T.removeItem(T.items()[1].id); // A
+  eq(T.items().map((it) => it.name), ["B"]);
+  eq(T.undoDelete(), true);
+  eq(T.items().map((it) => it.name), ["B", "A"]); // 戻るのは直前の1件だけ
+  eq(T.undoDelete(), false);                      // 同じ退避は二度効かない
+});
+
+test("techstack: 退避は他の変更で破棄され、空振り削除は false を返す", (MK) => {
+  // 観点: 削除以外の変更（追加・更新・全置換・CSV取込）で退避を捨てる。空振りでトーストを出すと、
+  //       その取り消しが直前に消した別の1件を復元してしまう。forgetUndo は全データ初期化用の後始末
+  // 入力: 削除→追加→undo／削除→更新→undo／削除→importData(replace)→undo／
+  //       削除→applyCSV→undo／空振り削除／forgetUndo
+  // 期待: いずれの undo も false。空振り削除は false を返し、直前の退避は潰さない
+  const T = MK.logic.techstack;
+  T.addItem("A");
+  T.removeItem(T.items()[0].id);
+  T.addItem("B");
+  eq(T.undoDelete(), false);
+
+  T.removeItem(T.items()[0].id);
+  T.addItem("C");
+  T.updateItem(T.items()[0].id, { note: "編集" });
+  eq(T.undoDelete(), false);
+
+  T.removeItem(T.items()[0].id);
+  T.importData({ items: [{ id: "ts_z", name: "取込", ring: "adopt", tags: [] }] }, "replace");
+  eq(T.undoDelete(), false);
+  eq(T.items().map((it) => it.name), ["取込"]);
+
+  T.removeItem(T.items()[0].id);
+  T.applyCSV([["技術名"], ["CSV"]]);
+  eq(T.undoDelete(), false);
+  eq(T.items().map((it) => it.name), ["CSV"]);
+
+  T.removeItem(T.items()[0].id);
+  eq(T.removeItem("no-such-id"), false); // 空振りは退避を潰さない
+  eq(T.undoDelete(), true);
+  eq(T.items().map((it) => it.name), ["CSV"]);
+
+  T.removeItem(T.items()[0].id);
+  T.forgetUndo();
+  eq(T.undoDelete(), false);
+  eq(T.counts().all, 0);
+});
