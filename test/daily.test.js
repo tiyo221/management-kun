@@ -197,6 +197,41 @@ test("daily: todo 側でタスク名を変えるとデイリーの表示も追�
   eq(D.dayItems(d2)[0].title, "詳細設計をする");
 });
 
+test("daily: setTitle は手書き項目のタイトルを直し、空は拒否する", (MK) => {
+  // 観点: インライン編集（§2.5-2）の確定口。空タイトルを通すと行が無題になって拾えなくなるため、
+  //       判定は logic が持ち false を返す（view はそれを見て元値へ戻す）。
+  // 入力: 手書き1件 → 改名 → 空・空白のみ・存在しない id
+  // 期待: 改名は通る。空・空白・不明 id は false で、値も並びも変わらない
+  const D = MK.logic.daily;
+  const d1 = "2026-07-15";
+  const id = D.addManual(d1, "企画書のドラフト", 60);
+  eq(D.setTitle(id, "  企画書を仕上げる  "), true); // 前後空白は trim して保存
+  eq(D.dayItems(d1)[0].title, "企画書を仕上げる");
+  eq(D.setTitle(id, ""), false);
+  eq(D.setTitle(id, "   "), false);
+  eq(D.dayItems(d1)[0].title, "企画書を仕上げる"); // 拒否時は元値のまま
+  eq(D.setTitle("d_missing", "どこにも無い"), false);
+  eq(D.dayItems(d1).length, 1);
+});
+
+test("daily: todo 由来の項目を改名すると todo 側のタスク名も変わる（title は todo が正）", (MK) => {
+  // 観点: title は resolveItem が todo から解決する。デイリー側の保存値だけ書いても解決器が旧名へ
+  //       戻すため、編集が黙って消える。done の書き戻し（toggleDone）と同じく todo へも書く。
+  // 入力: next「設計する」を引く → デイリー側で「詳細設計をする」へ改名
+  // 期待: デイリーの表示も todo のタスク名も新名。再読込（解決器を通す）でも旧名へ戻らない
+  const D = MK.logic.daily, T = MK.logic.todo;
+  const d1 = "2026-07-15";
+  T.applyCSV([
+    ["タイトル", "ステータス", "プロジェクト", "コンテキスト", "期限", "メモ"],
+    ["設計する", "next", "", "", "", ""],
+  ]);
+  const todoId = D.pullableTodos()[0].id;
+  const itemId = D.pullFromTodo(d1, todoId, 30);
+  eq(D.setTitle(itemId, "詳細設計をする"), true);
+  eq(T.tasks().find((t) => t.id === todoId).title, "詳細設計をする"); // todo 側の実体も追従
+  eq(D.dayItems(d1)[0].title, "詳細設計をする");                      // 解決器を通しても新名のまま
+});
+
 test("daily: 未完了の残りを翌日へ繰り越す（完了は残す）", (MK) => {
   // 観点: rolloverTo は未完了だけを翌日末尾へ移し、完了はその日に残す。件数を返す。
   // 入力: 7/15 に done 1件・未完 2件、翌日 7/16 に既存1件
