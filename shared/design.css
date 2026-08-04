@@ -430,8 +430,14 @@ textarea.text-input { min-height: 80px; resize: vertical; }
    組にすると 0,2,0 で確実に勝つ（#295 で判明。それまで select は 16px・padding 12px の
    ままで、max-width だけが掛かってラベルが切れていた）。 */
 .text-input.mk-row-control { width: auto; flex: 0 0 auto; min-height: 36px; padding: 6px 8px; font-size: 14px; }
-/* 上限は最長ラベル（techstack「評価（Assess）」）が切れない幅。内容幅で縮むので短いラベルは広がらない。 */
-.mk-row-select { max-width: 160px; }
+/* 上限は最長ラベル（techstack「評価（Assess）」）が切れない幅。内容幅で縮むので短いラベルは広がらない。
+   .text-input と組にするのは上と同じ理由（基底が max-width を持ち始めても詳細度で負けないように）。 */
+.text-input.mk-row-select { max-width: 160px; }
+/* 狭幅ではタップ目標を DESIGN.md「Touch Targets」の 44px へ戻す（pill tabs の 32px→44px と同じ扱い）。
+   36px は要素の多い行を広い画面で詰めるための密度調整で、指で触る幅では優先しない。 */
+@media (max-width: 480px) {
+  .text-input.mk-row-control { min-height: 44px; }
+}
 
 /* ---- todo 固有（期日入力の幅・低頻度操作を退避する帯）---- */
 .mk-todo-due { max-width: 150px; }

@@ -114,6 +114,7 @@
     // ステータス select（主操作＝Inbox の仕分けを1アクションで。CONVENTIONS §2.5-1）
     const statusSel = ui.select(L().STATUSES.map((s) => ({ value: s.key, label: s.label })), t.status);
     statusSel.classList.add("mk-row-control", "mk-row-select");
+    statusSel.title = "ステータスを変更"; // 主操作の select が支援技術から無名にならないように
 
     // タイトル（インライン編集。Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）
     const titleEdit = ui.inlineEdit({
@@ -198,7 +199,9 @@
     icon: "✅",
     description: "日々のやることを整理して前に進める",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; listHost = null; },
+    // badgeEls も手放す（listHost と同じ理由）。残すと、インライン編集中にモジュールを切り替えた
+    // ときに blur の確定が afterRowChange → refreshBadges を通り、デタッチ済みのバッジへ書き込む。
+    unmount() { root = null; listHost = null; Object.keys(badgeEls).forEach((k) => delete badgeEls[k]); },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },

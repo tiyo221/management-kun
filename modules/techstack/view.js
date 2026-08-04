@@ -21,8 +21,16 @@
     root.innerHTML = "";
     root.appendChild(ui.sectionTitle("技術スタック"));
 
-    // クイック追加（Enter で評価（Assess）に投入）
-    const capture = ui.input({ placeholder: "技術名を入力して Enter（評価に追加）", onEnter: (v) => { if (v.trim()) { L().addItem(v); render(); } } });
+    // クイック追加（Enter で評価（Assess）に投入）。追加した行が必ず見えるよう、絞り込みは
+    // 「評価」タブ＋全カテゴリ＋検索なしへ寄せる（CSV 取込が ring/category を戻すのと同じ理由）。
+    // 別のリングタブで絞り込んだまま追加すると、投入先が assess 固定のため一覧に出ず「追加できて
+    // いない」ように見える（絞り込み0件の空状態と重なるとなお紛らわしい）。
+    const capture = ui.input({ placeholder: "技術名を入力して Enter（評価に追加）", onEnter: (v) => {
+      if (!v.trim()) return;
+      L().addItem(v);
+      ring = "assess"; category = "all"; search = "";
+      render();
+    } });
 
     // ツールバー（CSV）
     const bar = ui.toolbar([
