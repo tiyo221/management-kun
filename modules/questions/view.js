@@ -18,8 +18,16 @@
     root.innerHTML = "";
     root.appendChild(ui.sectionTitle("わからないこと"));
 
-    // クイック追加（Enter で未解決に投入）
-    const capture = ui.input({ placeholder: "わからないことを入力して Enter（未解決に追加）", onEnter: (v) => { if (v.trim()) { L().addItem(v); render(); } } });
+    // クイック追加（Enter で未解決に投入）。追加した項目が必ず見えるよう、絞り込みは「未解決」タブ＋
+    // 検索なしへ寄せる（CONVENTIONS §2.5-2）。投入先が open 固定なので、「わかった」タブや検索中の
+    // まま捕捉すると、追加は成功しているのに一覧に何も現れずバッジの数字だけ増える。捕捉はこの
+    // モジュールの入口動線なので、黙って消えたように見えるのが一番痛い。
+    const capture = ui.input({ placeholder: "わからないことを入力して Enter（未解決に追加）", onEnter: (v) => {
+      if (!v.trim()) return;
+      L().addItem(v);
+      filter = "open"; search = "";
+      render();
+    } });
 
     // ツールバー（CSV）
     const bar = ui.toolbar([
@@ -90,6 +98,9 @@
 
   function renderList(host) {
     host.innerHTML = "";
+    // 見出しの参照は器を空にした時点で手放す（0件で早期 return する前に。残すと以降の
+    // afterRowChange が画面に無いノードへ書き続ける・§2.5-4）。
+    knowProgressNode = null;
     const list = currentList();
     if (!list.length) {
       host.appendChild(ui.emptyState(emptyMessage()));
@@ -97,7 +108,6 @@
     }
     // 「わかった」ビューは達成ログ。何件をナレッジ化できているかを一目で出す（2軸の可視化）。
     // 検索中は絞り込み結果と全体件数がズレて紛らわしいので出さない。
-    knowProgressNode = null;
     if (filter === "resolved" && !search) {
       knowProgressNode = el("div", { class: "mk-know-progress sub", text: knowProgressText() });
       host.appendChild(knowProgressNode);

@@ -60,8 +60,13 @@ function makeNode(tag) {
       const i = arr.indexOf(fn); if (i >= 0) arr.splice(i, 1);
     },
     // textContent は値を保持する（読めないと「数字だけ差し替える」部分更新を検証できない・#293）。
-    // 実物と同じく代入で子を捨てる。innerHTML は依然として捨てるだけ（HTML を解釈しない）。
-    get textContent() { return this._text || ""; },
+    // 実物と同じく代入で子を捨て、読むときは自分のテキスト＋子孫のテキストを連結する
+    // （葉ノードだけ返すと、el(tag, attrs, [文字列, 要素]) で組んだボタン等が "" に見えて偽陰性になる）。
+    // util.el は attrs（＝text）を先に処理してから子を足すので、この連結順で実物と一致する。
+    // innerHTML は依然として捨てるだけ（HTML を解釈しない）。
+    get textContent() {
+      return (this._text || "") + this.children.map((c) => c.textContent).join("");
+    },
     // 外した子は parentNode も切る。contains() は親子リンクを辿るので、切らないと
     // 「捨てたはずの子がまだ中にある」と判定され、フォーカス滞在の検証が偽陽性になる。
     set textContent(v) {
@@ -86,7 +91,7 @@ function makeDocument() {
   doc.documentElement = makeNode("html");
   doc.activeElement = null;
   doc.createElement = (t) => makeNode(t);
-  doc.createTextNode = () => makeNode("#text");
+  doc.createTextNode = (t) => { const n = makeNode("#text"); n._text = String(t == null ? "" : t); return n; };
   doc.getElementById = (id) => findById(doc.body, id);
   return doc;
 }
