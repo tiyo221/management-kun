@@ -326,6 +326,26 @@
    */
   function setAt(id, at) { updateItem(id, { at: normAt(at) }); }
   /**
+   * 項目のタイトルを更新して保存する（前後空白は trim）。
+   * 由来が todo の項目は todo 側のタイトルも更新する ── title は **todo が正**（{@link resolveItem}）で、
+   * デイリー側だけ書いても解決器が旧名へ戻すため、編集が黙って消える。done と同じ書き戻しにする。
+   * @param {string} id - 対象項目ID
+   * @param {string} title - 新しいタスク名（空・空白のみは拒否）
+   * @returns {boolean} 更新したら true、空タイトル／その id が無ければ false（何も変えない）
+   *   ── view はこの戻り値でインライン編集を確定するか元値へ戻すかを決める。
+   * ※ store へ保存する副作用あり。todo 由来なら MK.logic.todo へも書き込む副作用あり。
+   */
+  function setTitle(id, title) {
+    const t = String(title || "").trim();
+    if (!t) return false;
+    const it = items().find((x) => x.id === id);
+    if (!it) return false;
+    updateItem(id, { title: t });
+    const todo = MK.logic && MK.logic.todo;
+    if (it.source === "todo" && it.todoId && todo) todo.updateTask(it.todoId, { title: t });
+    return true;
+  }
+  /**
    * 項目の完了状態を切り替える。由来が todo の項目は todo 側の完了も同期する
    * （完了→done／解除→next。実体は todo が持つため・spec/modules/daily.md）。
    * @param {string} id - 対象項目ID
@@ -814,7 +834,7 @@
     load, save, items, dayItems, startTime, setStartTime,
     addManual, pullableTodos, pullFromTodo,
     routines, addRoutine, updateRoutine, removeRoutine, ensureDayInjected,
-    setMinutes, setAt, toggleDone, removeItem, undoDelete, forgetUndo, moveItem, moveItemToTop, moveItemToEnd, rolloverTo, rolloverStaleTo, staleCount,
+    setMinutes, setAt, setTitle, toggleDone, removeItem, undoDelete, forgetUndo, moveItem, moveItemToTop, moveItemToEnd, rolloverTo, rolloverStaleTo, staleCount,
     schedule, summary, exportData, importData, loadSample,
   };
 })();

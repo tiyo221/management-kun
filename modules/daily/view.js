@@ -167,7 +167,20 @@
 
   function itemRow(r) {
     const it = r.item;
-    const title = el("div", { class: it.done ? "mk-done" : "", text: it.title }); // cb ハンドラが参照するので先に宣言する
+    // タイトルはクリックでその場編集（Enter/blur 確定・Esc 取消・CONVENTIONS §2.5-2）。空は拒否して
+    // 元値へ戻す（判定は logic の setTitle が持ち、view は戻り値に従う）。todo 由来なら setTitle が
+    // todo 側のタイトルも直す（title は todo が正）。cb ハンドラが参照するので先に宣言する。
+    const title = ui.inlineEdit({
+      value: it.title,
+      onCommit: (next) => {
+        if (!L().setTitle(it.id, next)) { MK.ui.toast("タイトルを入力してください", "error"); return false; }
+        // 行が握っているのは描画時のスナップショット。改名を書き戻さないと、直後に ✕ したとき
+        // 取り消しトーストが旧タイトルを出す（削除は it.title を文言に使う）。
+        it.title = next;
+        return true;
+      },
+    });
+    title.classList.toggle("mk-done", it.done);
     const cb = el("input", { type: "checkbox" });
     cb.checked = it.done;
     // 完了チェックは時刻に影響しない（schedule は done を時間計算に使わない）ので行内で完結する。
