@@ -199,9 +199,10 @@
     icon: "🧰",
     description: "使っている技術スタックを棚卸しする",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    // listHost も手放す（todo と同じ）。残すと、インライン編集中にモジュールを切り替えたとき
-    // blur の確定が afterRowChange → ensureNotEmpty を通り、画面に無い器へ描画してしまう。
-    unmount() { root = null; listHost = null; },
+    // listHost / badgeEls とも手放す。残すと、インライン編集中にモジュールを切り替えたときに
+    // blur の確定が afterRowChange を通り、画面に無い器へ描画（listHost）・デタッチ済みの
+    // バッジへ書き込み（badgeEls）をしてしまう。参照を抱えたままにもしない。
+    unmount() { root = null; listHost = null; Object.keys(badgeEls).forEach((k) => delete badgeEls[k]); },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },
