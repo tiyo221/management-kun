@@ -9,14 +9,25 @@
   let root = null;
   let filter = "open";
   let search = "";
+  let listHost = null;             // 一覧の器（行単位の部分更新の対象。全再描画は render()）
+  let knowProgressNode = null;     // 「わかった」タブ見出しの「ナレッジ化 N / M」（行操作後に文字だけ差し替える）
+  const badges = ui.countBadges(); // ステータスタブの件数バッジ（行操作後に数字だけ差し替える・#299）
 
   function render() {
     if (!root) return;
     root.innerHTML = "";
     root.appendChild(ui.sectionTitle("わからないこと"));
 
-    // クイック追加（Enter で未解決に投入）
-    const capture = ui.input({ placeholder: "わからないことを入力して Enter（未解決に追加）", onEnter: (v) => { if (v.trim()) { L().addItem(v); render(); } } });
+    // クイック追加（Enter で未解決に投入）。追加した項目が必ず見えるよう、絞り込みは「未解決」タブ＋
+    // 検索なしへ寄せる（CONVENTIONS §2.5-2）。投入先が open 固定なので、「わかった」タブや検索中の
+    // まま捕捉すると、追加は成功しているのに一覧に何も現れずバッジの数字だけ増える。捕捉はこの
+    // モジュールの入口動線なので、黙って消えたように見えるのが一番痛い。
+    const capture = ui.input({ placeholder: "わからないことを入力して Enter（未解決に追加）", onEnter: (v) => {
+      if (!v.trim()) return;
+      L().addItem(v);
+      filter = "open"; search = "";
+      render();
+    } });
 
     // ツールバー（CSV）
     const bar = ui.toolbar([
@@ -36,28 +47,61 @@
     searchBox.addEventListener("input", () => { search = searchBox.value; renderList(listHost); });
     tabsBar.appendChild(searchBox);
 
-    const listHost = ui.card([], { flush: true });
+    listHost = ui.card([], { flush: true });
     renderList(listHost);
 
     root.appendChild(ui.stack([capture, bar, tabsBar, listHost]));
   }
 
   function pill(label, key, count) {
-    const b = el("button", { class: "pill-tab" + (filter === key ? " active" : "") }, [
-      label + " ", el("span", { class: "badge badge-count", text: String(count || 0) }),
-    ]);
+    const b = el("button", { class: "pill-tab" + (filter === key ? " active" : "") }, [label + " ", badges.make(key, count)]);
     b.addEventListener("click", () => { filter = key; render(); });
     return b;
   }
 
-  function labelOf(statusKey) {
-    const s = L().STATUSES.find((x) => x.key === statusKey);
-    return s ? s.label : statusKey;
+  // 現在のタブ・検索での一覧。renderList と「その行が残るか」の判定で同じものを見る
+  // （ナレッジタブだけ別の絞り込みなので、2か所に分けて書くとずれる）。
+  function currentList() { return filter === "knowledge" ? L().knowledge(search) : L().filtered(filter, search); }
+
+  // 行が消えて0件になったら空状態を出す（listHost だけの更新＝スクロールは飛ばない）。
+  // ナレッジは .mk-row ではなく .mk-know-card で描くので、両方を見て「行が無い」を判定する。
+  function ensureNotEmpty() {
+    if (listHost && !listHost.querySelector(".mk-row, .mk-know-card")) renderList(listHost);
+  }
+
+  function knowProgressText() { const c = L().counts(); return "ナレッジ化 " + c.knowledge + " / " + c.resolved; }
+
+  // 行内の変更後の後始末: 件数バッジと「ナレッジ化 N / M」を更新し、この行が今のタブ／検索から
+  // 外れたら取り除く。タブ切替・取込のような「画面の意味が変わる操作」は render() でよいが、
+  // インライン編集・ステータス変更は行だけ触る（CONVENTIONS §2.5-4）。
+  function afterRowChange(row, id) {
+    badges.refresh(L().counts());
+    // 見出しの「ナレッジ化 N / M」もバッジと同じ数字なので一緒に追随させる。放っておくと
+    // タブのバッジだけ減って見出しが据え置かれ、同じ画面の2つの数字が食い違う。
+    if (knowProgressNode) knowProgressNode.textContent = knowProgressText();
+    if (!currentList().some((x) => x.id === id)) { row.remove(); ensureNotEmpty(); }
+  }
+
+  // 行を作り直して差し替える。**描き方の種類が変わるときだけ**呼ぶ ── 答えのある項目を resolved に
+  // すると itemRow は Q→A のナレッジカードを返す（別レイアウト）。同じレイアウト間の遷移でも毎回
+  // 作り直すと、操作中の select ごと DOM から外れてフォーカスが body へ飛び、キーボードで選び
+  // 続けられなくなる（spec §10.2）。作り直す場合も新しい行の先頭コントロールへフォーカスを戻す。
+  function rebuildRow(row, id) {
+    const it = L().items().find((x) => x.id === id);
+    if (!it) { row.remove(); badges.refresh(L().counts()); ensureNotEmpty(); return; }
+    const fresh = itemRow(it);
+    row.replaceWith(fresh);
+    const focusable = fresh.querySelector("select, button");
+    if (focusable) focusable.focus();
+    afterRowChange(fresh, id);
   }
 
   function renderList(host) {
     host.innerHTML = "";
-    const list = filter === "knowledge" ? L().knowledge(search) : L().filtered(filter, search);
+    // 見出しの参照は器を空にした時点で手放す（0件で早期 return する前に。残すと以降の
+    // afterRowChange が画面に無いノードへ書き続ける・§2.5-4）。
+    knowProgressNode = null;
+    const list = currentList();
     if (!list.length) {
       host.appendChild(ui.emptyState(emptyMessage()));
       return;
@@ -65,17 +109,22 @@
     // 「わかった」ビューは達成ログ。何件をナレッジ化できているかを一目で出す（2軸の可視化）。
     // 検索中は絞り込み結果と全体件数がズレて紛らわしいので出さない。
     if (filter === "resolved" && !search) {
-      const c = L().counts();
-      host.appendChild(el("div", { class: "mk-know-progress sub", text: "ナレッジ化 " + c.knowledge + " / " + c.resolved }));
+      knowProgressNode = el("div", { class: "mk-know-progress sub", text: knowProgressText() });
+      host.appendChild(knowProgressNode);
     }
     const ul = el("ul", { class: "mk-list" });
     list.forEach((it) => ul.appendChild(itemRow(it)));
     host.appendChild(ul);
   }
 
+  // 「まだ無い」と「絞り込んだ結果0件」を区別する。ステータスを行内 select で変えると
+  // その行が今のタブから外れて0件になる経路（afterRowChange → ensureNotEmpty）が増えたため、
+  // 一律「わからないことはありません」だと、消えたのではなく最初から無いように読めてしまう。
   function emptyMessage() {
+    if (search) return "条件に合うものはありません";
     if (filter === "knowledge") return "ナレッジはまだありません。解決した質問に答えを残すとここに貯まります";
     if (filter === "resolved") return "まだ「わかった」はありません";
+    if (filter !== "all" && L().counts().all) return "このステータスのものはありません";
     return "わからないことはありません";
   }
 
@@ -83,28 +132,70 @@
     // 答えありの解決済み＝ナレッジは Q→A カードで描く（取り消し線は使わない）
     if (L().isKnowledge(it)) return knowledgeCard(it);
 
-    const meta = [];
-    meta.push(el("span", { class: "chip", text: labelOf(it.status) }));
-    (it.tags || []).forEach((t) => meta.push(el("span", { class: "chip", text: "#" + t })));
+    const row = el("li", { class: "mk-row mk-row-dense" });
 
-    const title = el("div", { text: it.title });
-    const grow = el("div", { class: "grow", style: "cursor:pointer;" }, [title, meta.length ? el("div", { class: "sub" }, meta) : null]);
-    grow.addEventListener("click", () => openEditor(it));
+    // タイトル（インライン編集。Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）
+    const titleEdit = titleEditFor(it, row);
 
-    const children = [grow];
+    // ステータスは行内 select。わからないことを未解決→調査中→わかったと転がしていくのが
+    // このモジュールの主眼なので、モーダルの3番目の欄に埋めない（CONVENTIONS §2.5-2）。
+    const statusSel = ui.select(L().STATUSES.map((s) => ({ value: s.key, label: s.label })), it.status, (v) => {
+      const wasKnowledge = L().isKnowledge(it);
+      L().updateItem(it.id, { status: v });
+      it.status = v;
+      // 描き方の種類が変わるとき（＝ナレッジカードへ／から）だけ行ごと作り直す。同じレイアウト間の
+      // 遷移で毎回作り直すと、操作中の select ごと外れてフォーカスが飛ぶ（spec §10.2）。
+      if (wasKnowledge !== L().isKnowledge(it)) { rebuildRow(row, it.id); return; }
+      cta.textContent = ctaLabel(it); // 「解決」⇄「答えを書く」の出し分けだけ追随させる
+      afterRowChange(row, it.id);
+    });
+    statusSel.classList.add("mk-row-control", "mk-row-select");
+    statusSel.title = "ステータスを変更";
+
+    // ステータスは select が示しているので chip では出さない（同じ情報を二重に置かない）。
+    const meta = (it.tags || []).map((t) => el("span", { class: "chip", text: "#" + t }));
+    const grow = el("div", { class: "grow" }, [titleEdit, meta.length ? el("div", { class: "sub" }, meta) : null]);
+
+    // タイトルのクリックはインライン編集が取るため、モーダルへの導線は明示のボタンにする。
+    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "背景・メモ・タグ・答えを編集" });
+    editBtn.addEventListener("click", () => openEditor(it));
+
     // 未解決／調査中：解決＝ナレッジ化の導線。答えなしで閉じた resolved は「答えを書く」で昇格させる
-    const cta = it.status === "resolved" ? "答えを書く" : "解決";
-    children.push(ui.button(cta, { onClick: () => openResolve(it) }));
-    return el("li", { class: "mk-row" }, children);
+    const cta = ui.button(ctaLabel(it), { onClick: () => openResolve(it) });
+    [grow, statusSel, editBtn, cta].forEach((n) => row.appendChild(n));
+    return row;
   }
 
-  // ナレッジ（Q→A）カード。質問を見出し、答えを主役に描く
+  function ctaLabel(it) { return it.status === "resolved" ? "答えを書く" : "解決"; }
+
+  // 質問文（インライン編集）。通常行とナレッジカードで同じ編集口を使う。
+  function titleEditFor(it, host) {
+    return ui.inlineEdit({
+      value: it.title,
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("わからないことを入力してください", "error"); return false; } // 空は拒否＝元値へ
+        L().updateItem(it.id, { title: next });
+        it.title = next; // 行が握るのは描画時のスナップショット。削除トーストが旧題を出さないよう揃える
+        afterRowChange(host, it.id); // 検索中はタイトル変更で一致から外れうる
+        return true;
+      },
+    });
+  }
+
+  // ナレッジ（Q→A）カード。質問を見出し、答えを主役に描く。
+  // 通常行と同じく質問文はインライン編集し、モーダルは明示の「編集」ボタンから開く
+  // （CONVENTIONS §2.5-2。同じ一覧に2種類の操作方法を混ぜない）。答え本文は複数行なので
+  // ここでは編集せずモーダルに委ねる ── カードの主役が入力欄になると読む面でなくなる。
+  // ステータス select も置かない（ナレッジは読むための面で、格下げは稀。必要ならモーダルから）。
   function knowledgeCard(it) {
-    const q = el("div", { class: "mk-know-q", text: it.title });
+    const card = el("li", { class: "mk-know-card" });
+    const q = el("div", { class: "mk-know-q" }, [titleEditFor(it, card)]);
     const a = el("div", { class: "mk-know-a", text: it.resolvedNote });
     const tags = (it.tags || []).map((t) => el("span", { class: "chip", text: "#" + t }));
-    const card = el("li", { class: "mk-know-card" }, [q, a, tags.length ? el("div", { class: "mk-know-tags" }, tags) : null]);
-    card.addEventListener("click", () => openEditor(it));
+    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "背景・メモ・タグ・答え・ステータスを編集" });
+    editBtn.addEventListener("click", () => openEditor(it));
+    [q, a, tags.length ? el("div", { class: "mk-know-tags" }, tags) : null,
+     el("div", { class: "mk-know-actions" }, [editBtn])].forEach((n) => { if (n) card.appendChild(n); });
     return card;
   }
 
@@ -187,7 +278,10 @@
     icon: "❓",
     description: "わからないことを書き出して解消する",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; },
+    // 部分更新で掴んだノードは全部手放す（§2.5-4）。残すと、インライン編集中にモジュールを
+    // 切り替えたときに blur の確定が afterRowChange を通り、画面に無い器・デタッチ済みの
+    // バッジや見出しへ書き込む。
+    unmount() { root = null; listHost = null; knowProgressNode = null; badges.clear(); },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },

@@ -14,6 +14,8 @@
   // 作り直さず、選択中目標の進捗表示（sideSubById）だけ更新して選択・スクロールを保つ。
   let mainPaneNode = null;   // 詳細ペイン（.mk-goals-main）
   let sideSubById = {};      // goalId → 左リスト項目の進捗 sub 要素
+  let sideTitleById = {};    // goalId → 左リスト項目のタイトル要素（インライン改名で揃える）
+  let summitTextNode = null; // 詳細ペインの頂上（階段の最上段）のタイトル要素
 
   // 左リスト・詳細で共用する進捗表示文言。
   function progressText(g) {
@@ -39,6 +41,32 @@
 
   // ステップ操作後の後始末: 詳細ペインを差し替え、左リストの進捗を更新する（§2.5-4）。
   function afterStepChange(gid) { refreshDetail(); refreshSideProgress(gid); }
+
+  // 大目標のタイトル（インライン編集。CONVENTIONS §2.5-2）。説明・期限との3項目まとめ編集は
+  // 「編集」ボタンのモーダルに残す。
+  function goalTitleEdit(g) {
+    return ui.inlineEdit({
+      value: g.title,
+      placeholder: "(無題)",
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("タイトルを入力してください", "error"); return false; } // 空は拒否＝元値へ
+        L().updateGoal(g.id, { title: next });
+        g.title = next; // 詳細ペインが握るスナップショットを揃える（編集モーダルの初期値に効く）
+        applyGoalTitle(g);
+        return true;
+      },
+    });
+  }
+
+  // 改名を、同じタイトルを映している他の箇所（左リスト・階段の頂上）へ反映する。
+  // 進捗も並びも変わらないので詳細ペインごと作り直さない（全再描画しない・§2.5-4）。
+  function applyGoalTitle(g) {
+    const side = sideTitleById[g.id];
+    if (side) side.textContent = g.title || "(無題)";
+    if (summitTextNode && selectedId === g.id) {
+      summitTextNode.textContent = (g.title || "(無題)") + (L().isAchieved(g) ? " 到達！" : "");
+    }
+  }
 
   function render() {
     if (!root) return;
@@ -89,14 +117,15 @@
     const side = el("div", { class: "mk-goals-side" });
     side.appendChild(ui.button("＋ 大目標", { variant: "btn-primary", onClick: () => promptText("新しい大目標", "タイトル", (v) => { if (v) { selectedId = L().addGoal(v); render(); } }) }));
     if (!list.length) side.appendChild(el("div", { class: "sub mk-muted", text: "大目標がありません" }));
-    sideSubById = {}; // 部分更新（refreshSideProgress）で参照する進捗 sub の対応表を作り直す
+    // 部分更新（refreshSideProgress / applyGoalTitle）で参照する対応表を作り直す。
+    // 頂上は詳細ペイン側（renderGoalDetail）で入れ直すので、ここでは掴んだままにしない。
+    sideSubById = {}; sideTitleById = {}; summitTextNode = null;
     list.forEach((g) => {
       const sub = el("div", { class: "sub", text: progressText(g) });
       sideSubById[g.id] = sub;
-      const item = el("div", { class: "mk-goal-item" + (g.id === selectedId ? " active" : "") }, [
-        el("div", { text: g.title || "(無題)" }),
-        sub,
-      ]);
+      const titleEl = el("div", { text: g.title || "(無題)" });
+      sideTitleById[g.id] = titleEl;
+      const item = el("div", { class: "mk-goal-item" + (g.id === selectedId ? " active" : "") }, [titleEl, sub]);
       item.addEventListener("click", () => { selectedId = g.id; render(); });
       side.appendChild(item);
     });
@@ -116,11 +145,15 @@
   }
 
   function renderGoalDetail(host, g) {
+    // 頂上は階段（ステップが1つ以上あるとき）にしか無い。前回描画のノードを掴んだままにしない。
+    summitTextNode = null;
     const pr = L().progress(g);
     const head = ui.card([
       el("div", { class: "mk-row", style: "border:none;padding:0 0 var(--space-xs);" }, [
         el("div", { class: "grow" }, [
-          el("h3", { text: g.title || "(無題)" }),
+          // 見出しはインライン編集（CONVENTIONS §2.5-2）。説明・期限との3項目まとめ編集は
+          // 「編集」ボタンのモーダルに残す。改名は左リストの見出しにも出るので、そこも揃える。
+          el("h3", {}, [goalTitleEdit(g)]),
           el("div", { class: "sub", text: (g.deadline ? "期限 " + g.deadline + " / " : "") + "作成 " + g.createdAt + (g.achievedAt ? " / 達成 " + g.achievedAt : "") }),
         ]),
         ui.button("編集", { variant: "btn-ghost", onClick: () => editGoal(g) }),
@@ -148,9 +181,10 @@
     const reached = L().isAchieved(g);
     const wrap = el("div", { class: "mk-staircase" });
     // 頂上（目標）— 全ステップの上・最も奥（インデント最大）に置く
+    summitTextNode = el("span", { text: (g.title || "(無題)") + (reached ? " 到達！" : "") });
     wrap.appendChild(el("div", { class: "mk-summit" + (reached ? " reached" : ""), style: indent(n) }, [
       el("span", { class: "mk-summit-flag", text: reached ? "🏁" : "🎯" }),
-      el("span", { text: (g.title || "(無題)") + (reached ? " 到達！" : "") }),
+      summitTextNode,
     ]));
     // 目標寄り（末尾ステップ=上）→ スタート（先頭=下）へ描画
     for (let i = n - 1; i >= 0; i--) wrap.appendChild(stairRow(g, g.steps[i], i, curId));
@@ -168,16 +202,29 @@
     // 差し替え、左リストの進捗だけ更新する（全再描画せず選択・スクロールを保つ・§2.5-4）。
     dot.addEventListener("click", () => { L().toggleStep(g.id, s.id, !done); afterStepChange(g.id); });
 
-    const titleEl = el("div", { class: done ? "mk-done" : "" }, [s.title || "(無題)", current ? el("span", { class: "mk-here", text: "いまここ" }) : null]);
+    // タイトルはインライン編集（CONVENTIONS §2.5-2）。説明・振り返りメモとの3項目まとめ編集は
+    // 「編集」ボタンのモーダルに残す。改名は進捗も並びも変えないので行内で完結する（§2.5-4）。
+    const titleEdit = ui.inlineEdit({
+      value: s.title,
+      placeholder: "(無題)",
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("タイトルを入力してください", "error"); return false; } // 空は拒否＝元値へ
+        L().updateStep(g.id, s.id, { title: next });
+        s.title = next; // 編集モーダルの初期値がずれないようスナップショットを揃える
+        return true;
+      },
+    });
+    const titleEl = el("div", { class: done ? "mk-done" : "" }, [titleEdit, current ? el("span", { class: "mk-here", text: "いまここ" }) : null]);
     const meta = s.review ? [el("div", { class: "sub", text: "📝 " + s.review })] : [];
-    const grow = el("div", { class: "grow", style: "cursor:pointer;" }, [titleEl].concat(meta));
-    grow.addEventListener("click", () => editStep(g, s));
+    const grow = el("div", { class: "grow" }, [titleEl].concat(meta));
 
     // 表示は上=目標寄りのため、視覚の上/下に合わせて moveStep 方向を反転（↑=末尾方向=+1、↓=先頭方向=-1）
     return el("div", { class: "mk-stair" + (done ? " done" : "") + (current ? " current" : ""), style: indent(idx) }, [
       dot, grow,
       ui.button("↑", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, 1); afterStepChange(g.id); } }),
       ui.button("↓", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, -1); afterStepChange(g.id); } }),
+      // タイトルのクリックはインライン編集が取るため、モーダルへの導線は明示のボタンにする。
+      ui.button("編集", { variant: "btn-ghost", title: "説明・振り返りメモを編集", onClick: () => editStep(g, s) }),
       ui.button("削除", { variant: "btn-ghost", onClick: () => removeStepWithUndo(g, s) }),
     ]);
   }
@@ -185,7 +232,7 @@
   function renderDashboard() {
     // ダッシュボードでは詳細ペイン・左リストが無い。部分更新の参照が前回ロードマップ描画時の
     // 切り離しノードを指したまま残らないようリセットする（afterStepChange はここでは発火しないが明確化）。
-    mainPaneNode = null; sideSubById = {};
+    mainPaneNode = null; sideSubById = {}; sideTitleById = {}; summitTextNode = null;
     const d = L().dashboardData();
     const stats = ui.statsRow([
       { num: d.achieveRate + "%", label: "大目標の達成率" },
@@ -244,7 +291,7 @@
     title: "目標", icon: "🎯",
     description: "目標を立てて達成度を追う",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; mainPaneNode = null; sideSubById = {}; },
+    unmount() { root = null; mainPaneNode = null; sideSubById = {}; sideTitleById = {}; summitTextNode = null; },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },
