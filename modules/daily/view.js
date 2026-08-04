@@ -208,7 +208,7 @@
     atInput.style.maxWidth = "120px";
     atInput.title = "開始時刻を固定（空で解除）";
 
-    return el("li", { class: "mk-row mk-daily-row" }, [
+    return el("li", { class: "mk-row mk-row-dense" }, [
       cb, time, grow, minSel, atInput,
       ui.button("↥", { variant: "btn-ghost", title: "先頭（朝イチ）へ移動", onClick: () => { L().moveItemToTop(it.id); render(); } }),
       ui.button("↑", { variant: "btn-ghost", title: "1つ前へ移動", onClick: () => { L().moveItem(it.id, -1); render(); } }),

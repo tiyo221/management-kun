@@ -107,13 +107,13 @@
   }
 
   function taskRow(t) {
-    const row = el("li", { class: "mk-row mk-todo-row" });
+    const row = el("li", { class: "mk-row mk-row-dense" });
 
     // 完了チェック
     const cb = ui.checkbox(t.status === "done");
     // ステータス select（主操作＝Inbox の仕分けを1アクションで。CONVENTIONS §2.5-1）
     const statusSel = ui.select(L().STATUSES.map((s) => ({ value: s.key, label: s.label })), t.status);
-    statusSel.classList.add("mk-todo-control", "mk-todo-status");
+    statusSel.classList.add("mk-row-control", "mk-row-select");
 
     // タイトル（インライン編集。Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）
     const titleEdit = ui.inlineEdit({
@@ -135,7 +135,7 @@
     const grow = el("div", { class: "grow" }, [titleEdit, meta.length ? el("div", { class: "sub" }, meta) : null]);
 
     // 期日（行内編集。頻度が高い単項目はモーダルへ入れない。CONVENTIONS §2.5-2）
-    const dueInput = el("input", { class: "text-input mk-todo-control mk-todo-due", type: "date" });
+    const dueInput = el("input", { class: "text-input mk-row-control mk-todo-due", type: "date" });
     dueInput.value = t.due || "";
 
     const detailBtn = ui.button("詳細", { variant: "btn-ghost", title: "メモ・コンテキスト・プロジェクトを編集" });

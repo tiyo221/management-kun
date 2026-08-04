@@ -13,6 +13,8 @@
   let ring = "all";
   let category = "all";
   let search = "";
+  let listHost = null;   // 一覧の器（行単位の部分更新の対象。全再描画は render()）
+  const badgeEls = {};   // リングタブの件数バッジ（行操作後に textContent だけ差し替える）
 
   function render() {
     if (!root) return;
@@ -49,37 +51,82 @@
     searchBox.addEventListener("input", () => { search = searchBox.value; renderList(listHost); });
     filterBar.appendChild(searchBox);
 
-    const listHost = ui.card([], { flush: true });
+    listHost = ui.card([], { flush: true });
     renderList(listHost);
 
     root.appendChild(ui.stack([capture, bar, tabsBar, filterBar, listHost]));
   }
 
   function pill(label, key, count) {
-    const b = el("button", { class: "pill-tab" + (ring === key ? " active" : "") }, [
-      label + " ", el("span", { class: "badge badge-count", text: String(count || 0) }),
-    ]);
+    const badge = el("span", { class: "badge badge-count", text: String(count || 0) });
+    badgeEls[key] = badge;
+    const b = el("button", { class: "pill-tab" + (ring === key ? " active" : "") }, [label + " ", badge]);
     b.addEventListener("click", () => { ring = key; render(); });
     return b;
   }
 
-  function labelOf(ringKey) {
-    const r = L().RINGS.find((x) => x.key === ringKey);
-    return r ? r.label : ringKey;
+  // 件数バッジだけ更新する（行操作でタブを再構築しないため。CONVENTIONS §2.5-4）
+  function refreshBadges() {
+    const c = L().counts();
+    Object.keys(badgeEls).forEach((k) => { badgeEls[k].textContent = String((k === "all" ? c.all : c[k]) || 0); });
+  }
+
+  // 行が消えて0件になったら空状態を出す（listHost だけの更新＝スクロールは飛ばない）
+  function ensureNotEmpty() {
+    if (listHost && !listHost.querySelector(".mk-row")) renderList(listHost);
+  }
+
+  // 行内の変更後の後始末: 件数バッジを更新し、この行が今のリングタブ／カテゴリ／検索から外れたら
+  // 取り除く。タブ切替・フィルタ変更・取込のような「画面の意味が変わる操作」は render() でよいが、
+  // インライン編集・リング変更は行だけ触る（CONVENTIONS §2.5-4）。
+  function afterRowChange(row, id) {
+    refreshBadges();
+    const stays = L().filtered(ring, category, search).some((x) => x.id === id);
+    if (!stays) { row.remove(); ensureNotEmpty(); }
   }
 
   function renderList(host) {
     host.innerHTML = "";
     const list = L().filtered(ring, category, search);
-    if (!list.length) { host.appendChild(ui.emptyState("技術がありません。技術名を入力して追加してください。")); return; }
+    if (!list.length) {
+      // 全体で0件（初回）と、絞り込みの結果0件を区別してガイドする。リング変更・技術名の編集で
+      // 行が絞り込みから外れて0件になる経路（afterRowChange → ensureNotEmpty）でも通る。
+      if (!L().counts().all) host.appendChild(ui.emptyState("技術がありません。技術名を入力して追加してください。"));
+      else host.appendChild(ui.emptyState("条件に合う技術はありません"));
+      return;
+    }
     const ul = el("ul", { class: "mk-list" });
     list.forEach((it) => ul.appendChild(itemRow(it)));
     host.appendChild(ul);
   }
 
   function itemRow(it) {
+    const row = el("li", { class: "mk-row mk-row-dense" });
+
+    // 技術名（インライン編集。Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）
+    const nameEdit = ui.inlineEdit({
+      value: it.name,
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("技術名を入力してください", "error"); return false; } // 空は拒否＝元値へ
+        L().updateItem(it.id, { name: next });
+        it.name = next; // 行が握るのは描画時のスナップショット。削除トーストが旧名を出さないよう揃える
+        afterRowChange(row, it.id); // 検索中は技術名の変更で一致から外れうる
+        return true;
+      },
+    });
+
+    // リング（採用状況）は行内 select。Adopt / Trial / Assess / Hold を行き来させるのがこのモジュールの
+    // 主眼なので、モーダルの4番目の欄に埋めない（CONVENTIONS §2.5-2）。
+    const ringSel = ui.select(L().RINGS.map((r) => ({ value: r.key, label: r.label })), it.ring, (v) => {
+      L().updateItem(it.id, { ring: v });
+      it.ring = v;
+      afterRowChange(row, it.id); // リングタブで絞り込み中なら、外れた行を取り除く
+    });
+    ringSel.classList.add("mk-row-control", "mk-row-select");
+
+    // 付随情報（カテゴリ・バージョン・見直し期限・タグ・メモ）は表示のみ。編集は「編集」モーダルで。
+    // リングはもう select が示しているので chip では出さない（同じ情報を二重に置かない）。
     const meta = [];
-    meta.push(el("span", { class: "chip", text: labelOf(it.ring) }));
     if (it.category) meta.push(el("span", { class: "chip", text: it.category }));
     if (it.version) meta.push(el("span", { class: "sub", text: "v" + it.version }));
     if (it.reviewDate) {
@@ -91,11 +138,15 @@
     (it.tags || []).forEach((t) => meta.push(el("span", { class: "chip", text: "#" + t })));
     if (it.note) meta.push(el("span", { class: "sub", text: it.note }));
 
-    const title = el("div", { text: it.name });
-    const grow = el("div", { class: "grow", style: "cursor:pointer;" }, [title, meta.length ? el("div", { class: "sub" }, meta) : null]);
-    grow.addEventListener("click", () => openEditor(it));
+    const grow = el("div", { class: "grow" }, [nameEdit, meta.length ? el("div", { class: "sub" }, meta) : null]);
 
-    return el("li", { class: "mk-row" }, [grow]);
+    // 技術名のクリックはインライン編集が取るため、モーダルへの導線は明示のボタンにする
+    // （skills / todo の「編集」「詳細」と同じ形）。
+    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "カテゴリ・バージョン・メモ・見直し期限・タグを編集" });
+    editBtn.addEventListener("click", () => openEditor(it));
+
+    [grow, ringSel, editBtn].forEach((n) => row.appendChild(n));
+    return row;
   }
 
   function openEditor(it) {
