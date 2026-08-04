@@ -155,3 +155,49 @@ test("ui.removeWithUndo: 「元に戻す」で undoRemove を呼び、成功時�
   ctrlZ();
   eq(changed2, 1);
 });
+
+test("ui.countBadges: make で覚えた要素を refresh で一括更新する", (MK) => {
+  // 観点: 行操作でタブを作り直さず数字だけ差し替える器（§2.5-4 / #299）。todo / techstack /
+  //       questions が共有するので、集計キーの扱いを変えたら3モジュール同時に退行する。
+  // 入力: all / open / done を make → 新しい件数マップで refresh
+  // 期待: 覚えている key はマップの値へ、マップに無い key は 0 へ（未知キーで NaN や undefined を出さない）
+  resetDom();
+  const badges = MK.ui.countBadges();
+  const all = badges.make("all", 3), open = badges.make("open", 2), done = badges.make("done", 1);
+  eq(all.textContent, "3");
+  eq(open.textContent, "2");
+  badges.refresh({ all: 5, open: 4, done: 1, knowledge: 9 }); // 覚えていない key は無視される
+  eq(all.textContent, "5");
+  eq(open.textContent, "4");
+  eq(done.textContent, "1");
+  badges.refresh({ all: 2 }); // 欠けた key は 0 へ倒す（前回の数字が残らない）
+  eq(all.textContent, "2");
+  eq(open.textContent, "0");
+});
+
+test("ui.countBadges: clear 後の refresh は何も触らない（unmount 後の書き込み防止）", (MK) => {
+  // 観点: unmount で clear() を呼ぶ約束。捨てたあとに遅れて refresh が来ても、デタッチ済みの
+  //       ノードへ書き込まない（インライン編集中にモジュールを切り替えると blur の確定が遅れて走る）。
+  // 入力: make → clear → refresh
+  // 期待: 例外を投げず、直前の要素の表示も変わらない
+  resetDom();
+  const badges = MK.ui.countBadges();
+  const all = badges.make("all", 7);
+  badges.clear();
+  badges.refresh({ all: 99 });
+  eq(all.textContent, "7");
+});
+
+test("ui.countBadges: 同じ key で make し直すと新しい要素を覚える（再描画のたびに作り直す）", (MK) => {
+  // 観点: render() は毎回タブを組み直して make する。古い要素を掴んだままだと、画面に出ている
+  //       新しいバッジが更新されない（数字が固まって見える）。
+  // 入力: 同じ key で2回 make → refresh
+  // 期待: 2つ目だけが更新される
+  resetDom();
+  const badges = MK.ui.countBadges();
+  const first = badges.make("all", 1);
+  const second = badges.make("all", 1);
+  badges.refresh({ all: 8 });
+  eq(second.textContent, "8");
+  eq(first.textContent, "1");
+});

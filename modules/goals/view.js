@@ -117,8 +117,9 @@
     const side = el("div", { class: "mk-goals-side" });
     side.appendChild(ui.button("＋ 大目標", { variant: "btn-primary", onClick: () => promptText("新しい大目標", "タイトル", (v) => { if (v) { selectedId = L().addGoal(v); render(); } }) }));
     if (!list.length) side.appendChild(el("div", { class: "sub mk-muted", text: "大目標がありません" }));
-    // 部分更新（refreshSideProgress / applyGoalTitle）で参照する対応表を作り直す
-    sideSubById = {}; sideTitleById = {};
+    // 部分更新（refreshSideProgress / applyGoalTitle）で参照する対応表を作り直す。
+    // 頂上は詳細ペイン側（renderGoalDetail）で入れ直すので、ここでは掴んだままにしない。
+    sideSubById = {}; sideTitleById = {}; summitTextNode = null;
     list.forEach((g) => {
       const sub = el("div", { class: "sub", text: progressText(g) });
       sideSubById[g.id] = sub;
