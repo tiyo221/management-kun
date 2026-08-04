@@ -123,6 +123,7 @@
       afterRowChange(row, it.id); // リングタブで絞り込み中なら、外れた行を取り除く
     });
     ringSel.classList.add("mk-row-control", "mk-row-select");
+    ringSel.title = "採用状況（リング）を変更"; // 主操作の select が支援技術から無名にならないように
 
     // 付随情報（カテゴリ・バージョン・見直し期限・タグ・メモ）は表示のみ。編集は「編集」モーダルで。
     // リングはもう select が示しているので chip では出さない（同じ情報を二重に置かない）。
@@ -198,7 +199,9 @@
     icon: "🧰",
     description: "使っている技術スタックを棚卸しする",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; },
+    // listHost も手放す（todo と同じ）。残すと、インライン編集中にモジュールを切り替えたとき
+    // blur の確定が afterRowChange → ensureNotEmpty を通り、画面に無い器へ描画してしまう。
+    unmount() { root = null; listHost = null; },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },
