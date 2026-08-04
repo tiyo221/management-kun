@@ -174,6 +174,9 @@
       value: it.title,
       onCommit: (next) => {
         if (!L().setTitle(it.id, next)) { MK.ui.toast("タイトルを入力してください", "error"); return false; }
+        // 行が握っているのは描画時のスナップショット。改名を書き戻さないと、直後に ✕ したとき
+        // 取り消しトーストが旧タイトルを出す（削除は it.title を文言に使う）。
+        it.title = next;
         return true;
       },
     });
