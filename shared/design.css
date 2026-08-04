@@ -301,9 +301,9 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 
 /* ---- ナレッジ（Q→A）カード（questions・Issue #81）---- */
 /* カード全体のクリックでモーダルを開くのはやめ、質問文はインライン編集・付随情報は「編集」ボタン
-   へ移した（CONVENTIONS §2.5-2 / #293）。cursor:pointer もカード全体からは外す。 */
+   へ移した（CONVENTIONS §2.5-2 / #293）。cursor:pointer とホバー強調もカードからは外す ──
+   押せない面が反応すると「押せそう」に見えて、実際の編集口（質問文とボタン）から目を逸らす。 */
 .mk-know-card { padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--color-hairline); background: var(--color-canvas); }
-.mk-know-card:hover { background: var(--color-surface-soft); }
 .mk-know-actions { margin-top: var(--space-xs); }
 .mk-know-q { font-weight: 600; color: var(--color-ink); }
 .mk-know-q::before { content: "Q. "; color: var(--color-steel); }

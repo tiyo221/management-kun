@@ -62,7 +62,13 @@ function makeNode(tag) {
     // textContent は値を保持する（読めないと「数字だけ差し替える」部分更新を検証できない・#293）。
     // 実物と同じく代入で子を捨てる。innerHTML は依然として捨てるだけ（HTML を解釈しない）。
     get textContent() { return this._text || ""; },
-    set textContent(v) { this._text = String(v == null ? "" : v); this.children.length = 0; },
+    // 外した子は parentNode も切る。contains() は親子リンクを辿るので、切らないと
+    // 「捨てたはずの子がまだ中にある」と判定され、フォーカス滞在の検証が偽陽性になる。
+    set textContent(v) {
+      this._text = String(v == null ? "" : v);
+      this.children.forEach((c) => { c.parentNode = null; });
+      this.children.length = 0;
+    },
     set innerHTML(v) {},
     querySelector() { return null; }, querySelectorAll() { return []; },
     getBoundingClientRect() { return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }; },

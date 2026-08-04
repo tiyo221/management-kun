@@ -268,9 +268,10 @@
     icon: "❓",
     description: "わからないことを書き出して解消する",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    // listHost / バッジとも手放す。残すと、インライン編集中にモジュールを切り替えたときに
-    // blur の確定が afterRowChange を通り、画面に無い器やデタッチ済みのバッジへ書き込む。
-    unmount() { root = null; listHost = null; badges.clear(); },
+    // 部分更新で掴んだノードは全部手放す（§2.5-4）。残すと、インライン編集中にモジュールを
+    // 切り替えたときに blur の確定が afterRowChange を通り、画面に無い器・デタッチ済みの
+    // バッジや見出しへ書き込む。
+    unmount() { root = null; listHost = null; knowProgressNode = null; badges.clear(); },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },
