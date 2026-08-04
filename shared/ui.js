@@ -293,5 +293,31 @@
     return bar;
   };
 
+  // タブに添える件数バッジの束（CONVENTIONS §2.5-4 / Issue #299）。
+  // 行内の操作でタブ自体を作り直さず、数字だけ差し替えるための入れ物。
+  // todo / techstack / questions が同じ「登録 → 更新 → 破棄」を各自に持っていたので括った。
+  // **括ったのはここまで**。「その行が今の絞り込みに残るか」の判定は、絞り込みの軸数も述語も
+  // モジュールごとに違う（todo＝タブ＋検索＋並び順／techstack＝タブ＋カテゴリ＋検索／
+  // questions＝タブ＋検索＋ナレッジの部分集合）ため、各 view に残す。行の差し替えまで共通化
+  // すると §2.5-4 が避けている「差分管理のミニフレームワーク内製」になる。
+  // 使い方: render で make() してタブへ挿し、行操作後に refresh(counts)、unmount で clear()。
+  ui.countBadges = function () {
+    const els = {};
+    return {
+      // key に対応するバッジ要素を作って覚える（同じ key で作り直すと新しい方を覚える）。
+      make(key, count) {
+        const b = el("span", { class: "badge badge-count", text: String(count || 0) });
+        els[key] = b;
+        return b;
+      },
+      // 件数マップ（logic の counts()）で覚えている全バッジを更新する。
+      refresh(counts) {
+        Object.keys(els).forEach((k) => { els[k].textContent = String((counts && counts[k]) || 0); });
+      },
+      // 覚えている参照を捨てる（unmount 用）。残すとデタッチ済みノードへ書き込み続ける。
+      clear() { Object.keys(els).forEach((k) => delete els[k]); },
+    };
+  };
+
   MK.ui = ui;
 })();

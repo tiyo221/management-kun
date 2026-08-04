@@ -14,7 +14,7 @@
   let category = "all";
   let search = "";
   let listHost = null;   // 一覧の器（行単位の部分更新の対象。全再描画は render()）
-  const badgeEls = {};   // リングタブの件数バッジ（行操作後に textContent だけ差し替える）
+  const badges = ui.countBadges(); // リングタブの件数バッジ（行操作後に数字だけ差し替える・#299）
 
   function render() {
     if (!root) return;
@@ -66,18 +66,13 @@
   }
 
   function pill(label, key, count) {
-    const badge = el("span", { class: "badge badge-count", text: String(count || 0) });
-    badgeEls[key] = badge;
-    const b = el("button", { class: "pill-tab" + (ring === key ? " active" : "") }, [label + " ", badge]);
+    const b = el("button", { class: "pill-tab" + (ring === key ? " active" : "") }, [label + " ", badges.make(key, count)]);
     b.addEventListener("click", () => { ring = key; render(); });
     return b;
   }
 
   // 件数バッジだけ更新する（行操作でタブを再構築しないため。CONVENTIONS §2.5-4）
-  function refreshBadges() {
-    const c = L().counts();
-    Object.keys(badgeEls).forEach((k) => { badgeEls[k].textContent = String((k === "all" ? c.all : c[k]) || 0); });
-  }
+  function refreshBadges() { badges.refresh(L().counts()); }
 
   // 行が消えて0件になったら空状態を出す（listHost だけの更新＝スクロールは飛ばない）
   function ensureNotEmpty() {
@@ -207,10 +202,10 @@
     icon: "🧰",
     description: "使っている技術スタックを棚卸しする",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    // listHost / badgeEls とも手放す。残すと、インライン編集中にモジュールを切り替えたときに
-    // blur の確定が afterRowChange を通り、画面に無い器へ描画（listHost）・デタッチ済みの
-    // バッジへ書き込み（badgeEls）をしてしまう。参照を抱えたままにもしない。
-    unmount() { root = null; listHost = null; Object.keys(badgeEls).forEach((k) => delete badgeEls[k]); },
+    // listHost / バッジとも手放す。残すと、インライン編集中にモジュールを切り替えたときに
+    // blur の確定が afterRowChange を通り、画面に無い器へ描画・デタッチ済みのバッジへ
+    // 書き込みをしてしまう。参照を抱えたままにもしない。
+    unmount() { root = null; listHost = null; badges.clear(); },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },

@@ -9,6 +9,8 @@
   let root = null;
   let filter = "open";
   let search = "";
+  let listHost = null;             // 一覧の器（行単位の部分更新の対象。全再描画は render()）
+  const badges = ui.countBadges(); // ステータスタブの件数バッジ（行操作後に数字だけ差し替える・#299）
 
   function render() {
     if (!root) return;
@@ -36,28 +38,49 @@
     searchBox.addEventListener("input", () => { search = searchBox.value; renderList(listHost); });
     tabsBar.appendChild(searchBox);
 
-    const listHost = ui.card([], { flush: true });
+    listHost = ui.card([], { flush: true });
     renderList(listHost);
 
     root.appendChild(ui.stack([capture, bar, tabsBar, listHost]));
   }
 
   function pill(label, key, count) {
-    const b = el("button", { class: "pill-tab" + (filter === key ? " active" : "") }, [
-      label + " ", el("span", { class: "badge badge-count", text: String(count || 0) }),
-    ]);
+    const b = el("button", { class: "pill-tab" + (filter === key ? " active" : "") }, [label + " ", badges.make(key, count)]);
     b.addEventListener("click", () => { filter = key; render(); });
     return b;
   }
 
-  function labelOf(statusKey) {
-    const s = L().STATUSES.find((x) => x.key === statusKey);
-    return s ? s.label : statusKey;
+  // 現在のタブ・検索での一覧。renderList と「その行が残るか」の判定で同じものを見る
+  // （ナレッジタブだけ別の絞り込みなので、2か所に分けて書くとずれる）。
+  function currentList() { return filter === "knowledge" ? L().knowledge(search) : L().filtered(filter, search); }
+
+  // 行が消えて0件になったら空状態を出す（listHost だけの更新＝スクロールは飛ばない）。
+  // ナレッジは .mk-row ではなく .mk-know-card で描くので、両方を見て「行が無い」を判定する。
+  function ensureNotEmpty() {
+    if (listHost && !listHost.querySelector(".mk-row, .mk-know-card")) renderList(listHost);
+  }
+
+  // 行内の変更後の後始末: 件数バッジを更新し、この行が今のタブ／検索から外れたら取り除く。
+  // タブ切替・取込のような「画面の意味が変わる操作」は render() でよいが、インライン編集・
+  // ステータス変更は行だけ触る（CONVENTIONS §2.5-4）。
+  function afterRowChange(row, id) {
+    badges.refresh(L().counts());
+    if (!currentList().some((x) => x.id === id)) { row.remove(); ensureNotEmpty(); }
+  }
+
+  // 行を作り直して差し替える。ステータス変更は見た目の種類まで変えうるので必要 ──
+  // 答えのある項目を resolved にすると itemRow は Q→A のナレッジカードを返す（別レイアウト）。
+  function rebuildRow(row, id) {
+    const it = L().items().find((x) => x.id === id);
+    if (!it) { row.remove(); badges.refresh(L().counts()); ensureNotEmpty(); return; }
+    const fresh = itemRow(it);
+    row.replaceWith(fresh);
+    afterRowChange(fresh, id);
   }
 
   function renderList(host) {
     host.innerHTML = "";
-    const list = filter === "knowledge" ? L().knowledge(search) : L().filtered(filter, search);
+    const list = currentList();
     if (!list.length) {
       host.appendChild(ui.emptyState(emptyMessage()));
       return;
@@ -73,9 +96,14 @@
     host.appendChild(ul);
   }
 
+  // 「まだ無い」と「絞り込んだ結果0件」を区別する。ステータスを行内 select で変えると
+  // その行が今のタブから外れて0件になる経路（afterRowChange → ensureNotEmpty）が増えたため、
+  // 一律「わからないことはありません」だと、消えたのではなく最初から無いように読めてしまう。
   function emptyMessage() {
+    if (search) return "条件に合うものはありません";
     if (filter === "knowledge") return "ナレッジはまだありません。解決した質問に答えを残すとここに貯まります";
     if (filter === "resolved") return "まだ「わかった」はありません";
+    if (filter !== "all" && L().counts().all) return "このステータスのものはありません";
     return "わからないことはありません";
   }
 
@@ -83,19 +111,43 @@
     // 答えありの解決済み＝ナレッジは Q→A カードで描く（取り消し線は使わない）
     if (L().isKnowledge(it)) return knowledgeCard(it);
 
-    const meta = [];
-    meta.push(el("span", { class: "chip", text: labelOf(it.status) }));
-    (it.tags || []).forEach((t) => meta.push(el("span", { class: "chip", text: "#" + t })));
+    const row = el("li", { class: "mk-row mk-row-dense" });
 
-    const title = el("div", { text: it.title });
-    const grow = el("div", { class: "grow", style: "cursor:pointer;" }, [title, meta.length ? el("div", { class: "sub" }, meta) : null]);
-    grow.addEventListener("click", () => openEditor(it));
+    // タイトル（インライン編集。Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）
+    const titleEdit = ui.inlineEdit({
+      value: it.title,
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("わからないことを入力してください", "error"); return false; } // 空は拒否＝元値へ
+        L().updateItem(it.id, { title: next });
+        it.title = next; // 行が握るのは描画時のスナップショット。削除トーストが旧題を出さないよう揃える
+        afterRowChange(row, it.id); // 検索中はタイトル変更で一致から外れうる
+        return true;
+      },
+    });
 
-    const children = [grow];
+    // ステータスは行内 select。わからないことを未解決→調査中→わかったと転がしていくのが
+    // このモジュールの主眼なので、モーダルの3番目の欄に埋めない（CONVENTIONS §2.5-2）。
+    const statusSel = ui.select(L().STATUSES.map((s) => ({ value: s.key, label: s.label })), it.status, (v) => {
+      L().updateItem(it.id, { status: v });
+      it.status = v;
+      // 答えのある項目を resolved にすると描き方がナレッジカードへ変わるので、行ごと作り直す。
+      rebuildRow(row, it.id);
+    });
+    statusSel.classList.add("mk-row-control", "mk-row-select");
+    statusSel.title = "ステータスを変更";
+
+    // ステータスは select が示しているので chip では出さない（同じ情報を二重に置かない）。
+    const meta = (it.tags || []).map((t) => el("span", { class: "chip", text: "#" + t }));
+    const grow = el("div", { class: "grow" }, [titleEdit, meta.length ? el("div", { class: "sub" }, meta) : null]);
+
+    // タイトルのクリックはインライン編集が取るため、モーダルへの導線は明示のボタンにする。
+    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "背景・メモ・タグ・答えを編集" });
+    editBtn.addEventListener("click", () => openEditor(it));
+
     // 未解決／調査中：解決＝ナレッジ化の導線。答えなしで閉じた resolved は「答えを書く」で昇格させる
     const cta = it.status === "resolved" ? "答えを書く" : "解決";
-    children.push(ui.button(cta, { onClick: () => openResolve(it) }));
-    return el("li", { class: "mk-row" }, children);
+    [grow, statusSel, editBtn, ui.button(cta, { onClick: () => openResolve(it) })].forEach((n) => row.appendChild(n));
+    return row;
   }
 
   // ナレッジ（Q→A）カード。質問を見出し、答えを主役に描く
@@ -187,7 +239,9 @@
     icon: "❓",
     description: "わからないことを書き出して解消する",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; },
+    // listHost / バッジとも手放す。残すと、インライン編集中にモジュールを切り替えたときに
+    // blur の確定が afterRowChange を通り、画面に無い器やデタッチ済みのバッジへ書き込む。
+    unmount() { root = null; listHost = null; badges.clear(); },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },

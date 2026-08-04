@@ -11,7 +11,7 @@
   let search = "";
   let sort = "created"; // 並び順（created=追加日順 / due=締め切り順 / project=プロジェクト別 / context=コンテキスト別）
   let listHost = null; // 一覧の器（行単位の部分更新の対象。全再描画は render()）
-  const badgeEls = {}; // ステータスタブの件数バッジ（行操作後に textContent だけ差し替える）
+  const badges = ui.countBadges(); // ステータスタブの件数バッジ（行操作後に数字だけ差し替える・#299）
 
   function render() {
     if (!root) return;
@@ -53,18 +53,13 @@
   }
 
   function pill(label, key, count) {
-    const badge = el("span", { class: "badge badge-count", text: String(count || 0) });
-    badgeEls[key] = badge;
-    const b = el("button", { class: "pill-tab" + (filter === key ? " active" : "") }, [label + " ", badge]);
+    const b = el("button", { class: "pill-tab" + (filter === key ? " active" : "") }, [label + " ", badges.make(key, count)]);
     b.addEventListener("click", () => { filter = key; render(); });
     return b;
   }
 
   // 件数バッジだけ更新する（行操作でタブを再構築しないため。CONVENTIONS §2.5-4）
-  function refreshBadges() {
-    const c = L().counts();
-    Object.keys(badgeEls).forEach((k) => { badgeEls[k].textContent = String((k === "all" ? c.all : c[k]) || 0); });
-  }
+  function refreshBadges() { badges.refresh(L().counts()); }
 
   // 行が消えて0件になったら空状態を出す（listHost だけの更新＝スクロールは飛ばない）
   function ensureNotEmpty() {
@@ -199,9 +194,9 @@
     icon: "✅",
     description: "日々のやることを整理して前に進める",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    // badgeEls も手放す（listHost と同じ理由）。残すと、インライン編集中にモジュールを切り替えた
+    // バッジも手放す（listHost と同じ理由）。残すと、インライン編集中にモジュールを切り替えた
     // ときに blur の確定が afterRowChange → refreshBadges を通り、デタッチ済みのバッジへ書き込む。
-    unmount() { root = null; listHost = null; Object.keys(badgeEls).forEach((k) => delete badgeEls[k]); },
+    unmount() { root = null; listHost = null; badges.clear(); },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },
