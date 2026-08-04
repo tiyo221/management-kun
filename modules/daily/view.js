@@ -199,16 +199,18 @@
     const grow = el("div", { class: "grow" }, [title, el("div", { class: "sub" }, chips)]);
 
     // 分数変更は後続行の時刻・合計へ波及するため、スケジュール領域だけ差し替える（全再描画しない・§2.5-4）。
+    // 幅は .mk-row-control に委ねる（内容幅へ縮める）。直書きの max-width:110px では
+    // 「1時間30分」の 120px に足りず、選択中のラベルが切れていた（#295 で判明）。
     const minSel = ui.select(minOptsFor(it.minutes), String(it.minutes), (v) => { L().setMinutes(it.id, Number(v)); refreshSchedule(); });
-    minSel.style.maxWidth = "110px";
+    minSel.classList.add("mk-row-control", "mk-row-select");
 
     // 開始時刻の固定（ピン）。空にすると解除して流動へ戻す（setAt が normAt で null へ寄せる）。
     // ピンの追加/解除は空き・食い込みを生むためスケジュール領域を差し替える（§2.5-4）。
     const atInput = ui.input({ type: "time", value: it.at || "", onChange: (v) => { L().setAt(it.id, v); refreshSchedule(); } });
-    atInput.style.maxWidth = "120px";
+    atInput.classList.add("mk-row-control");
     atInput.title = "開始時刻を固定（空で解除）";
 
-    return el("li", { class: "mk-row mk-daily-row" }, [
+    return el("li", { class: "mk-row mk-row-dense" }, [
       cb, time, grow, minSel, atInput,
       ui.button("↥", { variant: "btn-ghost", title: "先頭（朝イチ）へ移動", onClick: () => { L().moveItemToTop(it.id); render(); } }),
       ui.button("↑", { variant: "btn-ghost", title: "1つ前へ移動", onClick: () => { L().moveItem(it.id, -1); render(); } }),

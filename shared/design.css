@@ -417,21 +417,29 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .progress { height: 8px; background: var(--color-hairline); border-radius: var(--rounded-full); overflow: hidden; }
 .progress > i { display: block; height: 100%; background: var(--color-primary); border-radius: var(--rounded-full); transition: width .25s; }
 
-/* ---- daily: 時間割の行（Issue #213）----
-   チェック＋時刻＋タイトル＋所要時間＋↑↓✕ と要素が多く、狭幅（375px）では1行に収まらない。
+/* ---- 操作コントロールを並べる一覧行（CONVENTIONS §2.5 / §2.2）----
+   インライン編集＋select＋ボタンが並ぶ行は要素が多く、狭幅（375px）では1行に収まらない。
    既定の .mk-row は折り返さず .grow が min-width:0 で 0 まで潰れるため、タイトルが消える。
-   折り返しを許し、タイトルに下限幅を与えて操作系を次の行へ逃がす。 */
-.mk-daily-row { flex-wrap: wrap; }
-.mk-daily-row .grow { min-width: 160px; }
+   折り返しを許し、タイトルに下限幅を与えて操作系を次の行へ逃がす。
+   daily（#213）・todo（#244）・techstack（#295）が同じ形なので共通クラスに寄せた。 */
+.mk-row-dense { flex-wrap: wrap; }
+.mk-row-dense .grow { min-width: 160px; }
+/* 行内コントロールは幅100%の .text-input を内容幅へ抑える（行の flex を壊さない）。
+   .text-input と組で書くのは詳細度のため ── 基底が `select.text-input`（0,1,1）で
+   width/font-size/padding を持つので、単一クラス（0,1,0）では select にだけ負ける。
+   組にすると 0,2,0 で確実に勝つ（#295 で判明。それまで select は 16px・padding 12px の
+   ままで、max-width だけが掛かってラベルが切れていた）。 */
+.text-input.mk-row-control { width: auto; flex: 0 0 auto; min-height: 36px; padding: 6px 8px; font-size: 14px; }
+/* 上限は最長ラベル（techstack「評価（Assess）」）が切れない幅。内容幅で縮むので短いラベルは広がらない。
+   .text-input と組にするのは上と同じ理由（基底が max-width を持ち始めても詳細度で負けないように）。 */
+.text-input.mk-row-select { max-width: 160px; }
+/* 狭幅ではタップ目標を DESIGN.md「Touch Targets」の 44px へ戻す（pill tabs の 32px→44px と同じ扱い）。
+   36px は要素の多い行を広い画面で詰めるための密度調整で、指で触る幅では優先しない。 */
+@media (max-width: 480px) {
+  .text-input.mk-row-control { min-height: 44px; }
+}
 
-/* ---- todo: 操作コスト規約に沿った一覧行（#244 / CONVENTIONS §2.5）----
-   チェック＋タイトル(インライン編集)＋ステータス select＋期日＋詳細＋削除 と要素が多く、
-   375px では1行に収まらない。daily と同じく折り返しを許し、タイトルに下限幅を与える。 */
-.mk-todo-row { flex-wrap: wrap; }
-.mk-todo-row .grow { min-width: 160px; }
-/* 行内コントロールは幅100%の .text-input を内容幅へ抑える（行の flex を壊さない） */
-.mk-todo-control { width: auto; flex: 0 0 auto; min-height: 36px; padding: 6px 8px; font-size: 14px; }
-.mk-todo-status { max-width: 130px; }
+/* ---- todo 固有（期日入力の幅・低頻度操作を退避する帯）---- */
 .mk-todo-due { max-width: 150px; }
 /* 低頻度操作（CSV）を退避する最下部の帯。主操作から視覚的に切り離す（§2.5-5）。 */
 .mk-todo-footer { display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-lg); padding-top: var(--space-md); border-top: 1px solid var(--color-hairline-soft); }
