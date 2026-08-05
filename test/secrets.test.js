@@ -50,14 +50,23 @@ const PATTERNS = [
   // **日本語の散文が丸ごと当たる**（日本語ドキュメント中心のリポジトリでは致命的）。
   // 値が識別子の連なり（`process.env.API_KEY` / `settings.apiKey`）なら**リテラルではない**ので
   // 対象外にする。これは「中身がダミーか」の推測ではなく「そもそも値が書かれていない」判定。
+  // キー名の前後の引用符を許し、左端に `\b` を置かない ── `\b` は `_` を単語構成文字として
+  // 扱うため `GITHUB_TOKEN` に境界を作らず、`"token":` は閉じ引用符で一致が切れる。
+  // #303 の動機である `.claude/` 配下の MCP・エディタ設定（＝JSON）が最も外れる形だった。
   {
     name: "代入形の秘密",
-    re: /\b(?:password|passwd|api[_-]?key|apikey|secret|token)\s*[:=]\s*["'`]?([A-Za-z0-9_\-+/=.:~@#$%^&*!?]{8,})/i,
+    re: /(?:password|passwd|api[_-]?key|apikey|secret|token)["'`]?\s*[:=]\s*["'`]?([A-Za-z0-9_\-+/=.:~@#$%^&*!?]{8,})/i,
     // URL も値そのものではない（ドキュメントの `token: https://…` が丸ごと当たる）。
     // クエリに秘密が載っていれば、その `?token=…` 側が別の一致として検出される。
     exempt: (m) =>
       /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+$/.test(m[1]) ||
       /^https?:\/\//i.test(m[1]),
+  },
+  // `api_key: process.env.KEY || "<本物>"` のフォールバック。先頭の一致は識別子の連なりで
+  // 対象外になり、後続のリテラルにはキーワードが付かないので、通常の代入形では拾えない。
+  {
+    name: "代入形の秘密（フォールバック値）",
+    re: /(?:password|passwd|api[_-]?key|apikey|secret|token)["'`]?\s*[:=][^\n]{0,80}?(?:\|\||\?\?)\s*["'`]([A-Za-z0-9_\-+/=.:~@#$%^&*!?]{8,})["'`]/i,
   },
   // 区切りは `\` と `/` の両方を見る。MCP / エディタの JSON 設定や Node の出力は
   // Windows でもドライブレターの後がスラッシュ区切りになるため、`\` だけだと
@@ -169,6 +178,13 @@ test("検出パターンが実際の秘密の形を検出する（#305）", () =
     ["/mnt/c/" + "Users/someone/x", "ローカル絶対パス（WSL）"], // WSL / コンテナ経由
     ["Authorization: Bea" + "rer " + "aB3xK9zQ71mnPq", "Bearer トークン"],
     ["sha = " + "A1B2C3D4".repeat(4), "長い16進値"], // 大文字・混在も見る
+    // JSON（キー名が引用符で囲まれる）と接尾辞つき env 名。#303 の動機である
+    // .claude/ 配下の MCP・エディタ設定がまさにこの形。
+    ['"to' + 'ken": "aB3xK9zQ71mn"', "代入形の秘密"],
+    ['{"pass' + 'word": "aB3xK9zQ71mn"}', "代入形の秘密"],
+    ["GITHUB_TO" + "KEN: aB3xK9zQ71mn", "代入形の秘密"],
+    ["  API_TO" + "KEN=aB3xK9zQ71mn", "代入形の秘密"], // インデントがあり .env 形式では拾えない
+    ["api" + "_key: process.env.KEY || \"aB3xK9zQ71mn\"", "代入形の秘密（フォールバック値）"],
   ];
   const missed = cases
     .filter(([sample, name]) => {
@@ -203,8 +219,9 @@ test("散文の言及を誤検出しない（#305）", () => {
     "token: https://example.com/oauth/authorize", // URL は値そのものではない
     "Bea" + "rer トークンを Authorization ヘッダに載せる", // 散文（後続が全角）
   ];
+  // 失敗時にどの行が誤検出されたかが分かるよう、件数ではなく行そのものを比較する。
   const wrong = benign.filter((s) => scanText("x.md", s).length > 0);
-  eq(wrong.length, 0, "誤検出した行数");
+  eq(wrong, [], "誤検出した行");
 });
 
 test("抑止マーカーのある行は検査しない（#305）", () => {
