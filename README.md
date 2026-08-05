@@ -43,5 +43,6 @@ npx --yes http-server -p 8777 -c-1
 | [`CONVENTIONS.md`](CONVENTIONS.md) | UI/レイアウト規約・logic/view 分割・共有資産リファレンス・**新規モジュール追加手順**・完成チェックリスト |
 | [`TESTING.md`](TESTING.md) | テスト指針・変更影響マトリクス・自動テストの実行/書き方（`node test/run.js`） |
 | [`DESIGN.md`](DESIGN.md) | Notion 風デザインシステム（トークン・コンポーネント） |
+| [`.claude/agents/`](.claude/agents/) | サブエージェント定義（探索・ドキュメント同期検査・テスト実行・DoD 点検）。委譲ルールは CLAUDE.md「サブエージェントへの委譲」 |
 
 新しくモジュールを足す・直すときは、まず [`CONVENTIONS.md`](CONVENTIONS.md) を参照する。
