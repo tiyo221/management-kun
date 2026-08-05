@@ -20,7 +20,15 @@
 
     // 主操作（Inbox の仕分け＝spec/modules/todo.md）を最短にするため、最上段はクイックキャプチャ。
     // CSV 入出力など低頻度の操作は画面最下部へ退避する（CONVENTIONS §2.5-5）。
-    const capture = ui.input({ placeholder: "やることを入力して Enter（Inbox に追加）", onEnter: (v) => { if (v.trim()) { L().addTask(v); render(); } } });
+    // 捕捉した項目が必ず見えるよう、絞り込みは Inbox タブ＋検索なしへ寄せる（CONVENTIONS §2.5-2）。
+    // 投入先が inbox 固定なので、別タブや検索中のまま捕捉すると、追加は成功しているのに一覧に
+    // 現れずバッジの数字だけ増える。並び順（sort）は絞り込みではないので触らない。
+    const capture = ui.input({ placeholder: "やることを入力して Enter（Inbox に追加）", onEnter: (v) => {
+      if (!v.trim()) return;
+      L().addTask(v);
+      filter = "inbox"; search = "";
+      render();
+    } });
 
     // ステータスタブ（件数バッジ）
     const c = L().counts();
