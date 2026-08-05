@@ -9,7 +9,7 @@ model: sonnet
 
 ## 手順
 
-1. `git --no-pager diff origin/main...HEAD` と `git --no-pager diff`（未コミット分）で変更範囲を把握する。ベースは**リモート追跡ブランチ**を使う（ローカル `main` が古いと無関係な変更が混ざり、点検範囲を誤る。worktree 運用では特に踏みやすい）。`origin/main` が無ければ `git symbolic-ref refs/remotes/origin/HEAD` で既定ブランチを解決する。
+1. `git fetch origin main` でリモート追跡ブランチを更新してから、`git --no-pager diff origin/main...HEAD` と `git --no-pager diff`（未コミット分）で変更範囲を把握する（fetch を省くと `origin/main` 自体が古く、マージベースが後退して点検範囲を誤る）。ベースは**リモート追跡ブランチ**を使う（ローカル `main` が古いと無関係な変更が混ざり、点検範囲を誤る。worktree 運用では特に踏みやすい）。`origin/main` が無ければ `git symbolic-ref refs/remotes/origin/HEAD` で既定ブランチを解決する。
 2. **`CONVENTIONS.md` §6 のチェックリストを読む。これが点検項目の正**（この定義には項目を書き写さない ── 手写しは §6 の改訂から必ず遅れる）。**変更に関係する項目だけ**を実際のコードで検証し、無関係な項目は「対象外」として一行で流す（形だけの全項目 ✓ を返さない）。
 3. §6 の項目のうち grep で機械的に確かめられるものは、目視で済ませず必ずコードで確かめる。**以下は探し方の例であって、点検項目の一覧ではない**（正は §6）:
    - logic.js が `document` / `window` / `MK.ui` を参照していないか（grep）
