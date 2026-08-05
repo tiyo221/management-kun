@@ -27,8 +27,11 @@ const PATTERNS = [
   // 代入形。語の言及（散文の「トークンを扱わない」等）を拾わないよう、
   // 引用符で囲まれた 8 文字以上の値が伴うことを条件にする。
   { name: "代入形の秘密", re: /\b(?:password|passwd|api[_-]?key|apikey|secret|token)\s*[:=]\s*["'`][^"'`\s]{8,}["'`]/i },
-  { name: "ローカル絶対パス（Windows）", re: /\b[A-Za-z]:\\+Users\\+[A-Za-z0-9._-]{2,}/ },
-  { name: "ローカル絶対パス（Unix）", re: /(?:^|[\s"'`(])\/(?:Users|home)\/[a-z][a-z0-9._-]+/ },
+  // 区切りは `\` と `/` の両方を見る。MCP / エディタの JSON 設定や Node の出力は
+  // Windows でもドライブレターの後がスラッシュ区切りになるため、`\` だけだと
+  // 止めたい経路の中心が抜ける（この行に実例を書くと自分が引っかかるので書かない）。
+  { name: "ローカル絶対パス（Windows）", re: /\b[A-Za-z]:[\\/]+Users[\\/]+[A-Za-z0-9._-]{2,}/ },
+  { name: "ローカル絶対パス（Unix）", re: /(?:^|[\s"'`(])\/(?:Users|home)\/[A-Za-z][A-Za-z0-9._-]+/ },
 ];
 
 /* 中身を読まない拡張子（バイナリ・画像・書庫）。テキストでも NUL を含めば読み飛ばす。 */
@@ -81,22 +84,30 @@ test("Git 追跡下に秘密情報・ローカル固有値が混入していな�
 test("検出パターンが実際の秘密の形を検出する（#305）", () => {
   // 観点: パターンが腐って「何も検出しない正規表現」になっていないことを固定する。
   //       検査対象に本物の形を残さないよう、サンプルは実行時に組み立てる（リテラルで書くと自分が引っかかる）。
-  // 入力: 各パターンに対応する合成サンプル
-  // 期待: いずれか1つ以上のパターンが一致する
-  const samples = [
-    "sk-ant-" + "a1b2c3d4e5f6g7h8i9j0k1",
-    "gh" + "p_" + "A".repeat(36),
-    "github" + "_pat_" + "B".repeat(30),
-    "AKIA" + "ABCDEFGHIJKLMNOP",
-    "xox" + "b-" + "123456789012-abcdef",
-    "AIza" + "C".repeat(35),
-    "-----BEGIN RSA " + "PRIVATE KEY-----",
-    'const cfg = { api' + '_key: "s3cr3tvalue123" };',
-    "C:" + "\\Users\\someone\\Desktop",
-    "  /home/" + "someone/work",
+  // 入力: サンプルと、それを捕まえるべきパターン名の組
+  // 期待: 各サンプルが「担当のパターン」で検出される。どれか1つでも当たれば緑にしない
+  //       ── 別のパターンが偶然拾うと、担当が壊れても気づけないため（#306 レビュー）
+  const cases = [
+    ["sk-ant-" + "a1b2c3d4e5f6g7h8i9j0k1", "API キー（sk- 形式）"],
+    ["gh" + "p_" + "A".repeat(36), "GitHub トークン"],
+    ["github" + "_pat_" + "B".repeat(30), "GitHub PAT"],
+    ["AKIA" + "ABCDEFGHIJKLMNOP", "AWS アクセスキー"],
+    ["xox" + "b-" + "123456789012-abcdef", "Slack トークン"],
+    ["AIza" + "C".repeat(35), "Google API キー"],
+    ["-----BEGIN RSA " + "PRIVATE KEY-----", "秘密鍵"],
+    ['const cfg = { api' + '_key: "s3cr3tvalue123" };', "代入形の秘密"],
+    ["C:" + "\\Users\\someone\\Desktop", "ローカル絶対パス（Windows）"],
+    ["C:/" + "Users/someone/Desktop", "ローカル絶対パス（Windows）"], // スラッシュ区切りも止める
+    ["  /home/" + "someone/work", "ローカル絶対パス（Unix）"],
+    ["  /Users/" + "Someone/work", "ローカル絶対パス（Unix）"], // 大文字始まりのユーザ名
   ];
-  const missed = samples.filter((s) => !PATTERNS.some((p) => p.re.test(s)));
-  eq(missed.length, 0, "検出できなかったサンプル数");
+  const missed = cases
+    .filter(([sample, name]) => {
+      const p = PATTERNS.find((x) => x.name === name);
+      return !p || !p.re.test(sample);
+    })
+    .map(([, name]) => name);
+  eq(missed, [], "担当パターンで検出できなかったもの");
 });
 
 test("散文の言及・プレースホルダを誤検出しない（#305）", () => {
