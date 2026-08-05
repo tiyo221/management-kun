@@ -183,4 +183,4 @@ modules/
 **ドキュメント**
 - [ ] 作業中に参照したドキュメントと実装・現状の食い違いを放置していない（同じ PR で更新した or `[core]`・`documentation` ラベルの Issue 化した。[`CLAUDE.md`](CLAUDE.md) の開発ワークフロー）。
 - [ ] モジュール id を新たに列挙していない（一覧は [`spec.md`](spec.md) §5 の 1 か所・§5 手順 6）。
-- [ ] モジュールを追加・削除・改名したら、その id でドキュメント全体（`spec.md` / `spec/*` / `README.md` / `CONVENTIONS.md` / `TESTING.md`）を grep し、§5 以外に残る言及を同期した（読んだ箇所だけでなく `grep <id>` で探しに行く。網羅に見える列挙は「例:」の少数へ刈る。[`CLAUDE.md`](CLAUDE.md) 必須ルール5・#227）。
+- [ ] モジュールを追加・削除・改名したら、その id で Git 追跡下の md 全体（`git ls-files "*.md"`。`.claude/agents/*.md` も含む）を grep し、§5 以外に残る言及を同期した（読んだ箇所だけでなく `grep <id>` で探しに行く。網羅に見える列挙は「例:」の少数へ刈る。[`CLAUDE.md`](CLAUDE.md) 必須ルール5・#227）。

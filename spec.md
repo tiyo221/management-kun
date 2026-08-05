@@ -125,6 +125,8 @@ management-kun/
 ├── TESTING.md              … テスト指針・変更影響マトリクス
 ├── README.md               … 概要・使い方・ドキュメント索引
 ├── spec.md                 … 共通（統合）仕様。これが最上位の正。
+├── .claude/agents/         … サブエージェント定義（CLAUDE.md「サブエージェントへの委譲」）。
+│                             .claude/ 配下でここだけ追跡対象（他はローカル設定）
 └── spec/
     ├── masters.md          … 共通マスタ（§4.4）: 共通契約＋People/Project/Allocation/Product。マスタ追加・修正時に参照。
     ├── import-migration.md … 取り込み・移行・名寄せ（§4.6 CSV / §7 移行 / §8 名寄せ）。取込・移行作業時のみ参照。
