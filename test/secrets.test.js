@@ -15,7 +15,22 @@ const cp = require("child_process");
 
 const rootDir = path.join(__dirname, "..");
 
-/** 検出パターン。name は違反メッセージに出す名前（値そのものは絶対に出さない）。 */
+/* 説明用のダミー値か（代入形の値側に使う）。ドキュメントやサンプルに
+   `api_key: "YOUR_KEY_HERE"` と1行書いただけでフルスイートが赤くなると、
+   回避手段が「共通の正規表現を書き換える」しか無くなり、検査ごと外される。
+   実在の秘密は英小文字だけ・全大文字＋アンダースコアだけ、という形をまず取らない。 */
+const PLACEHOLDER_WORDS = /your|example|sample|dummy|placeholder|changeme|redacted|todo|fixme|test|foo|bar/i;
+function isPlaceholder(value) {
+  return (
+    /^[A-Z0-9_]+$/.test(value) ||   // YOUR_API_KEY_HERE
+    /^[a-z]+$/.test(value) ||       // xxxxxxxx / abcdefghij（数字も大文字も無い）
+    /^[-x*._]+$/i.test(value) ||    // ****** / xxx-xxx
+    PLACEHOLDER_WORDS.test(value)
+  );
+}
+
+/** 検出パターン。name は違反メッセージに出す名前（値そのものは絶対に出さない）。
+    exempt は「一致したが見逃してよい」判定（キャプチャ結果を受ける）。 */
 const PATTERNS = [
   { name: "API キー（sk- 形式）", re: /\bsk-(?:ant-)?[A-Za-z0-9_-]{20,}/ },
   { name: "GitHub トークン", re: /\bgh[pousr]_[A-Za-z0-9]{20,}/ },
@@ -25,13 +40,20 @@ const PATTERNS = [
   { name: "Google API キー", re: /\bAIza[0-9A-Za-z_-]{35}/ },
   { name: "秘密鍵", re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
   // 代入形。語の言及（散文の「トークンを扱わない」等）を拾わないよう、
-  // 引用符で囲まれた 8 文字以上の値が伴うことを条件にする。
-  { name: "代入形の秘密", re: /\b(?:password|passwd|api[_-]?key|apikey|secret|token)\s*[:=]\s*["'`][^"'`\s]{8,}["'`]/i },
+  // 引用符で囲まれた 8 文字以上の値が伴うことを条件にし、値がダミーなら見逃す。
+  {
+    name: "代入形の秘密",
+    re: /\b(?:password|passwd|api[_-]?key|apikey|secret|token)\s*[:=]\s*["'`]([^"'`\s]{8,})["'`]/i,
+    exempt: (m) => isPlaceholder(m[1]),
+  },
   // 区切りは `\` と `/` の両方を見る。MCP / エディタの JSON 設定や Node の出力は
   // Windows でもドライブレターの後がスラッシュ区切りになるため、`\` だけだと
   // 止めたい経路の中心が抜ける（この行に実例を書くと自分が引っかかるので書かない）。
   { name: "ローカル絶対パス（Windows）", re: /\b[A-Za-z]:[\\/]+Users[\\/]+[A-Za-z0-9._-]{2,}/ },
-  { name: "ローカル絶対パス（Unix）", re: /(?:^|[\s"'`(])\/(?:Users|home)\/[A-Za-z][A-Za-z0-9._-]+/ },
+  // 前置は否定後読みで「相対パスの途中（foo/Users/bar）」だけを外す。許可リスト方式にすると
+  // `cwd=/Users/…` や `path:/home/…`（設定ファイル・ツール出力の貼り付け＝止めたい形の中心）を
+  // 落とし、`\b` 起点の Windows 側と非対称になる。
+  { name: "ローカル絶対パス（Unix）", re: /(?<![A-Za-z0-9._~/-])\/(?:Users|home)\/[A-Za-z][A-Za-z0-9._-]+/ },
 ];
 
 /* 中身を読まない拡張子（バイナリ・画像・書庫）。テキストでも NUL を含めば読み飛ばす。 */
@@ -52,19 +74,27 @@ function trackedFiles() {
   }
 }
 
-/** rel のテキストを行ごとに検査し、"path:line（パターン名）" の配列を返す。値は含めない。 */
-function scanFile(rel) {
-  if (BINARY_EXT.has(path.extname(rel).toLowerCase())) return [];
-  let text;
-  try { text = fs.readFileSync(path.join(rootDir, rel), "utf8"); } catch { return []; }
+/** text を行ごとに検査し、"path:line（パターン名）" の配列を返す。**値は決して含めない**。 */
+function scanText(rel, text) {
   if (text.includes("\0")) return []; // 拡張子で漏れたバイナリ
   const hits = [];
   text.split(/\r?\n/).forEach((line, i) => {
     PATTERNS.forEach((p) => {
-      if (p.re.test(line)) hits.push(rel + ":" + (i + 1) + "（" + p.name + "）");
+      const m = line.match(p.re);
+      if (!m) return;
+      if (p.exempt && p.exempt(m)) return;
+      hits.push(rel + ":" + (i + 1) + "（" + p.name + "）");
     });
   });
   return hits;
+}
+
+/** 追跡下の1ファイルを読んで検査する。読めないもの（作業ツリーに無い等）は対象外。 */
+function scanFile(rel) {
+  if (BINARY_EXT.has(path.extname(rel).toLowerCase())) return [];
+  let text;
+  try { text = fs.readFileSync(path.join(rootDir, rel), "utf8"); } catch { return []; }
+  return scanText(rel, text);
 }
 
 test("Git 追跡下に秘密情報・ローカル固有値が混入していない（#305）", () => {
@@ -100,6 +130,9 @@ test("検出パターンが実際の秘密の形を検出する（#305）", () =
     ["C:/" + "Users/someone/Desktop", "ローカル絶対パス（Windows）"], // スラッシュ区切りも止める
     ["  /home/" + "someone/work", "ローカル絶対パス（Unix）"],
     ["  /Users/" + "Someone/work", "ローカル絶対パス（Unix）"], // 大文字始まりのユーザ名
+    ["cwd=/home/" + "someone/x", "ローカル絶対パス（Unix）"],   // 設定・ツール出力の貼り付け
+    ["path:/home/" + "someone/x", "ローカル絶対パス（Unix）"],
+    ["[/home/" + "someone/x](x)", "ローカル絶対パス（Unix）"],  // Markdown リンク
   ];
   const missed = cases
     .filter(([sample, name]) => {
@@ -119,10 +152,27 @@ test("散文の言及・プレースホルダを誤検出しない（#305）", (
     "token を扱わない。password は保存しない",
     'const label = "APIキー";',
     "api_key: <YOUR_KEY_HERE>",
+    'api' + '_key: "YOUR_API_KEY_HERE"',   // 引用符付きプレースホルダ（全大文字＋_）
+    'token: "' + "x".repeat(12) + '"',     // ダミー値（英小文字のみ）
+    '<input data-token="abcdefghij">',     // 説明用の HTML 属性
+    'password: "changeme123"',             // プレースホルダ語
+    "foo/Users/bar/baz",                   // 相対パスの途中（絶対パスではない）
     "shared/ui.js と modules/todo/logic.js を参照",
     "C:\\Users\\<名前>\\... のようなローカル絶対パスは書かない",
     "詳細は /home ディレクトリ構成の節を参照",
   ];
-  const wrong = benign.filter((s) => PATTERNS.some((p) => p.re.test(s)));
+  const wrong = benign.filter((s) => scanText("x.md", s).length > 0);
   eq(wrong.length, 0, "誤検出した行数");
+});
+
+test("scanText(): 書式・行番号・値の非出力・NUL スキップ（#305）", () => {
+  // 観点: 「違反メッセージに値そのものを含めない」は本検査の中心的な保証。
+  //       パターンの自己テストだけでは、走査本体が値を足す変更に気づけない。
+  // 入力: 2行目にだけ秘密（合成した GitHub トークン形式）を含むテキスト／NUL を含むテキスト
+  // 期待: "a.md:2（GitHub トークン）" だけを返し、戻り値のどこにも秘密の断片が現れない。NUL 入りは []
+  const secretValue = "gh" + "p_" + "D".repeat(36);
+  const hits = scanText("a.md", "1行目は普通\n" + "key: " + secretValue + "\n3行目も普通");
+  eq(hits, ["a.md:2（GitHub トークン）"]);
+  assert(!hits.join("|").includes(secretValue.slice(4)), "戻り値に値の断片が含まれない");
+  eq(scanText("b.bin", "key: " + secretValue + "\0"), []);
 });
