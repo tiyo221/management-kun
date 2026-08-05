@@ -15,27 +15,15 @@ const cp = require("child_process");
 
 const rootDir = path.join(__dirname, "..");
 
-/* 説明用のダミー値か（代入形の値側に使う）。ドキュメントやサンプルに
-   `api_key: "YOUR_KEY_HERE"` と1行書いただけでフルスイートが赤くなると、
-   回避手段が「共通の正規表現を書き換える」しか無くなり、検査ごと外される。
-   実在の秘密は英小文字だけ・全大文字＋アンダースコアだけ、という形をまず取らない。 */
-/* 語はトークン境界で照合する。部分一致にすると `bar` が `Rhubarb2024!` を、
-   `foo` が `aB9fooQ12345` を免除してしまい、本物を素通りさせる（#306 レビュー）。 */
-const PLACEHOLDER_WORDS = /(?:^|[^A-Za-z])(?:your|example|sample|dummy|placeholder|changeme|redacted)(?:[^A-Za-z]|$)/i;
-/* 汎用すぎる語（英単語の断片として頻出）は、値の全体がその語＋数字のときだけ免除する。 */
-const PLACEHOLDER_ONLY = /^(?:foo|bar|baz|test|todo|fixme|secret|password)\d*$/i;
-function isPlaceholder(value) {
-  return (
-    /^[A-Z0-9_]+$/.test(value) ||   // YOUR_API_KEY_HERE
-    /^[a-z]+$/.test(value) ||       // xxxxxxxx / abcdefghij（数字も大文字も無い）
-    /^[-x*._]+$/i.test(value) ||    // ****** / xxx-xxx
-    PLACEHOLDER_ONLY.test(value) ||
-    PLACEHOLDER_WORDS.test(value)
-  );
-}
+/* 抑止マーカー。この文字列を含む行は検査しない。
+   見逃し（偽陰性）は公開されたら不可逆、誤検出（偽陽性）はテストが赤くなるだけで可逆 ──
+   非対称なので厳しい側に倒す。ただし逃げ道が無い厳しさは「共通の正規表現を削る」圧力に
+   変わり、検査ごと外される。そこで例外は**行単位で明示**する形にした。
+   ダミー値の暗黙免除（`YOUR_KEY` 等を自動で見逃す）は置かない ── 緩める操作が
+   差分に出ず、総数も数えられないため。例外は `git grep secrets-allow` で全部数えられる。 */
+const ALLOW_MARKER = "secrets-allow";
 
-/** 検出パターン。name は違反メッセージに出す名前（値そのものは絶対に出さない）。
-    exempt は「一致したが見逃してよい」判定（キャプチャ結果を受ける）。 */
+/** 検出パターン。name は違反メッセージに出す名前（値そのものは絶対に出さない）。 */
 const PATTERNS = [
   { name: "API キー（sk- 形式）", re: /\bsk-(?:ant-)?[A-Za-z0-9_-]{20,}/ },
   { name: "GitHub トークン", re: /\bgh[pousr]_[A-Za-z0-9]{20,}/ },
@@ -44,13 +32,13 @@ const PATTERNS = [
   { name: "Slack トークン", re: /\bxox[baprs]-[0-9A-Za-z-]{10,}/ },
   { name: "Google API キー", re: /\bAIza[0-9A-Za-z_-]{35}/ },
   { name: "秘密鍵", re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
-  // 代入形。語の言及（散文の「トークンを扱わない」等）を拾わないよう、
-  // 引用符で囲まれた 8 文字以上の値が伴うことを条件にし、値がダミーなら見逃す。
-  {
-    name: "代入形の秘密",
-    re: /\b(?:password|passwd|api[_-]?key|apikey|secret|token)\s*[:=]\s*["'`]([^"'`\s]{8,})["'`]/i,
-    exempt: (m) => isPlaceholder(m[1]),
-  },
+  { name: "JWT", re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/ },
+  { name: "長い16進値", re: /\b[0-9a-f]{32,}\b/ },
+  // .env 形式（`KEY=長い値`）。行全体がその形のときだけ見る。
+  { name: "環境変数形式の値", re: /^[A-Z][A-Z0-9_]{2,}=[^\s"']{12,}$/ },
+  // 代入形。語の言及（散文の「トークンを扱わない」等）を拾わないよう、8 文字以上の値が
+  // 伴うことを条件にする。引用符の有無は問わない（JSON も .env もシェルも止めるため）。
+  { name: "代入形の秘密", re: /\b(?:password|passwd|api[_-]?key|apikey|secret|token)\s*[:=]\s*["'`]?[^\s"'`,;)]{8,}/i },
   // 区切りは `\` と `/` の両方を見る。MCP / エディタの JSON 設定や Node の出力は
   // Windows でもドライブレターの後がスラッシュ区切りになるため、`\` だけだと
   // 止めたい経路の中心が抜ける（この行に実例を書くと自分が引っかかるので書かない）。
@@ -79,22 +67,14 @@ function trackedFiles() {
   }
 }
 
-/* 1行に複数の一致がありうるので走査は全一致で回す。先頭の1件だけを見て免除すると、
-   `api_key: "YOUR_KEY_HERE", token: "<本物>"` のような1行 JSON（MCP・エディタ設定＝
-   止めたい経路の中心）で、行ごと見逃す（#306 レビュー）。
-   PATTERNS 側は非グローバルのまま持ち、ここで g 付きの複製を1度だけ作る
-   （グローバル正規表現は lastIndex を持ち、`test` と共用すると結果が飛ぶ）。 */
-const SCANNERS = PATTERNS.map((p) => ({ name: p.name, exempt: p.exempt, re: new RegExp(p.re.source, p.re.flags + "g") }));
-
 /** text を行ごとに検査し、"path:line（パターン名）" の配列を返す。**値は決して含めない**。 */
 function scanText(rel, text) {
   if (text.includes("\0")) return []; // 拡張子で漏れたバイナリ
   const hits = [];
   text.split(/\r?\n/).forEach((line, i) => {
-    SCANNERS.forEach((s) => {
-      const matches = Array.from(line.matchAll(s.re));
-      if (!matches.some((m) => !(s.exempt && s.exempt(m)))) return; // 全部が免除なら見逃す
-      hits.push(rel + ":" + (i + 1) + "（" + s.name + "）");
+    if (line.includes(ALLOW_MARKER)) return; // 明示的に許可された行
+    PATTERNS.forEach((p) => {
+      if (p.re.test(line)) hits.push(rel + ":" + (i + 1) + "（" + p.name + "）");
     });
   });
   return hits;
@@ -144,6 +124,10 @@ test("検出パターンが実際の秘密の形を検出する（#305）", () =
     ["cwd=/home/" + "someone/x", "ローカル絶対パス（Unix）"],   // 設定・ツール出力の貼り付け
     ["path:/home/" + "someone/x", "ローカル絶対パス（Unix）"],
     ["[/home/" + "someone/x](x)", "ローカル絶対パス（Unix）"],  // Markdown リンク
+    ["ey" + "J" + "hbGciOiJIUzI1NiJ9." + "eyJzdWIiOiIxIn0", "JWT"],
+    ["hash = " + "a1b2c3d4".repeat(4), "長い16進値"],
+    ["API" + "_TOKEN=" + "aB3xK9zQ71mn", "環境変数形式の値"],
+    ["export " + "token=" + "aB3xK9zQ71mn", "代入形の秘密"], // 引用符が無くても止める
   ];
   const missed = cases
     .filter(([sample, name]) => {
@@ -154,19 +138,16 @@ test("検出パターンが実際の秘密の形を検出する（#305）", () =
   eq(missed, [], "担当パターンで検出できなかったもの");
 });
 
-test("散文の言及・プレースホルダを誤検出しない（#305）", () => {
-  // 観点: 偽陽性でフルスイートが赤くなると規約ごと形骸化するので、通常の記述が通ることを固定する。
-  // 入力: 接頭辞への言及・値を伴わない語・プレースホルダ・リポジトリ相対パス
+test("散文の言及を誤検出しない（#305）", () => {
+  // 観点: 通常の散文まで拾うと例外だらけになり、抑止マーカーが形骸化する。ここは通す。
+  //       ダミー値の暗黙免除は持たないので、キー名と 8 文字以上の値が揃った記述例は
+  //       中身がダミーでも**検出される**（通したい行には抑止マーカーを付ける。次のテスト）。
+  // 入力: 接頭辞への言及・値を伴わない語・相対パス・プレースホルダ記法だけの行
   // 期待: いずれも検出しない
   const benign = [
     "既知のキー接頭辞（ghp_ / AKIA / AIza）を検出する",
     "token を扱わない。password は保存しない",
     'const label = "APIキー";',
-    "api_key: <YOUR_KEY_HERE>",
-    'api' + '_key: "YOUR_API_KEY_HERE"',   // 引用符付きプレースホルダ（全大文字＋_）
-    'token: "' + "x".repeat(12) + '"',     // ダミー値（英小文字のみ）
-    '<input data-token="abcdefghij">',     // 説明用の HTML 属性
-    'password: "changeme123"',             // プレースホルダ語
     "foo/Users/bar/baz",                   // 相対パスの途中（絶対パスではない）
     "shared/ui.js と modules/todo/logic.js を参照",
     "C:\\Users\\<名前>\\... のようなローカル絶対パスは書かない",
@@ -174,6 +155,17 @@ test("散文の言及・プレースホルダを誤検出しない（#305）", (
   ];
   const wrong = benign.filter((s) => scanText("x.md", s).length > 0);
   eq(wrong.length, 0, "誤検出した行数");
+});
+
+test("抑止マーカーのある行は検査しない（#305）", () => {
+  // 観点: 厳しさは逃げ道とセットでのみ成立する。逃げ道が無いと、赤くなった人が
+  //       共通の正規表現を削る方向へ動き、検査ごと失われる。例外は行単位で明示する。
+  // 入力: 本物の形を含む行（マーカー無し／マーカー付き）
+  // 期待: マーカー付きの行だけ検出しない。マーカーは行のどこにあっても効く
+  const real = "gh" + "p_" + "E".repeat(36);
+  eq(scanText("a.md", "key: " + real).length, 1);
+  eq(scanText("a.md", "key: " + real + "  // " + "secrets-allow" + ": 記述例"), []);
+  eq(scanText("a.md", "<!-- " + "secrets-allow" + " --> key: " + real), []);
 });
 
 test("scanText(): 書式・行番号・値の非出力・NUL スキップ（#305）", () => {
@@ -187,14 +179,9 @@ test("scanText(): 書式・行番号・値の非出力・NUL スキップ（#305
   assert(!hits.join("|").includes(secretValue.slice(4)), "戻り値に値の断片が含まれない");
   eq(scanText("b.bin", "key: " + secretValue + "\0"), []);
 
-  // 観点（続き）: 免除（isPlaceholder）が広がりすぎて「代入形の秘密」が実質無効化されても
-  //   パターン直呼びの自己テストは緑のままなので、走査経路を通した検出をここで固定する。
-  // 入力: 実在形の値を持つ代入／プレースホルダと本物が同居する1行 JSON／部分一致しうる値
-  // 期待: いずれも1件検出する（同居行で本物を見逃さない・語の部分一致で免除しない）
-  // 値はここでも実行時に組み立てる（本物らしい形をファイルに残すと自分が検出される）。
+  // 観点（続き）: パターン直呼びの自己テストは走査経路を通らないため、走査を経た検出も固定する。
+  // 入力: 実在形の値を持つ代入（値はここでも実行時に組み立てる）
+  // 期待: 1件検出する
   const realish = "s3cr3t" + "value123";
   eq(scanText("x.js", "const cfg = { api_key: \"" + realish + "\" };"), ["x.js:1（代入形の秘密）"]);
-  eq(scanText("x.json", 'api_key: "YOUR_KEY_HERE", token: "' + realish + '"'), ["x.json:1（代入形の秘密）"]);
-  // 語の部分一致（"bar"）で免除されないこと
-  eq(scanText("x.js", 'password: "Rhu' + 'barb2024x"'), ["x.js:1（代入形の秘密）"]);
 });
