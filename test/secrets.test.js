@@ -4,10 +4,15 @@
    古い前提のまま書かれた値（API キー・ローカル絶対パス）を機械で止める。
    対象は `.claude/` に限らず Git 追跡下のテキスト全体 ── 追跡されていれば場所を問わず公開される。
 
-   検出は既知パターンの列挙に留め、高エントロピー検出は入れない。フルスイートは毎回走るので、
-   偽陽性が出ると「とりあえず無視する」運用に堕ちて規約ごと形骸化する（取りこぼしより害が大きい）。
-   各パターンは「接頭辞＋十分な長さの本体」を要求する。ドキュメントが `ghp_` のような接頭辞に
-   言及しても落ちないようにするため（このファイル自身の正規表現リテラルも同じ理由で自己一致しない）。 */
+   方針は「きつく始めて、証拠が出たら緩める」（TESTING.md §7.2）。見逃しは公開されたら
+   不可逆、誤検出はテストが赤くなるだけで可逆という非対称から、厳しい側に倒す。ただし
+   逃げ道の無い厳しさは「共通の正規表現を削る」圧力に変わるので、抑止マーカーとセットで持つ。
+
+   パターンの性格は2種類ある。(1) 既知のキー（`ghp_` 等）は接頭辞＋十分な長さの本体を要求し、
+   ドキュメントが接頭辞に言及しても落ちない。(2) 代入形・16進値・.env 形式は接頭辞を持たない
+   ヒューリスティックで、正当な記述にも当たりうる ── そのための抑止マーカー。
+   高エントロピー検出だけは入れない（実測で誤検出しか出なかったため。§7.2）。
+   このファイル自身も走査対象なので、正規表現リテラル・テストデータは自己一致しない形で書く。 */
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -38,7 +43,15 @@ const PATTERNS = [
   { name: "環境変数形式の値", re: /^[A-Z][A-Z0-9_]{2,}=[^\s"']{12,}$/ },
   // 代入形。語の言及（散文の「トークンを扱わない」等）を拾わないよう、8 文字以上の値が
   // 伴うことを条件にする。引用符の有無は問わない（JSON も .env もシェルも止めるため）。
-  { name: "代入形の秘密", re: /\b(?:password|passwd|api[_-]?key|apikey|secret|token)\s*[:=]\s*["'`]?[^\s"'`,;)]{8,}/i },
+  // 値の文字集合は ASCII に限る ── 全角を含めると `token: 認証に使う文字列` のような
+  // **日本語の散文が丸ごと当たる**（日本語ドキュメント中心のリポジトリでは致命的）。
+  // 値が識別子の連なり（`process.env.API_KEY` / `settings.apiKey`）なら**リテラルではない**ので
+  // 対象外にする。これは「中身がダミーか」の推測ではなく「そもそも値が書かれていない」判定。
+  {
+    name: "代入形の秘密",
+    re: /\b(?:password|passwd|api[_-]?key|apikey|secret|token)\s*[:=]\s*["'`]?([A-Za-z0-9_\-+/=.:~@#$%^&*!?]{8,})/i,
+    exempt: (m) => /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+$/.test(m[1]),
+  },
   // 区切りは `\` と `/` の両方を見る。MCP / エディタの JSON 設定や Node の出力は
   // Windows でもドライブレターの後がスラッシュ区切りになるため、`\` だけだと
   // 止めたい経路の中心が抜ける（この行に実例を書くと自分が引っかかるので書かない）。
@@ -47,6 +60,9 @@ const PATTERNS = [
   // `cwd=/Users/…` や `path:/home/…`（設定ファイル・ツール出力の貼り付け＝止めたい形の中心）を
   // 落とし、`\b` 起点の Windows 側と非対称になる。
   { name: "ローカル絶対パス（Unix）", re: /(?<![A-Za-z0-9._~/-])\/(?:Users|home)\/[A-Za-z][A-Za-z0-9._-]+/ },
+  // WSL / コンテナ経由。`/mnt/c/Users/…` は Windows 側（ドライブレター必須）からも
+  // Unix 側（否定後読みの直前が `c`）からも漏れるので、専用に見る。
+  { name: "ローカル絶対パス（WSL）", re: /\/mnt\/[a-z]\/Users\/[A-Za-z][A-Za-z0-9._-]+/ },
 ];
 
 /* 中身を読まない拡張子（バイナリ・画像・書庫）。テキストでも NUL を含めば読み飛ばす。 */
@@ -67,14 +83,22 @@ function trackedFiles() {
   }
 }
 
+/* 走査は行内の全一致で回す。先頭の1件だけを見て対象外と判断すると、
+   `token: process.env.X, key: "<本物>"` のような1行で本物ごと見逃す。
+   PATTERNS 側は非グローバルのまま持ち（`test` と lastIndex を共用すると結果が飛ぶ）、
+   ここで g 付きの複製を1度だけ作る。 */
+const SCANNERS = PATTERNS.map((p) => ({ name: p.name, exempt: p.exempt, re: new RegExp(p.re.source, p.re.flags + "g") }));
+
 /** text を行ごとに検査し、"path:line（パターン名）" の配列を返す。**値は決して含めない**。 */
 function scanText(rel, text) {
   if (text.includes("\0")) return []; // 拡張子で漏れたバイナリ
   const hits = [];
   text.split(/\r?\n/).forEach((line, i) => {
     if (line.includes(ALLOW_MARKER)) return; // 明示的に許可された行
-    PATTERNS.forEach((p) => {
-      if (p.re.test(line)) hits.push(rel + ":" + (i + 1) + "（" + p.name + "）");
+    SCANNERS.forEach((s) => {
+      const matches = Array.from(line.matchAll(s.re));
+      if (!matches.some((m) => !(s.exempt && s.exempt(m)))) return; // 全部が対象外なら見逃す
+      hits.push(rel + ":" + (i + 1) + "（" + s.name + "）");
     });
   });
   return hits;
@@ -128,6 +152,7 @@ test("検出パターンが実際の秘密の形を検出する（#305）", () =
     ["hash = " + "a1b2c3d4".repeat(4), "長い16進値"],
     ["API" + "_TOKEN=" + "aB3xK9zQ71mn", "環境変数形式の値"],
     ["export " + "token=" + "aB3xK9zQ71mn", "代入形の秘密"], // 引用符が無くても止める
+    ["/mnt/c/" + "Users/someone/x", "ローカル絶対パス（WSL）"], // WSL / コンテナ経由
   ];
   const missed = cases
     .filter(([sample, name]) => {
@@ -152,6 +177,13 @@ test("散文の言及を誤検出しない（#305）", () => {
     "shared/ui.js と modules/todo/logic.js を参照",
     "C:\\Users\\<名前>\\... のようなローカル絶対パスは書かない",
     "詳細は /home ディレクトリ構成の節を参照",
+    // 日本語の散文。値の文字集合を ASCII に限っているので当たらない
+    "- token: 認証に使う文字列のこと。仕様は後述する",
+    "| `secret` | 秘密の値を表す語。ここでは扱わない |",
+    // 値が識別子の連なり＝リテラルが書かれていないコード
+    'const token = localStorage.getItem("k");',
+    "let apiKey = process.env.API_KEY;",
+    "api_key: settings.apiKey",
   ];
   const wrong = benign.filter((s) => scanText("x.md", s).length > 0);
   eq(wrong.length, 0, "誤検出した行数");
@@ -184,4 +216,6 @@ test("scanText(): 書式・行番号・値の非出力・NUL スキップ（#305
   // 期待: 1件検出する
   const realish = "s3cr3t" + "value123";
   eq(scanText("x.js", "const cfg = { api_key: \"" + realish + "\" };"), ["x.js:1（代入形の秘密）"]);
+  // 対象外（識別子の連なり）と本物が同居する行は、本物の側で検出する
+  eq(scanText("x.js", "token: process.env.X, api_key: \"" + realish + "\""), ["x.js:1（代入形の秘密）"]);
 });
