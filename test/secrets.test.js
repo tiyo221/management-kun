@@ -19,12 +19,17 @@ const rootDir = path.join(__dirname, "..");
    `api_key: "YOUR_KEY_HERE"` と1行書いただけでフルスイートが赤くなると、
    回避手段が「共通の正規表現を書き換える」しか無くなり、検査ごと外される。
    実在の秘密は英小文字だけ・全大文字＋アンダースコアだけ、という形をまず取らない。 */
-const PLACEHOLDER_WORDS = /your|example|sample|dummy|placeholder|changeme|redacted|todo|fixme|test|foo|bar/i;
+/* 語はトークン境界で照合する。部分一致にすると `bar` が `Rhubarb2024!` を、
+   `foo` が `aB9fooQ12345` を免除してしまい、本物を素通りさせる（#306 レビュー）。 */
+const PLACEHOLDER_WORDS = /(?:^|[^A-Za-z])(?:your|example|sample|dummy|placeholder|changeme|redacted)(?:[^A-Za-z]|$)/i;
+/* 汎用すぎる語（英単語の断片として頻出）は、値の全体がその語＋数字のときだけ免除する。 */
+const PLACEHOLDER_ONLY = /^(?:foo|bar|baz|test|todo|fixme|secret|password)\d*$/i;
 function isPlaceholder(value) {
   return (
     /^[A-Z0-9_]+$/.test(value) ||   // YOUR_API_KEY_HERE
     /^[a-z]+$/.test(value) ||       // xxxxxxxx / abcdefghij（数字も大文字も無い）
     /^[-x*._]+$/i.test(value) ||    // ****** / xxx-xxx
+    PLACEHOLDER_ONLY.test(value) ||
     PLACEHOLDER_WORDS.test(value)
   );
 }
@@ -74,16 +79,22 @@ function trackedFiles() {
   }
 }
 
+/* 1行に複数の一致がありうるので走査は全一致で回す。先頭の1件だけを見て免除すると、
+   `api_key: "YOUR_KEY_HERE", token: "<本物>"` のような1行 JSON（MCP・エディタ設定＝
+   止めたい経路の中心）で、行ごと見逃す（#306 レビュー）。
+   PATTERNS 側は非グローバルのまま持ち、ここで g 付きの複製を1度だけ作る
+   （グローバル正規表現は lastIndex を持ち、`test` と共用すると結果が飛ぶ）。 */
+const SCANNERS = PATTERNS.map((p) => ({ name: p.name, exempt: p.exempt, re: new RegExp(p.re.source, p.re.flags + "g") }));
+
 /** text を行ごとに検査し、"path:line（パターン名）" の配列を返す。**値は決して含めない**。 */
 function scanText(rel, text) {
   if (text.includes("\0")) return []; // 拡張子で漏れたバイナリ
   const hits = [];
   text.split(/\r?\n/).forEach((line, i) => {
-    PATTERNS.forEach((p) => {
-      const m = line.match(p.re);
-      if (!m) return;
-      if (p.exempt && p.exempt(m)) return;
-      hits.push(rel + ":" + (i + 1) + "（" + p.name + "）");
+    SCANNERS.forEach((s) => {
+      const matches = Array.from(line.matchAll(s.re));
+      if (!matches.some((m) => !(s.exempt && s.exempt(m)))) return; // 全部が免除なら見逃す
+      hits.push(rel + ":" + (i + 1) + "（" + s.name + "）");
     });
   });
   return hits;
@@ -175,4 +186,15 @@ test("scanText(): 書式・行番号・値の非出力・NUL スキップ（#305
   eq(hits, ["a.md:2（GitHub トークン）"]);
   assert(!hits.join("|").includes(secretValue.slice(4)), "戻り値に値の断片が含まれない");
   eq(scanText("b.bin", "key: " + secretValue + "\0"), []);
+
+  // 観点（続き）: 免除（isPlaceholder）が広がりすぎて「代入形の秘密」が実質無効化されても
+  //   パターン直呼びの自己テストは緑のままなので、走査経路を通した検出をここで固定する。
+  // 入力: 実在形の値を持つ代入／プレースホルダと本物が同居する1行 JSON／部分一致しうる値
+  // 期待: いずれも1件検出する（同居行で本物を見逃さない・語の部分一致で免除しない）
+  // 値はここでも実行時に組み立てる（本物らしい形をファイルに残すと自分が検出される）。
+  const realish = "s3cr3t" + "value123";
+  eq(scanText("x.js", "const cfg = { api_key: \"" + realish + "\" };"), ["x.js:1（代入形の秘密）"]);
+  eq(scanText("x.json", 'api_key: "YOUR_KEY_HERE", token: "' + realish + '"'), ["x.json:1（代入形の秘密）"]);
+  // 語の部分一致（"bar"）で免除されないこと
+  eq(scanText("x.js", 'password: "Rhu' + 'barb2024x"'), ["x.js:1（代入形の秘密）"]);
 });
