@@ -38,7 +38,10 @@ const PATTERNS = [
   { name: "Google API キー", re: /\bAIza[0-9A-Za-z_-]{35}/ },
   { name: "秘密鍵", re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
   { name: "JWT", re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/ },
-  { name: "長い16進値", re: /\b[0-9a-f]{32,}\b/ },
+  { name: "長い16進値", re: /\b[0-9a-fA-F]{32,}\b/ },
+  // Authorization ヘッダの貼り付け。`Bearer トークンとは…` のような散文は
+  // 後続が全角なので当たらない（ASCII 12 文字以上を要求する）。
+  { name: "Bearer トークン", re: /\bBearer\s+[A-Za-z0-9._~+/-]{12,}/ },
   // .env 形式（`KEY=長い値`）。行全体がその形のときだけ見る。
   { name: "環境変数形式の値", re: /^[A-Z][A-Z0-9_]{2,}=[^\s"']{12,}$/ },
   // 代入形。語の言及（散文の「トークンを扱わない」等）を拾わないよう、8 文字以上の値が
@@ -50,7 +53,11 @@ const PATTERNS = [
   {
     name: "代入形の秘密",
     re: /\b(?:password|passwd|api[_-]?key|apikey|secret|token)\s*[:=]\s*["'`]?([A-Za-z0-9_\-+/=.:~@#$%^&*!?]{8,})/i,
-    exempt: (m) => /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+$/.test(m[1]),
+    // URL も値そのものではない（ドキュメントの `token: https://…` が丸ごと当たる）。
+    // クエリに秘密が載っていれば、その `?token=…` 側が別の一致として検出される。
+    exempt: (m) =>
+      /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+$/.test(m[1]) ||
+      /^https?:\/\//i.test(m[1]),
   },
   // 区切りは `\` と `/` の両方を見る。MCP / エディタの JSON 設定や Node の出力は
   // Windows でもドライブレターの後がスラッシュ区切りになるため、`\` だけだと
@@ -104,11 +111,15 @@ function scanText(rel, text) {
   return hits;
 }
 
-/** 追跡下の1ファイルを読んで検査する。読めないもの（作業ツリーに無い等）は対象外。 */
+/* 追跡下の1ファイルを読んで検査する。**読めなかったものは黙って飛ばさず違反として報告する** ──
+   追跡下＝公開されるので、未検査のまま緑になるのは「git ls-files が引けなければ落とす」という
+   本検査の方針と非対称になる（`git rm` せず消した／権限エラー／submodule の gitlink が該当し、
+   md 以外は spec-consistency の「追跡下にあるのに作業ツリーに無い」検査でも拾えない）。 */
 function scanFile(rel) {
   if (BINARY_EXT.has(path.extname(rel).toLowerCase())) return [];
   let text;
-  try { text = fs.readFileSync(path.join(rootDir, rel), "utf8"); } catch { return []; }
+  try { text = fs.readFileSync(path.join(rootDir, rel), "utf8"); }
+  catch (e) { return [rel + "（読み取り失敗: " + (e && e.code ? e.code : "unknown") + "）"]; }
   return scanText(rel, text);
 }
 
@@ -120,7 +131,10 @@ test("Git 追跡下に秘密情報・ローカル固有値が混入していな�
   // この検査は「追跡下＝公開される」が判定の本質なので、追跡状態を引けない環境では
   // 素通り（＝緑）にせず落とす。0 件で全部素通りする無効化パターンを塞ぐ。
   assert(files, "git ls-files が使える（追跡状態を判定できない環境では検査が成立しない）");
-  assert(files.includes("CLAUDE.md"), "走査対象に既知のファイルが含まれる（" + files.length + "件）");
+  // 番人: 走査対象が空・極小のまま「全部素通りで緑」になる無効化を塞ぐ。
+  // ここが落ちたときは秘密の混入ではなく、走査対象の取得が壊れていることを疑う。
+  assert(files.length >= 50 && files.includes("CLAUDE.md"),
+    "走査対象が十分にある（無効化の番人。混入ではなく取得の破損を疑う。" + files.length + "件）");
   const violations = [];
   files.forEach((rel) => { scanFile(rel).forEach((h) => violations.push(h)); });
   eq(violations, [], "秘密情報・ローカル固有値の混入");
@@ -153,6 +167,8 @@ test("検出パターンが実際の秘密の形を検出する（#305）", () =
     ["API" + "_TOKEN=" + "aB3xK9zQ71mn", "環境変数形式の値"],
     ["export " + "token=" + "aB3xK9zQ71mn", "代入形の秘密"], // 引用符が無くても止める
     ["/mnt/c/" + "Users/someone/x", "ローカル絶対パス（WSL）"], // WSL / コンテナ経由
+    ["Authorization: Bea" + "rer " + "aB3xK9zQ71mnPq", "Bearer トークン"],
+    ["sha = " + "A1B2C3D4".repeat(4), "長い16進値"], // 大文字・混在も見る
   ];
   const missed = cases
     .filter(([sample, name]) => {
@@ -184,6 +200,8 @@ test("散文の言及を誤検出しない（#305）", () => {
     'const token = localStorage.getItem("k");',
     "let apiKey = process.env.API_KEY;",
     "api_key: settings.apiKey",
+    "token: https://example.com/oauth/authorize", // URL は値そのものではない
+    "Bea" + "rer トークンを Authorization ヘッダに載せる", // 散文（後続が全角）
   ];
   const wrong = benign.filter((s) => scanText("x.md", s).length > 0);
   eq(wrong.length, 0, "誤検出した行数");
