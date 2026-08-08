@@ -653,11 +653,11 @@ test("daily: overflow はちょうど 24:00 では立たず、超過で立つ", 
   eq(D.schedule(day).overflow, true);
 });
 
-test("daily: ピンは下限アンカー（手前に空き・ピン時刻に固定・合計は空きを含めない）", (MK) => {
-  // 観点: at を持つ項目は開始を max(積み上がり位置, at) にする（L1）。前が余ればピン手前に空き時間、
-  //       ちょうど積み上がりと一致すればギャップ無し。totalMin は空き時間を含めない所要合計。
+test("daily: ピンは下限アンカー（手前に空き行・ピン時刻に固定・合計は空きを含めない）", (MK) => {
+  // 観点: at を持つ項目は開始を max(積み上がり位置, at) にする（L1）。前が余ればピン手前に空き時間の行
+  //       （type:"gap"）が描画順で差し込まれる。totalMin は空き時間を含めない所要合計。
   // 入力: 開始 09:00、A(30)→朝会(15・固定10:00)→B(30)
-  // 期待: A 09:00-09:30 / 朝会 10:00-10:15（09:30〜10:00 が空き gap）/ B 10:15-10:45。合計75分・終了10:45
+  // 期待: rows は A / 空き(09:30-10:00・30分) / 朝会 10:00-10:15 / B 10:15-10:45。合計75分・終了10:45
   const D = MK.logic.daily;
   const day = "2026-07-15";
   D.setStartTime("09:00");
@@ -665,12 +665,13 @@ test("daily: ピンは下限アンカー（手前に空き・ピン時刻に固�
   D.addManual(day, "朝会", 15, "10:00");
   D.addManual(day, "B", 30);
   const s = D.schedule(day);
-  eq(s.rows.map((r) => r.start), ["09:00", "10:00", "10:15"]);
-  eq(s.rows.map((r) => r.end), ["09:30", "10:15", "10:45"]);
-  eq(s.rows[1].pinned, true);
-  eq(s.rows[1].gap, true);         // 09:30〜10:00 が空く
-  eq(s.rows[0].gap, false);
-  eq(s.rows[2].pinned, false);
+  eq(s.rows.map((r) => r.type), ["item", "gap", "item", "item"]); // 空き行はピン項目の手前に入る
+  eq(s.rows.map((r) => r.start), ["09:00", "09:30", "10:00", "10:15"]);
+  eq(s.rows.map((r) => r.end), ["09:30", "10:00", "10:15", "10:45"]);
+  eq(s.rows[1].minutes, 30);       // 09:30〜10:00 が空く
+  eq(s.rows[2].pinned, true);
+  eq(s.rows[3].pinned, false);
+  eq(s.rows.filter((r) => r.type === "item").map((r) => r.item.title), ["A", "朝会", "B"]);
   eq(s.hasConflict, false);
   eq(s.totalMin, 75);              // 30+15+30（空き30分は数えない）
   eq(s.endLabel, "10:45");
@@ -678,25 +679,25 @@ test("daily: ピンは下限アンカー（手前に空き・ピン時刻に固�
 
 test("daily: ピンに間に合わないと食い込み（conflict）で印がつく", (MK) => {
   // 観点: 前の項目がピン時刻を過ぎるまで埋めていると、時刻は戻せないので積み上がり位置のまま置き、
-  //       conflict の印をつける（hasConflict も立つ）。gap にはしない。
+  //       conflict の印をつける（hasConflict も立つ）。空き行は差し込まない。
   // 入力: 開始 09:00、長い作業(90)→朝会(15・固定10:00)
-  // 期待: 朝会は 10:30 開始（09:00+90分=10:30）で conflict=true、hasConflict=true
+  // 期待: 朝会は 10:30 開始（09:00+90分=10:30）で conflict=true、hasConflict=true、行は項目2行だけ
   const D = MK.logic.daily;
   const day = "2026-07-15";
   D.setStartTime("09:00");
   D.addManual(day, "長い作業", 90);
   D.addManual(day, "朝会", 15, "10:00");
   const s = D.schedule(day);
+  eq(s.rows.map((r) => r.type), ["item", "item"]); // 食い込みでは空き行を作らない
   eq(s.rows[1].start, "10:30");    // 時刻は戻せない＝積み上がり位置のまま
   eq(s.rows[1].conflict, true);
-  eq(s.rows[1].gap, false);
   eq(s.hasConflict, true);
 });
 
-test("daily: setAt でピンを設定・解除できる（ちょうど一致はギャップ無し）", (MK) => {
-  // 観点: setAt が項目のピンを設定/解除する。積み上がりとちょうど一致する固定はギャップにしない。空で解除。
+test("daily: setAt でピンを設定・解除できる（ちょうど一致は空き行なし）", (MK) => {
+  // 観点: setAt が項目のピンを設定/解除する。積み上がりとちょうど一致する固定は空き行を作らない。空で解除。
   // 入力: 開始 09:00、A(30)→B(30)。B を 09:30→10:00→解除
-  // 期待: 09:30 は gap なし、10:00 は gap あり、解除で流動（09:30）へ戻る
+  // 期待: 09:30 は空き行なし、10:00 は空き行（30分）が挟まる、解除で流動（09:30）へ戻る
   const D = MK.logic.daily;
   const day = "2026-07-15";
   D.setStartTime("09:00");
@@ -704,15 +705,17 @@ test("daily: setAt でピンを設定・解除できる（ちょうど一致は�
   const bId = D.addManual(day, "B", 30);
   D.setAt(bId, "09:30");           // 積み上がり位置とちょうど一致
   let s = D.schedule(day);
+  eq(s.rows.map((r) => r.type), ["item", "item"]); // ちょうど一致は空き行にしない
   eq(s.rows[1].start, "09:30");
   eq(s.rows[1].pinned, true);
-  eq(s.rows[1].gap, false);        // ちょうど一致はギャップにしない
   D.setAt(bId, "10:00");           // 手前に空き
   s = D.schedule(day);
-  eq(s.rows[1].start, "10:00");
-  eq(s.rows[1].gap, true);
+  eq(s.rows.map((r) => r.type), ["item", "gap", "item"]);
+  eq(s.rows[1].minutes, 30);
+  eq(s.rows[2].start, "10:00");
   D.setAt(bId, "");                // 解除で流動へ
   s = D.schedule(day);
+  eq(s.rows.map((r) => r.type), ["item", "item"]);
   eq(s.rows[1].start, "09:30");
   eq(s.rows[1].pinned, false);
 });
@@ -732,7 +735,7 @@ test("daily: ルーチンの固定時刻は投入時に項目へスナップシ�
   eq(it.source, "routine");
   eq(it.routineId, rid);
   eq(it.at, "10:00");                          // 固定時刻がスナップショットされる
-  eq(D.schedule(today).rows[0].start, "10:00");
+  eq(D.schedule(today).rows.find((r) => r.type === "item").start, "10:00"); // 手前は開始起点からの空き行
   D.updateRoutine(rid, { at: "11:00" });        // 定義を変更
   eq(D.dayItems(today)[0].at, "10:00");         // 投入済みには遡及しない
 });

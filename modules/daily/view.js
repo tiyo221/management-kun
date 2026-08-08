@@ -153,14 +153,8 @@
       return host;
     }
     const list = el("ul", { class: "mk-list" });
-    // ピンで空きが生じたら、その項目の手前に空き時間の行を差し込む（gap は schedule が判定）。
-    let prevEndMin = sched.startMin, prevEndLabel = L().startTime();
-    sched.rows.forEach((r) => {
-      if (r.gap) list.appendChild(gapRow(prevEndLabel, r.start, r.startMin - prevEndMin));
-      list.appendChild(itemRow(r));
-      prevEndMin = r.endMin;
-      prevEndLabel = r.end;
-    });
+    // 空き行を含む描画順は schedule が組む（時刻の計算は logic 側・CONVENTIONS §1）。view は行の型で描き分けるだけ。
+    sched.rows.forEach((r) => { list.appendChild(r.type === "gap" ? gapRow(r) : itemRow(r)); });
     host.appendChild(list);
     return host;
   }
@@ -221,10 +215,10 @@
   }
 
   // ピンの手前にできる空き時間を薄い行で見せる（Outlook のように固定予定まで間が空くのを可視化する）。
-  function gapRow(fromLabel, toLabel, mins) {
+  function gapRow(r) {
     return el("li", { class: "mk-row", style: "opacity:.55;" }, [
-      el("div", { class: "sub", style: "min-width:92px;font-variant-numeric:tabular-nums;", text: fromLabel + "–" + toLabel }),
-      el("div", { class: "grow sub", text: "空き " + fmtDur(mins) }),
+      el("div", { class: "sub", style: "min-width:92px;font-variant-numeric:tabular-nums;", text: r.start + "–" + r.end }),
+      el("div", { class: "grow sub", text: "空き " + fmtDur(r.minutes) }),
     ]);
   }
 
@@ -252,7 +246,7 @@
     if (!sched.rows.length) return null;
     // 繰り越せる残り＝未完了かつ非ルーチン。ルーチン由来は繰り越し対象外（翌日は翌日ぶんが投入される）
     // なので「残りN件を送る」の N に数えると、押しても送られず表示と挙動がズレる。除外して数える。
-    const remaining = sched.rows.filter((r) => !r.item.done && r.item.source !== "routine").length;
+    const remaining = sched.rows.filter((r) => r.type === "item" && !r.item.done && r.item.source !== "routine").length;
     const bar = ui.toolbar([
       el("div", { class: "grow sub" }, [
         "合計 " + fmtDur(sched.totalMin) + " ／ 終了 " + sched.endLabel,

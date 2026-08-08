@@ -631,35 +631,41 @@
   /**
    * 指定日の時間割（各項目の開始・終了時刻）を積み上げで算出する純関数。
    * 固定時刻（ピン＝`at`）は **下限アンカー**として効く（L1 方式）: 項目は並び順に積み上げるが、
-   * ピン項目は開始を `max(積み上がり位置, at)` にする。前が余ればピン手前に空き時間（`gap`）ができ、
+   * ピン項目は開始を `max(積み上がり位置, at)` にする。前が余ればピン手前に空き時間ができ、
    * 前が押し込んでピン時刻を過ぎたら食い込み（`conflict`）として印を付ける（時刻は戻せないので積み上がり位置のまま置く）。
    * `totalMin` は空き時間を含めない所要合計、`endMin`/`endLabel` は空き時間を含む実際の終了。
+   *
+   * `rows` は **描画順の行列**で、項目行（`type:"item"`）と空き行（`type:"gap"`）が混ざる。空き時間を
+   * フラグではなく行として返すのは、差し込み位置の計算（直前終了時刻の持ち回り）が view に漏れないよう
+   * にするため（CONVENTIONS §1・logic＝計算 / view＝描画）。空き行は必ず項目行の手前にだけ現れるので、
+   * `rows` が空 ⇔ その日の項目が 0 件。
    * @param {string} date - 対象日（"YYYY-MM-DD"）
-   * @returns {{rows: {item: DailyItem, start: string, end: string, startMin: number, endMin: number,
-   *             pinned: boolean, gap: boolean, conflict: boolean}[],
-   *           totalMin: number, startMin: number, endMin: number, endLabel: string, overflow: boolean, hasConflict: boolean}}
-   *   rows＝各項目の時刻付き（pinned/gap/conflict の印）、totalMin＝所要合計、endLabel＝終了時刻、
-   *   overflow＝24時以降にはみ出すか、hasConflict＝いずれかの項目が固定時刻に食い込んだか
+   * @returns {{rows: ({type: "item", item: DailyItem, start: string, end: string, pinned: boolean, conflict: boolean}
+   *                  |{type: "gap", start: string, end: string, minutes: number})[],
+   *           totalMin: number, endMin: number, endLabel: string, overflow: boolean, hasConflict: boolean}}
+   *   rows＝描画順の行（項目行は pinned/conflict の印付き、空き行は空き分数付き）、totalMin＝所要合計、
+   *   endLabel＝終了時刻、overflow＝24時以降にはみ出すか、hasConflict＝いずれかの項目が固定時刻に食い込んだか
    */
   function schedule(date) {
-    const start = hhmmToMin(startTime());
-    let cur = start;
+    let cur = hhmmToMin(startTime());
     let workMin = 0; // 空き時間を含めない所要の合計（ピンで生じるギャップは「合計」に数えない）
-    const rows = dayItems(date).map((it) => {
+    const rows = [];
+    dayItems(date).forEach((it) => {
       const pin = isValidTime(it.at) ? hhmmToMin(it.at) : null;
-      let s = cur, gap = false, conflict = false;
+      let s = cur, conflict = false;
       if (pin != null) {
-        if (pin >= cur) { gap = pin > cur; s = pin; }  // 前が余ればピンまで空き（ちょうど一致ならギャップ無し）
-        else { conflict = true; }                       // 前が押し込んでピン時刻を過ぎた＝食い込み（s=cur のまま）
+        if (pin >= cur) s = pin;    // 前が余ればピンまで空く（ちょうど一致なら空き行は出ない）
+        else conflict = true;       // 前が押し込んでピン時刻を過ぎた＝食い込み（s=cur のまま）
       }
+      if (s > cur) rows.push({ type: "gap", start: minToHHMM(cur), end: minToHHMM(s), minutes: s - cur });
       const dur = normMinutes(it.minutes);
       const e = s + dur;
       workMin += dur;
       cur = e;
-      return { item: it, start: minToHHMM(s), end: minToHHMM(e), startMin: s, endMin: e, pinned: pin != null, gap, conflict };
+      rows.push({ type: "item", item: it, start: minToHHMM(s), end: minToHHMM(e), pinned: pin != null, conflict });
     });
     // ちょうど 24:00 で終わる場合は「またいで」いないので overflow ではない（超過のみ警告）。
-    return { rows, totalMin: workMin, startMin: start, endMin: cur, endLabel: minToHHMM(cur), overflow: cur > 24 * 60, hasConflict: rows.some((r) => r.conflict) };
+    return { rows, totalMin: workMin, endMin: cur, endLabel: minToHHMM(cur), overflow: cur > 24 * 60, hasConflict: rows.some((r) => r.conflict) };
   }
 
   // ---- HOME サマリー（spec §3.6） ----
