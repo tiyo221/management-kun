@@ -23,7 +23,7 @@
 - ID 採番・JSON 入出力・CSV・名寄せは `shared/` の共通実装を使い、各モジュールで再実装しない。
 
 ## ドキュメンテーション（JSDoc）
-- **logic 部分（`modules/<id>/logic.js` と `shared/*` のロジック）の公開関数には JSDoc を記述する。** logic は DOM に触れない純粋なデータ・計算層で仕様変更の起点になるため、引数・戻り値・副作用を型付きで明示する（AI 保守・サーバー移行の布石。[`CONVENTIONS.md`](CONVENTIONS.md) §1.4）。
+- **logic 部分（`modules/<id>/logic.js` と `shared/*` のロジック）の公開関数には JSDoc を記述する。** logic は DOM に触れない純粋なデータ・計算層で仕様変更の起点になるため、引数・戻り値・副作用を型付きで明示する（AI 保守。加えて、ドメイン規則を別 PJ へ取り出すときに JSDoc がその規則の記述になる。[`CONVENTIONS.md`](CONVENTIONS.md) §1.1.1）。
 - 最低限、`@param`（型と意味）・`@returns`（型と意味）を書く。副作用（`save` によるストア書き込み・`MK.people`/`MK.projects` 更新・`MK.bus` への emit 等）がある関数はその旨を1行で添える。
 - ドメインの形（レコードの構造）は `@typedef` で1回定義し、各関数から参照して重複を避ける。
 - view 部分は必須にしない（描画・イベントが主で、意図が非自明な箇所のみコメントで補う）。
