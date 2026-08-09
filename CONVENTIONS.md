@@ -12,9 +12,21 @@
 ### 1.1 原則
 各モジュールは **ロジック（logic）** と **描画（view）** を**別ファイル**に分ける。狙い:
 1. 触るファイルのスコープを狭め、保守性を上げる。
-2. 将来サーバー運用へ移す際、**logic＝サーバー寄り / view＝クライアント**として即分離できる。
+2. **ドメイン規則を view から独立させ、別プロジェクトへ取り出せる形に保つ**（以下「**取り出せる形に保つ**」。下記 §1.1.1）。
 
 > 共有層も同じ分離になっている（`store.js`/`io.js`/`people.js`/`projects.js` = ロジック、`ui.js`/`design.css` = 描画）。
+
+#### 1.1.1 「取り出せる形に保つ」（狙い 2）が意味すること ── 取り出せること ≠ 移送できること
+サーバー版は**本リポジトリを移送する方式を取らない**（別プロジェクトとして持つ・#310）。したがって狙いは「このコードをサーバーへ移送できること」ではなく、**ドメイン規則が view の中に埋もれず、独立して取り出せること**を指す。
+
+- **判定材料は2点だけ**:
+  - (1) DOM に触れない（下記 §1.3）。
+  - (2) 振る舞いがテストで期待値として固定されている。
+- **他の規則は別途遵守する。** 2点だけというのは「取り出せる形に保つ」を満たすかの**判定**の話であって、§1.3 のその他の規則（`MK.store` 経由のみ・`render` を呼ばない・JSDoc 等）や §1.4 の免除ではない。
+- **資すること ≠ 判定材料。** 例えば JSDoc は取り出す側が規則の記述として読むので狙いに資するが、充足判定は上の2点だけで行う。
+- **テスト可能性は狙いではなく手段。** DOM から切れているから node で叩け、node で叩けるからテストの期待値が別 PJ 側の受入条件として使える。
+- **logic の戻り値の形は制約しない。** 描画順の配列（例: `daily` の `schedule()` が空き行を含む行の並びを返す）でも規約違反ではない。「API の戻り値らしい形か」は取り出せるかどうかと無関係で、判定材料は上の2点に限る（Issue #263 / #310）。
+- **違反はその逆**、すなわちドメイン規則が view の描画ループの中にしか存在しない状態。取り出せないうえに node から観測できず、テストで固定することもできない（#263 以前の `daily` の空き時間算出がこれにあたる）。
 
 ### 1.2 ディレクトリ構成
 ```
@@ -29,7 +41,7 @@ modules/
 **logic.js（DOM に触れない）**
 - データ入出力は `MK.store.scope("module:<id>")` 経由のみ（`localStorage` 直叩き禁止）。
 - 計算・集計・バリデーション・CRUD・名寄せ呼び出し（`MK.people` / `MK.projects`）・CSV 行の整形/取込。
-- `document` / `window` / DOM API / `MK.ui` を**参照しない**（サーバーへ持って行ける純粋さを保つ）。
+- `document` / `window` / DOM API / `MK.ui` を**参照しない**（ドメイン規則を取り出せる状態に保つ・§1.1.1）。
 - 公開はオブジェクトで: `MK.logic = MK.logic || {}; MK.logic["<id>"] = { load, save, …計算/CRUD, exportData, importData, loadSample };`
 - **副作用は save まで。描画（`render`）は呼ばない**（描画は view の責務）。
 - **公開関数には JSDoc を付ける**（`@param`/`@returns`・副作用・`@typedef`。詳細は [`CODING.md`](CODING.md)）。
@@ -39,8 +51,8 @@ modules/
 - UI は **`shared/ui.js` のヘルパ**（§4）を使い、部品を自作しない。
 - `MK.registerModule("<id>", { title, icon, description, mount, unmount, exportData, importData, loadSample })` を定義。`exportData`/`importData`/`loadSample` は logic に委譲する。`description` は「何ができるか」の1行説明で、HOME が見取り図として描画する（spec §3.6 / Issue #40）。
 
-### 1.4 データ境界（サーバー移行の布石）
-- logic のデータアクセスは `store` 抽象の背後に閉じる。将来 `store` を API クライアントへ差し替えれば、view を変えずにサーバー化できる状態を保つ。
+### 1.4 データ境界（読み書き先を差し替えられる状態）
+- logic のデータアクセスは `store` 抽象の背後に閉じる。読み書き先が localStorage であることを logic の各所へ散らさず、`store` を差し替えれば view を変えずに保存先を変えられる状態を保つ（本リポジトリ自体のサーバー化は [`spec.md`](spec.md) §13 のとおりスコープ外。§1.1.1）。
 
 ---
 
@@ -132,7 +144,7 @@ modules/
 
 1. `modules/<id>/logic.js` を作成。配列キー1本なら `const { load, save } = MK.store.collection("module:<id>", { key, stamp });`（複数キー・fixup が要るなら `const store = MK.store.scope("module:<id>");` で始め load/save を自前で書く）。計算・CRUD・`exportData/importData/loadSample` を定義し、`MK.logic["<id>"] = {...}` で公開（DOM に触れない）。
 2. `modules/<id>/view.js` を作成。`const L = () => MK.logic["<id>"];`、`render()` を `MK.ui` ヘルパで組み、`MK.registerModule("<id>", { title, icon, description, mount, unmount, exportData:()=>L().exportData(), importData:(d,m)=>L().importData(d,m), loadSample:()=>L().loadSample() })`。`description` は「何ができるか」の1行説明（HOME が見取り図として描画・spec §3.6 / Issue #40）。
-3. [`shared/manifest.js`](shared/manifest.js): **モジュールの登録は原則ここ1か所**（Issue #137）。カタログ `CATALOG` に `<id>: {}`（空オブジェクト）を追加し（**カタログに無いモジュールはナビ・HOME に出ず、スクリプトも読み込まれない**）、既定（マネージャ全部入り）の `ZONES` の該当グループ（自分／ピープル／デリバリー…＝§1.4 の領域）に `<id>` を登録する。ゾーンが未定義なら新しいゾーンを追加する。ゾーンに出さないが実体だけ常に読み込みたい場合は `LOAD` に追加する（現状は該当なし）。これだけでエントリ HTML（index.html）の `<script>` 追記もゾーンの二重定義も不要（manifest が `logic→view→shell` を順序どおり動的読込し、shell.js の `META`／`DEFAULT_ZONES` も manifest を参照する）。表示メタ `title`／`icon`／`description` は **カタログに足さず def 側に持たせる**（シェルの `META` が def を単一ソースとして読む。重複ハードコード禁止・§3.6 / Issue #142・#40）。まだ def を書かない「準備中」モジュールを名前だけ先に出したいときのみ、カタログ値に `{ title, icon }` をフォールバックとして書く（def 実装時に空へ戻す）。
+3. [`shared/manifest.js`](shared/manifest.js): **モジュールの登録は原則ここ1か所**（Issue #137）。カタログ `CATALOG` に `<id>: {}`（空オブジェクト）を追加し（**カタログに無いモジュールはナビ・HOME に出ず、スクリプトも読み込まれない**）、既定（マネージャ全部入り）の `ZONES` の該当グループ（自分／ピープル／デリバリー…＝spec §1.4 の領域）に `<id>` を登録する。ゾーンが未定義なら新しいゾーンを追加する。ゾーンに出さないが実体だけ常に読み込みたい場合は `LOAD` に追加する（現状は該当なし）。これだけでエントリ HTML（index.html）の `<script>` 追記もゾーンの二重定義も不要（manifest が `logic→view→shell` を順序どおり動的読込し、shell.js の `META`／`DEFAULT_ZONES` も manifest を参照する）。表示メタ `title`／`icon`／`description` は **カタログに足さず def 側に持たせる**（シェルの `META` が def を単一ソースとして読む。重複ハードコード禁止・§3.6 / Issue #142・#40）。まだ def を書かない「準備中」モジュールを名前だけ先に出したいときのみ、カタログ値に `{ title, icon }` をフォールバックとして書く（def 実装時に空へ戻す）。
    - `MK_CONFIG.zones` を絞った配布用エントリ（現状は無し・spec §1.5）を将来足す場合のみ、そのエントリの `zones` にも `<id>` を足す（載せなければ配布物にコードもデータも含まれない）。マネージャ（[`index.html`](index.html)）は `zones` を宣言せず manifest 既定を使うため追記不要。
 4. 旧ツール移行が必要なら [`shared/shell-settings.js`](shared/shell-settings.js) の `migrateLegacy()` に分岐を、[`shared/shell-core.js`](shared/shell-core.js) の `LEGACY_KEYS` にキーを追加（シェルは責務別に分割済み・Issue #140）。
 5. `spec/modules/<id>.md` を既存モジュールと同じ体裁で作成し（位置づけ・**主操作**・共通マスタ関係・固有データ・CSV 列・旧データ移行・参照）、`## 主操作` には「一番多く繰り返す操作」を1つ書く（§2.5-1。**既存モジュールへの遡及記入は求めない** ── そのモジュールを触ったときに書き足す）。**[`spec.md`](spec.md) §5 のモジュール一覧表に行を追加する（モジュール id の列挙・CSV 対応の ✓ はここだけ・単一ソース）**。CSV に対応させたら §5 表の CSV 列を ✓ にする（`build…CSVRows` を実装したのに ✓ を付け忘れる／逆に外し忘れると [`test/spec-consistency.test.js`](test/spec-consistency.test.js) が失敗する。id 一覧は manifest カタログと突き合わせる）。**個別仕様の作成漏れ・§5 表からのリンク漏れ・md の相対リンク切れも同テストが検出する**（#241）。マスタ利用の有無に増減があれば [`spec/masters.md`](spec/masters.md) §4.4 の利用関係表も同期する。§3.2 / §4.1 / §4.2 / §4.6 / §6.4・README・CLAUDE.md は規則＋参照になっているため個別列挙の追記は不要（もし id や「CSV 対応＝○○」の列挙を見つけたら §5 への参照へ直す）。
