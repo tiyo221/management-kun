@@ -12,6 +12,8 @@
   let root = null;
   let productId = "all";
   let status = "all";
+  let listHost = null;             // 一覧の器（行単位の部分更新の対象。全再描画は render()）
+  const badges = ui.countBadges(); // ステータスタブの件数バッジ（行操作後に数字だけ差し替える・#299）
 
   function render() {
     if (!root) return;
@@ -42,52 +44,101 @@
     tabsBar.appendChild(pill("全て", "all", c.all));
     L().STATUSES.forEach((s) => tabsBar.appendChild(pill(s.label, s.key, c[s.key])));
 
-    const listHost = ui.card([], { flush: true });
+    listHost = ui.card([], { flush: true });
     renderList(listHost);
 
     root.appendChild(ui.stack([bar, filterBar, tabsBar, listHost]));
   }
 
   function pill(label, key, count) {
-    const b = el("button", { class: "pill-tab" + (status === key ? " active" : "") }, [
-      label + " ", el("span", { class: "badge badge-count", text: String(count || 0) }),
-    ]);
+    const b = el("button", { class: "pill-tab" + (status === key ? " active" : "") }, [label + " ", badges.make(key, count)]);
     b.addEventListener("click", () => { status = key; render(); });
     return b;
   }
 
-  function labelOf(statusKey) {
-    const s = L().STATUSES.find((x) => x.key === statusKey);
-    return s ? s.label : statusKey;
+  // 行が消えて0件になったら空状態を出す（listHost だけの更新＝スクロールは飛ばない）
+  function ensureNotEmpty() {
+    if (listHost && !listHost.querySelector(".mk-row")) renderList(listHost);
+  }
+
+  // 行内の変更後の後始末: 件数バッジを更新し、この行が今のプロダクトフィルタ／ステータスタブから
+  // 外れたら取り除く。タブ切替・フィルタ変更のような「画面の意味が変わる操作」は render() でよいが、
+  // インライン編集・ステータス変更は行だけ触る（CONVENTIONS §2.5-4）。
+  function afterRowChange(row, id) {
+    badges.refresh(L().counts(productId));
+    if (!L().timeline(productId, status).some((x) => x.id === id)) { row.remove(); ensureNotEmpty(); }
   }
 
   function renderList(host) {
     host.innerHTML = "";
     const list = L().timeline(productId, status);
-    if (!list.length) { host.appendChild(ui.emptyState("リリースがありません。「リリースを追加」から登録してください。")); return; }
+    if (!list.length) { host.appendChild(ui.emptyState(emptyMessage())); return; }
     const ul = el("ul", { class: "mk-list" });
     list.forEach((r) => ul.appendChild(itemRow(r)));
     host.appendChild(ul);
   }
 
+  // 「まだ無い」と「絞り込んだ結果0件」を区別する。ステータスを行内 select で変えるとその行が
+  // 今のタブから外れて0件になる経路（afterRowChange → ensureNotEmpty）が増えたため、一律
+  // 「リリースがありません」だと、消えたのではなく最初から無いように読めてしまう。
+  function emptyMessage() {
+    if (!L().counts("all").all) return "リリースがありません。「リリースを追加」から登録してください。";
+    return "条件に合うリリースはありません";
+  }
+
   function itemRow(r) {
+    const row = el("li", { class: "mk-row mk-row-dense" });
     const date = L().effectiveDate(r);
+
+    // ステータスは select が示すので chip では出さない（同じ情報を二重に置かない）
     const meta = [];
-    meta.push(el("span", { class: "chip", text: labelOf(r.status) }));
     meta.push(el("span", { class: "chip", text: "📦 " + (L().productName(r) || "（削除済みプロダクト）") }));
     if (r.plannedDate) meta.push(el("span", { class: "sub", text: "予定 " + r.plannedDate }));
     if (r.actualDate) meta.push(el("span", { class: "sub", text: "実施 " + r.actualDate }));
     if (r.note) meta.push(el("span", { class: "sub", text: r.note }));
 
+    // バージョン / 名称はインライン編集（Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）。
+    // 表記ゆれを直すために6項目のモーダルを開かせない。
+    const versionEdit = ui.inlineEdit({
+      value: r.version,
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("バージョン / 名称を入力してください", "error"); return false; } // 空は拒否＝元値へ
+        if (!L().updateRelease(r.id, { version: next })) return rejectStale(); // 消えていたら元値へ＋画面を合わせ直す
+        r.version = next; // logic が同じオブジェクトを更新済みで今は冗長。store のキャッシュ共有に
+                          // 依存せず、削除トーストが旧名を出さないようにする防御
+        return true; // 並びは effectiveDate 順で、名称では並べ替えないため行はその場に留まる（§2.5-4）
+      },
+    });
+
     const title = el("div", {}, [
       el("span", { class: "sub", text: (date || "日付未定") + "　" }),
-      el("span", { text: r.version }),
+      versionEdit,
     ]);
-    const grow = el("div", { class: "grow", style: "cursor:pointer;" }, [title, el("div", { class: "sub" }, meta)]);
-    grow.addEventListener("click", () => openEditor(r));
+    const grow = el("div", { class: "grow" }, [title, el("div", { class: "sub" }, meta)]);
 
-    return el("li", { class: "mk-row" }, [grow]);
+    // ステータスは行内 select。予定→完了と転がしていくのが運用中に最も繰り返す操作なので、
+    // モーダルの3番目の欄に埋めない（CONVENTIONS §2.5-2）。
+    const statusSel = ui.select(L().STATUSES.map((s) => ({ value: s.key, label: s.label })), r.status, (v) => {
+      if (!L().updateRelease(r.id, { status: v })) { rejectStale(); return; }
+      r.status = v;
+      // 表示日（effectiveDate）は予定日／実施日から決まるのでステータスでは動かない。
+      // ステータスタブで絞り込み中なら、外れた行を取り除いて件数バッジを更新する。
+      afterRowChange(row, r.id);
+    });
+    statusSel.classList.add("mk-row-control", "mk-row-select");
+    statusSel.title = "ステータスを変更";
+
+    // バージョンのクリックはインライン編集が取るため、モーダルへの導線は明示のボタンにする。
+    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "プロダクト・予定日・実施日・メモを編集", onClick: () => openEditor(r) });
+
+    [grow, statusSel, editBtn].forEach((n) => row.appendChild(n));
+    return row;
   }
+
+  // 掴んだ行の実体が別経路（CSV 取込・JSON 取込・同一タブの別画面での削除）で消えていたときの応答。
+  // 無言で元値へ戻すと「なぜか編集が効かない行」に見えるので、消えた事実を伝えて画面をストアへ
+  // 合わせ直す。onCommit へそのまま返せるよう false を返す。
+  function rejectStale() { MK.ui.toast("このリリースは見つかりません（削除された可能性があります）", "info"); render(); return false; }
 
   /**
    * リリースの追加/編集モーダルを開く。rel=null で新規追加。
@@ -135,8 +186,17 @@
         productId: f.productId.value, version, status: f.status.value,
         plannedDate: f.plannedDate.value, actualDate: f.actualDate.value, note: f.note.value,
       };
-      if (isNew) L().addRelease(attrs); else L().updateRelease(rel.id, attrs);
-      close(); render();
+      const saved = isNew ? L().addRelease(attrs) : L().updateRelease(rel.id, attrs);
+      close();
+      // 保存した1件が絞り込みから外れるなら、絞り込みをその1件へ寄せてから描き直す
+      // （CONVENTIONS §2.5-2）。releases は techstack / questions と違い**投入先がモーダルで選べる**
+      // ので、寄せ先は固定値ではなく「保存した値」になる。寄せないと、「予定」タブを開いたまま
+      // 完了で追加した／別プロダクトへ付け替えた行が、保存できているのに一覧から消える。
+      if (saved && !L().timeline(productId, status).some((x) => x.id === saved.id)) {
+        productId = saved.productId;
+        status = saved.status;
+      }
+      render();
     } });
 
     MK.ui.modal({ title: isNew ? "リリースを追加" : "リリースを編集", body, actions });
@@ -147,7 +207,9 @@
     icon: "🚀",
     description: "リリースの予定と実績を管理する",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    unmount() { root = null; },
+    // listHost / バッジとも手放す。残すと、インライン編集中にモジュールを切り替えたときに blur の
+    // 確定が afterRowChange を通り、画面に無い器・デタッチ済みのバッジへ書き込んでしまう。
+    unmount() { root = null; listHost = null; badges.clear(); },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
     exportData() { return L().exportData(); },

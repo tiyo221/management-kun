@@ -81,11 +81,29 @@
     }
     if (m.note) meta.push(el("span", { class: "sub", text: m.note }));
 
-    const title = el("div", {}, [el("span", { text: m.name })]);
+    // 指標名はインライン編集（Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）。微修正のために
+    // 7項目のモーダルを開かせない。種別・単位・方向・目標値・親指標は互いに絡む（方向と目標値で
+    // 達成判定が決まり、親指標は循環チェックが要る）のでモーダル継続。
+    const nameEdit = ui.inlineEdit({
+      value: m.name,
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("指標名を入力してください", "error"); return false; } // 空は拒否＝元値へ
+        if (!L().updateMetric(m.id, { name: next })) { // 消えていたら元値へ＋画面をストアへ合わせ直す
+          MK.ui.toast("この指標は見つかりません（削除された可能性があります）", "info");
+          render();
+          return false;
+        }
+        m.name = next; // logic が同じオブジェクトを更新済みで今は冗長。store のキャッシュ共有に
+                       // 依存せず、削除トーストが旧名を出さないようにする防御
+        return true; // 木（tree）の並びも親子関係も指標名では変わらないので、行はその場で完結（§2.5-4）
+      },
+    });
+    const title = el("div", {}, [nameEdit]);
     // depth ぶんインデントして KGI→NSM→KPI の階層を視認できるようにする（14px/段。wbs のツリーと同じ流儀）。
-    const grow = el("div", { class: "grow", style: "cursor:pointer;padding-left:" + (depth * 14) + "px;" }, [title, el("div", { class: "sub" }, meta)]);
-    grow.addEventListener("click", () => openEditor(m));
-    return el("li", { class: "mk-row" }, [grow]);
+    const grow = el("div", { class: "grow", style: "padding-left:" + (depth * 14) + "px;" }, [title, el("div", { class: "sub" }, meta)]);
+    // 指標名のクリックはインライン編集が取るため、モーダルへの導線は明示のボタンにする。
+    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "種別・単位・方向・目標値・親指標・メモ・実績を編集", onClick: () => openEditor(m) });
+    return el("li", { class: "mk-row mk-row-dense" }, [grow, editBtn]);
   }
 
   function kindLabel(kind) { const k = L().KINDS.find((x) => x.key === kind); return k ? k.label : kind; }
