@@ -111,8 +111,20 @@
   function actionRow(entry, action, head, ul, card) {
     const meta = [el("span", { class: "sub", text: entry.date })];
     if (action.due) meta.push(el("span", { class: "chip", text: "〜" + action.due }));
+    // アクションの文言はインライン編集（Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）。このカードは
+    // 「いま追いかけている約束」の一覧で微修正の頻度が高いのに、記録編集モーダルの奥にしか手が無かった。
+    // 期限（due）と記録本体（実施日・本文・温度感）はモーダル継続。
+    const textEdit = ui.inlineEdit({
+      value: action.text,
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("アクションを入力してください", "error"); return false; } // 空は拒否＝元値へ
+        if (!L().updateAction(entry.id, action.id, { text: next })) return false; // 別経路で消えていたら元値へ
+        action.text = next; // 行が握るのは描画時のスナップショット
+        return true; // 未完のままなので行はこの場に残る。タイムラインの表示（本文冒頭・未完件数）も変わらない
+      },
+    });
     const info = el("div", { class: "grow" }, [
-      el("div", { text: action.text }),
+      textEdit,
       el("div", { class: "sub" }, meta),
     ]);
     const cb = ui.checkbox(action.done);

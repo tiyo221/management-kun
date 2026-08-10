@@ -66,7 +66,19 @@
     const meta = [];
     if (s.core) meta.push("コア");
     if (s.core && s.targetLevel != null) meta.push("目標Lv" + s.targetLevel + "×" + (s.requiredCount != null ? s.requiredCount : "?") + "人");
-    const info = el("div", { class: "grow" }, [el("div", { text: s.item || "(中分類なし)" }), el("div", { class: "sub", text: [s.description, meta.join(" / ")].filter(Boolean).join("　") })]);
+    // スキル項目名（中分類）はインライン編集（Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）。
+    // 誤字直しのために7項目のモーダルを開かせない。大分類・小分類・コア関連は「編集」モーダルに残す。
+    const nameEdit = ui.inlineEdit({
+      value: s.item,
+      placeholder: "(中分類なし)",
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("中分類（スキル項目）を入力してください", "error"); return false; } // 空は拒否＝元値へ
+        L().updateSkill(s.id, { item: next });
+        s.item = next; // 行が握るのは描画時のスナップショット。削除トーストが旧名を出さないよう揃える
+        return true; // 一覧は大分類で束ねるだけで項目名では並べ替えないため、行はその場に留まる（§2.5-4）
+      },
+    });
+    const info = el("div", { class: "grow" }, [nameEdit, el("div", { class: "sub", text: [s.description, meta.join(" / ")].filter(Boolean).join("　") })]);
     return el("div", { class: "skill-list-item" }, [
       labeled("表示", visChk), labeled("コア", coreChk), info,
       ui.button("編集", { variant: "btn-ghost", onClick: () => editSkill(s) }),

@@ -47,6 +47,24 @@ test("oneonone: 未完アクションの集計と toggle", (MK) => {
   eq(O.openActionCount(), 1);
 });
 
+test("oneonone: updateAction は該当アクションだけ部分更新し、無い id では false", (MK) => {
+  // 観点: 未完アクションの行内編集（文言の直し）が、他のアクション・エントリ本体を巻き込まないこと。
+  // 入力: actions=[A(due あり), B] のエントリで A の text だけ更新。続けて無いエントリ/アクションを指定
+  // 期待: A の text だけ変わり due・done と B は不変。存在しない id では false で何も変えない
+  const O = MK.logic.oneonone;
+  const e = O.addEntry({ memberId: "m1", date: "2026-07-01", body: "b", actions: [{ text: "A", due: "2026-07-10" }, { text: "B" }] });
+  const a = e.actions.find((x) => x.text === "A");
+  eq(O.updateAction(e.id, a.id, { text: "A2" }), true);
+  const got = O.entriesOf("m1")[0];
+  eq(got.actions[0].text, "A2");
+  eq(got.actions[0].due, "2026-07-10");
+  eq(got.actions[0].done, false);
+  eq(got.actions[1].text, "B");
+  eq(O.updateAction("no-entry", a.id, { text: "X" }), false);
+  eq(O.updateAction(e.id, "no-action", { text: "X" }), false);
+  eq(O.entriesOf("m1")[0].actions[0].text, "A2");
+});
+
 test("oneonone: updateEntry は部分更新＋actions 正規化、removeEntry で削除", (MK) => {
   // 観点: body/mood を更新できる。actions を渡すと再正規化。削除で消える。
   // 入力: body="old" のエントリを updateEntry で body/mood/actions=[{X},{空}] に更新後、removeEntry
