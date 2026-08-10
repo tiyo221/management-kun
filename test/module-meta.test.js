@@ -19,11 +19,11 @@ const MODULES = ZONE_MODULE_IDS.filter((id) =>
 // 必ず test() の中で落とす。
 test("meta: 走査対象のモジュールが揃っている（空ループで緑にしない・#312）", () => {
   // 観点: MODULES はマニフェスト由来なので、導出が壊れると以下3テストが全部「空ループで緑」になる。
-  // 入力: ゾーンに載る id と、そのうち view.js を持つもの
-  // 期待: 両者が一致する（＝準備中の id がゼロ）。ずれたら導出の破損か view.js の欠落。
-  eq(MODULES.length, ZONE_MODULE_IDS.length,
-    "ゾーンに載る id と view.js を持つ id が一致しない: " +
-      ZONE_MODULE_IDS.filter((id) => MODULES.indexOf(id) < 0).join(", "));
+  // 入力: ゾーンに載る id のうち view.js を持つもの
+  // 期待: 十分な数が残っている。**「ゾーンに載る id と一致すること」は要求しない** ──
+  //   カタログに登録済みで def 未実装の「準備中」は CONVENTIONS §5 手順3 / spec §3.6 が
+  //   正式にサポートする状態で、それを1件足した瞬間に落ちる番人は規約と矛盾する。
+  assert(MODULES.length >= 10, "走査対象のモジュールが減っている（導出の破損を疑う）: " + MODULES.length);
 });
 
 // 各 view.js を読み込んで MK.modules に def（title/icon/description）を揃える。

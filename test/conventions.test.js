@@ -152,13 +152,20 @@ function scanTemplate(src, i, emit) {
 function endOfSubstitution(src, i) {
   let depth = 0;
   let j = i;
+  let prev = "";
   while (j < src.length) {
     const c = src[j];
     if (c === "}" && depth === 0) return j;
-    if (c === "{") depth++;
-    else if (c === "}") depth--;
-    else if (c === '"' || c === "'") { j = endOfQuoted(src, j); continue; }
-    else if (c === "`") { j = scanTemplate(src, j, () => {}); continue; }
+    if (c === "{") { depth++; }
+    else if (c === "}") { depth--; }
+    else if (c === '"' || c === "'") { j = endOfQuoted(src, j); prev += "x"; continue; }
+    else if (c === "`") { j = scanTemplate(src, j, () => {}); prev += "x"; continue; }
+    // 置換式の中の正規表現も飛ばす（`${s.replace(/}/g, "")}` で終端を見誤らないため。
+    // 文字列とテンプレートだけ飛ばして正規表現を素通りさせると、そこだけ非対称になる）。
+    else if (c === "/" && src[j + 1] !== "/" && src[j + 1] !== "*" && isRegexStart(prev)) {
+      j = endOfRegex(src, j); prev += "x"; continue;
+    }
+    prev += c;
     j++;
   }
   return j;
@@ -293,6 +300,8 @@ test("codeOf(): 走査対象が痩せていない（無効化の番人・#312）
   //   分母を素のソースにするとコメントの厚いファイルが 44% まで落ちて閾値を張れない。
   //   一方、誤読は「そこから先を全部文字列として飲む」形で出る ── text は残るが code だけが
   //   消えるので、この比なら急落する（実測の下限は 80%＝ view.js 群）。
+  //   落ちたときは2通りを疑う: (a) split の誤読（比が数%まで落ちる）、(b) 文字列・テンプレートの
+  //   比重が極端に高い新しい view（60〜80% を下回る）。後者なら閾値の側を実測で引き直す。
   const files = moduleFiles("logic").concat(moduleFiles("view"));
   assert(files.length >= 20, "走査対象が十分ある: " + files.length);
   files.forEach((f) => {
@@ -336,10 +345,16 @@ test("§1.3: logic の store 名前空間が自分の `module:<id>` に閉じて
   //   判定する（接頭辞さえ自分のものなら、後ろに何を継いでも他の領域へは出られない）。
   //   先頭がリテラルでない（丸ごと変数渡し）ものは黙って対象外にせず「検査不能」として落とす
   //   ── 静かな抜け道になるため、通したくなったらこの検査の側を直す。
+  //   走査は `MK.store.scope(` というリテラル形にしか当たらないので、**呼び出しを1件も拾えなかった
+  //   のに MK.store を参照している** logic も違反として積む（分割代入や別名経由へ書き換えられると
+  //   「呼び出しゼロ＝違反ゼロ」で黙って緑になるため）。
   const bad = [];
   moduleFiles("logic").forEach((f) => {
     const text = textOf(read(f.rel));
     const re = /MK\.store\.(?:scope|collection)\(\s*([^,)]*)/g;
+    if (/\bMK\.store\b/.test(codeOf(read(f.rel))) && !/MK\.store\.(?:scope|collection)\(/.test(text)) {
+      bad.push(f.rel + " → MK.store を参照しているが scope/collection の呼び出しを検出できない");
+    }
     let m;
     while ((m = re.exec(text))) {
       const arg = m[1].trim();
