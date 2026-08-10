@@ -129,13 +129,22 @@
    */
   function addSkill(attrs) { const d = load(); d.skills.push(Object.assign({ id: MK.util.uid("sk"), domain: "", item: "", description: "", visible: true, core: false, targetLevel: null, requiredCount: null }, attrs || {})); save(d); }
   /**
-   * 指定スキルを部分更新して保存する。該当なしなら何も変更しない。
+   * 指定スキルを部分更新して保存する。該当なしなら何も変更せず保存もしない。
    * @param {string} id - 対象スキルID
    * @param {Partial<Skill>} patch - 上書きするフィールド
-   * @returns {void}
-   * ※ store へ保存する副作用あり。
+   * @returns {boolean} 更新したら true、その id が無ければ false（何も変えない）
+   *   ── view はこの戻り値で行内編集の確定を受け入れるか決める（`removeSkill` と同じ契約）。
+   *   空振りで保存すると、別タブ・別経路の変更を読み込み直した内容で巻き戻しかねない。
+   * ※ 更新できたときのみ store へ保存する副作用あり。
    */
-  function updateSkill(id, patch) { const d = load(); const s = d.skills.find((x) => x.id === id); if (s) Object.assign(s, patch); save(d); }
+  function updateSkill(id, patch) {
+    const d = load();
+    const s = d.skills.find((x) => x.id === id);
+    if (!s) return false;
+    Object.assign(s, patch);
+    save(d);
+    return true;
+  }
   /**
    * 指定スキルを削除し、関連する評価も併せて削除して保存する。取り消し用に「消したスキル＋元の位置
    * ＋一緒に消した評価」を退避する（{@link undoDelete}）。

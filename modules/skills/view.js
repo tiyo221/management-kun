@@ -73,7 +73,7 @@
       placeholder: "(中分類なし)",
       onCommit: (next) => {
         if (!next) { MK.ui.toast("中分類（スキル項目）を入力してください", "error"); return false; } // 空は拒否＝元値へ
-        L().updateSkill(s.id, { item: next });
+        if (!L().updateSkill(s.id, { item: next })) return false; // 別経路で消えていたら元値へ
         s.item = next; // 行が握るのは描画時のスナップショット。削除トーストが旧名を出さないよう揃える
         return true; // 一覧は大分類で束ねるだけで項目名では並べ替えないため、行はその場に留まる（§2.5-4）
       },

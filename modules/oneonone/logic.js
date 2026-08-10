@@ -229,7 +229,9 @@
    * （view が entries() を直接書き換えないため。CONVENTIONS §1 / §2.5-2）。
    * @param {string} entryId - 対象エントリID
    * @param {string} actionId - 対象アクションID
-   * @param {{text?: string, done?: boolean, due?: (string|null)}} patch - 変更する項目だけを含むオブジェクト
+   * @param {{text?: string, done?: boolean, due?: (string|null)}} patch - 変更する項目だけを含むオブジェクト。
+   *   `updateEntry` と違い `normalizeActions` を通さないので、trim と「text を空にしない」は呼び出し側が持つ
+   *   （必須項目の拒否は view に置く。CONVENTIONS §2.5-2）。
    * @returns {boolean} 更新したら true、エントリまたはアクションが無ければ false（何も変えない）
    * ※ 更新できたときのみ store へ保存する副作用あり。
    */
