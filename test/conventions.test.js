@@ -17,11 +17,74 @@ function read(rel) {
   return fs.readFileSync(path.join(rootDir, rel), "utf8");
 }
 
-/** モジュールの logic.js / view.js の相対パス一覧（id 順）。 */
+/** モジュールの logic.js / view.js の相対パス一覧（id 順）。存在しないものは含めない。 */
 function moduleFiles(kind) {
   return ALL_MODULE_IDS.map((id) => ({ id, rel: "modules/" + id + "/" + kind + ".js" }))
     .filter((f) => fs.existsSync(path.join(rootDir, f.rel)));
 }
+
+/* 検出器の定義。**トリップワイヤ（発火確認）と本番の走査は必ずここを共有する。**
+   同じ正規表現をテスト側へ書き写すと、枝を足すたびに「本番にはあるが発火確認されていない枝」が
+   静かに増える（実際 cssText / setProperty と window.confirm( の枝がそうなっていた・#312 レビュー）。
+
+   - `files` … "logic" / "view" / "both"（走査対象の種類）
+   - `on`    … "code"（文字列の中身も落とす）/ "text"（コメントだけ落とす。リテラルを見る検査）
+   - `fires` / `passes` … 発火確認用の合成スニペット（違反する書き方／違反ではない対照）。 */
+const DETECTORS = {
+  dom: {
+    files: "logic", on: "code",
+    re: /\bdocument\b|\bMK\.ui\b|\bwindow\.(?!MK\b)/,
+    fires: ["const d = document.body;", "MK.ui.toast(1);", "window.foo = 1;"],
+    passes: ["const MK = window.MK;"],
+  },
+  localStorage: {
+    files: "logic", on: "code",
+    re: /\blocalStorage\b/,
+    fires: ["localStorage.getItem(k);"],
+    passes: ["MK.store.scope(ns);"],
+  },
+  render: {
+    files: "logic", on: "code",
+    re: /\brender\s*\(/,
+    fires: ["render();"],
+    passes: ["renderer.x();"],
+  },
+  scopeDim: {
+    files: "both", on: "text",
+    re: /\w*(?:dim|scope)\w*\s*[=!]==\s*["'`]project["'`]|["'`]project["'`]\s*[=!]==\s*\w*(?:dim|scope)\w*/i,
+    fires: ['if (dim === "project") {}', 'if (a.scopeAttr !== "project") {}'],
+    passes: ['const dim = d || "project";', 'if (sort === "project") {}'],
+  },
+  spacing: {
+    files: "both", on: "text",
+    re: /style\s*=\s*["'`][^"'`]*(?:margin|padding)|\.style\.(?:margin|padding)|cssText[^\n]*(?:margin|padding)|setProperty\(\s*["'`](?:margin|padding)/,
+    fires: [
+      "el.style.marginTop = 4;",
+      'h = `<div style="margin:2px">`;',
+      'el.style.cssText = "margin:0;padding:0";',
+      'el.style.setProperty("padding", "0");',
+    ],
+    passes: ["el.style.width = 4;", 'h = `<div class="mk-stack">`;'],
+  },
+  color: {
+    files: "both", on: "text",
+    re: /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b|\b(?:rgba?|hsla?)\s*\(\s*(?!var\()/,
+    fires: ['el.style.color = "#ff0000";', 'const c = "rgba(0,0,0,.3)";'],
+    passes: ['const c = "rgba(var(--color-primary-rgb), .3)";', 'const c = "var(--color-primary)";'],
+  },
+  dialog: {
+    files: "both", on: "code",
+    re: /(?:\b(?:window|globalThis|self)\.|(?<![.\w]))(?:confirm|alert|prompt)\s*\(/,
+    fires: ["confirm(1);", "window.confirm(1);", "globalThis.alert(1);", "self.prompt(1);"],
+    passes: ["MK.ui.confirm(1);", "ui.confirm(1);"],
+  },
+  undoToast: {
+    files: "view", on: "code",
+    re: /(?<!Delete)\bundoToast\s*\(/,
+    fires: ["MK.ui.undoToast(m, fn);"],
+    passes: ["MK.ui.undoDeleteToast(m, fn);"],
+  },
+};
 
 /* 走査の下ごしらえ。ソースを1回だけ舐めて2つの見え方を同時に作る。行番号と桁を保つため、
    落とす文字は空白へ置き換える（改行は残す）。
@@ -184,19 +247,36 @@ function hits(rel, code, re) {
   return found;
 }
 
-/** 全ファイルのコード部分（文字列の中身も落とす）を走査して違反箇所を集める。 */
-function scan(files, re) {
+/** DETECTORS の1つを走らせて違反箇所（`rel:line`）を集める。走査対象と見え方は定義側が持つ。 */
+function detect(name) {
+  const d = DETECTORS[name];
+  assert(d, "未定義の検出器: " + name);
+  const files = d.files === "both"
+    ? moduleFiles("logic").concat(moduleFiles("view"))
+    : moduleFiles(d.files);
   const out = [];
-  files.forEach((f) => { out.push(...hits(f.rel, codeOf(read(f.rel)), re)); });
+  files.forEach((f) => {
+    const src = read(f.rel);
+    out.push(...hits(f.rel, d.on === "text" ? textOf(src) : codeOf(src), d.re));
+  });
   return out;
 }
 
-/** 全ファイルのコメント以外（文字列の中身は残す）を走査して違反箇所を集める。 */
-function scanText(files, re) {
-  const out = [];
-  files.forEach((f) => { out.push(...hits(f.rel, textOf(read(f.rel)), re)); });
-  return out;
-}
+// ---- 走査対象の番人（ここが痩せると、以下の検査が黙って全部通る） ----
+
+test("走査対象のファイルが欠けていない（静かに検査から外れない・#312）", () => {
+  // 観点: moduleFiles() は存在しないファイルを黙って落とすので、logic.js が消えた／改名された
+  //       モジュールは logic 系の全検査から静かに外れる。種類ごとに欠落を違反として出す。
+  //       合計での下限（logic＋view で 20 以上）では logic.js が4本消えても通ってしまう。
+  // 入力: マニフェストのカタログに載る全モジュール id
+  // 期待: 各 id に logic.js と view.js の両方がある
+  ["logic", "view"].forEach((kind) => {
+    const have = moduleFiles(kind).map((f) => f.id);
+    eq(ALL_MODULE_IDS.filter((id) => have.indexOf(id) < 0), [],
+      "カタログにあるのに modules/<id>/" + kind + ".js が無い");
+  });
+  assert(ALL_MODULE_IDS.length >= 10, "カタログのモジュールが減っている: " + ALL_MODULE_IDS.length);
+});
 
 // ---- codeOf 自体の検査（この土台が壊れると、以下の検査が黙って全部通る） ----
 
@@ -263,33 +343,20 @@ test("split(): テンプレートリテラルの ${…} はコードとして残
 
 test("検出器が実際に違反へ当たる（無検出で緑になる罠を塞ぐ・#312）", () => {
   // 観点: 走査の正規表現が何かの拍子に何にも当たらなくなると、規約検査が全部素通りで緑になる。
-  //       各検出器へ「必ず違反」のソースを1本ずつ通して、当たることと当たらない書き方を固定する。
-  // 入力: 合成した違反スニペットと、違反でない対照
-  // 期待: 違反側だけがヒットする
-  const fire = (re, src, prep) => (prep || codeOf)(src).split("\n").some((l) => { re.lastIndex = 0; return re.test(l); });
-  assert(fire(/\bdocument\b|\bMK\.ui\b|\bwindow\.(?!MK\b)/, "const d = document.body;"), "DOM 参照を検出");
-  assert(!fire(/\bdocument\b|\bMK\.ui\b|\bwindow\.(?!MK\b)/, "const MK = window.MK;"), "window.MK 受けは違反にしない");
-  assert(fire(/\blocalStorage\b/, "localStorage.getItem(k);"), "localStorage 直叩きを検出");
-  assert(fire(/\brender\s*\(/, "render();"), "render 呼び出しを検出");
-  const proj = /\w*(?:dim|scope)\w*\s*[=!]==\s*["'`]project["'`]|["'`]project["'`]\s*[=!]==\s*\w*(?:dim|scope)\w*/i;
-  assert(fire(proj, 'if (dim === "project") {}', textOf), "決め打ち分岐を検出");
-  assert(fire(proj, 'if (a.scopeAttr !== "project") {}', textOf), "属性名でも検出");
-  assert(!fire(proj, 'const dim = d || "project";', textOf), "既定値は違反にしない");
-  assert(!fire(proj, 'if (sort === "project") {}', textOf), "並び順キーは違反にしない");
-  const sp = /style\s*=\s*["'`][^"'`]*(?:margin|padding)|\.style\.(?:margin|padding)/;
-  assert(fire(sp, "el.style.marginTop = 4;", textOf), "style.margin 代入を検出");
-  assert(fire(sp, 'h = `<div style="margin:2px">`;', textOf), "テンプレート内の style 属性を検出");
-  const color = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b|\b(?:rgba?|hsla?)\s*\(\s*(?!var\()/;
-  assert(fire(color, 'el.style.color = "#ff0000";', textOf), "16進カラーを検出");
-  assert(fire(color, 'const c = "rgba(0,0,0,.3)";', textOf), "rgba の直書きを検出");
-  assert(!fire(color, 'const c = "rgba(var(--color-primary-rgb), .3)";', textOf), "トークン経由の rgba は違反にしない");
-  assert(!fire(color, 'const c = "var(--color-primary)";', textOf), "var 参照は違反にしない");
-  const dlg = /(?<![.\w])(?:confirm|alert|prompt)\s*\(/;
-  assert(fire(dlg, "confirm(1);"), "ネイティブ confirm を検出");
-  assert(!fire(dlg, "MK.ui.confirm(1);"), "MK.ui.confirm は違反にしない");
-  const ut = /(?<!Delete)\bundoToast\s*\(/;
-  assert(fire(ut, "MK.ui.undoToast(m, fn);"), "undoToast 直呼びを検出");
-  assert(!fire(ut, "MK.ui.undoDeleteToast(m, fn);"), "undoDeleteToast は違反にしない");
+  //       **DETECTORS を本番の走査と共有して**回すのが肝で、ここへ正規表現を書き写すと、枝を
+  //       足すたびに「本番にはあるが発火確認されていない枝」が静かに増える（#312 レビュー）。
+  // 入力: 各検出器の fires（必ず違反）と passes（違反ではない対照）
+  // 期待: fires は全部ヒットし、passes は1つもヒットしない
+  const prep = { code: codeOf, text: textOf };
+  const fires = (d, src) => prep[d.on](src).split(/\r?\n/).some((l) => { d.re.lastIndex = 0; return d.re.test(l); });
+  const names = Object.keys(DETECTORS);
+  assert(names.length >= 8, "検出器が減っている: " + names.length);
+  names.forEach((name) => {
+    const d = DETECTORS[name];
+    assert(d.fires.length > 0, name + " に発火確認のスニペットが無い");
+    d.fires.forEach((s) => assert(fires(d, s), name + " が違反を検出できない: " + s));
+    (d.passes || []).forEach((s) => assert(!fires(d, s), name + " が違反でない書き方に誤爆する: " + s));
+  });
 });
 
 test("codeOf(): 走査対象が痩せていない（無効化の番人・#312）", () => {
@@ -319,22 +386,21 @@ test("§1.3: logic が DOM / document / MK.ui を参照しない（#312）", () 
   // 観点: ドメイン規則を取り出せる形に保つ判定材料 (1)（§1.1.1）。DOM から切れているから node で叩ける。
   // 入力: 全モジュールの logic.js のコード部分
   // 期待: document / MK.ui / window（先頭の `window.MK` 受けを除く）への参照がゼロ
-  const bad = scan(moduleFiles("logic"), /\bdocument\b|\bMK\.ui\b|\bwindow\.(?!MK\b)/);
-  eq(bad, [], "logic が DOM を参照している");
+  eq(detect("dom"), [], "logic が DOM を参照している");
 });
 
 test("§1.3: logic が localStorage を直叩きしない（MK.store 経由・#312）", () => {
   // 観点: 読み書き先を差し替えられる状態を保つ（§1.4）。store 抽象の背後に閉じる。
   // 入力: 全モジュールの logic.js のコード部分（説明文の localStorage は codeOf が落とす）
   // 期待: localStorage への参照がゼロ
-  eq(scan(moduleFiles("logic"), /\blocalStorage\b/), [], "logic が localStorage を直叩きしている");
+  eq(detect("localStorage"), [], "logic が localStorage を直叩きしている");
 });
 
 test("§1.3: logic が render を呼ばない（描画は view の責務・#312）", () => {
   // 観点: logic の副作用は save まで。描画を呼ぶと view から切り離せなくなる。
   // 入力: 全モジュールの logic.js のコード部分
   // 期待: render( / render() の呼び出しがゼロ
-  eq(scan(moduleFiles("logic"), /\brender\s*\(/), [], "logic が render を呼んでいる");
+  eq(detect("render"), [], "logic が render を呼んでいる");
 });
 
 test("§1.3: logic の store 名前空間が自分の `module:<id>` に閉じている（#312）", () => {
@@ -376,9 +442,7 @@ test("§3: スコープ次元を `\"project\"` で決め打ち分岐していな
   //   既定値（`d || "project"`）・属性値（`dim: "project"`）は分岐ではないので対象外。
   //   `sort === "project"`（並び順キー）のような同名の別概念に当てないため、左辺は dim / scope 名に限る。
   //   ※ 決め打ちの形はこれだけではない。この検査は代表形のトリップワイヤで、規約そのものは §3 / spec §3.7.6。
-  const files = moduleFiles("logic").concat(moduleFiles("view"));
-  const bad = scanText(files, /\w*(?:dim|scope)\w*\s*[=!]==\s*["'`]project["'`]|["'`]project["'`]\s*[=!]==\s*\w*(?:dim|scope)\w*/i);
-  eq(bad, [], "次元を決め打ち分岐している");
+  eq(detect("scopeDim"), [], "次元を決め打ち分岐している");
 });
 
 // ---- §2.1 余白 / §2.3 ダイアログ / §2.5-3 undo ----
@@ -389,9 +453,7 @@ test("§2.1: モジュールに余白のインライン直書きが無い（#312
   // 期待: margin / padding のインライン指定がゼロ
   // ※ style 属性はテンプレートリテラルの中に書けるので textOf（コメントだけ落とす）で走査する。
   //   `style.margin` の直代入だけでなく `cssText` / `setProperty("margin"…)` の迂回路も見る。
-  const files = moduleFiles("logic").concat(moduleFiles("view"));
-  const bad = scanText(files, /style\s*=\s*["'`][^"'`]*(?:margin|padding)|\.style\.(?:margin|padding)|cssText[^\n]*(?:margin|padding)|setProperty\(\s*["'`](?:margin|padding)/);
-  eq(bad, [], "余白をインラインで直書きしている");
+  eq(detect("spacing"), [], "余白をインラインで直書きしている");
 });
 
 test("§2.1: 色をトークン経由で指定している（値の直書きが無い・#312）", () => {
@@ -402,9 +464,7 @@ test("§2.1: 色をトークン経由で指定している（値の直書きが�
   //   `rgba(var(--color-primary-rgb), .3)` のように**チャンネルをトークンから取る**書き方は
   //   トークン経由なので違反にしない（skills の評価セルが実際にこの形）。
   //   コメント中の Issue 番号（`#213` = 3桁16進に見える）は textOf が落とす。
-  const files = moduleFiles("logic").concat(moduleFiles("view"));
-  const bad = scanText(files, /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b|\b(?:rgba?|hsla?)\s*\(\s*(?!var\()/);
-  eq(bad, [], "色を直書きしている（var(--token) を使う）");
+  eq(detect("color"), [], "色を直書きしている（var(--token) を使う）");
 });
 
 test("§2.3: ネイティブ confirm / alert / prompt を使っていない（#312）", () => {
@@ -413,16 +473,14 @@ test("§2.3: ネイティブ confirm / alert / prompt を使っていない（#3
   // 期待: MK.ui 経由でない confirm( / alert( / prompt( がゼロ。
   //   `window.` / `globalThis.` / `self.` を前置した呼び方も同じネイティブ呼び出しなので違反にする
   //   （logic は window 検査で塞がるが view.js は素通りしていた）。
-  const files = moduleFiles("logic").concat(moduleFiles("view"));
-  const bad = scan(files, /(?:\b(?:window|globalThis|self)\.|(?<![.\w]))(?:confirm|alert|prompt)\s*\(/);
-  eq(bad, [], "ネイティブダイアログを使っている");
+  eq(detect("dialog"), [], "ネイティブダイアログを使っている");
 });
 
 test("§2.5-3: view が undoToast を直呼びせず undoDeleteToast を使う（#312）", () => {
   // 観点: 削除の取り消しは定型（失敗文言・Ctrl+Z の到達性）を undoDeleteToast に1本化する。
   // 入力: 全モジュールの view.js のコード部分
   // 期待: `undoToast(` の直呼びがゼロ（`undoDeleteToast(` は別語なので当たらない）
-  eq(scan(moduleFiles("view"), /(?<!Delete)\bundoToast\s*\(/), [], "undoToast を直呼びしている");
+  eq(detect("undoToast"), [], "undoToast を直呼びしている");
 });
 
 test("§2.5-3: undo 退避を持つ logic に forgetUndo がある（#312）", () => {
