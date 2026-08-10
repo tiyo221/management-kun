@@ -60,15 +60,18 @@
 
   function skillRow(s) {
     // 行内の3つの編集口（表示・コア・スキル項目名）はどれも updateSkill の戻り値を見る。false＝
-    // その id がもう無い（別経路で削除された行を掴んだまま操作した）ので、見た目だけ変えて store と
-    // 食い違わせない。チェックボックスは押した状態を押し戻す。
+    // その id がもう無い（別経路 ── CSV 取込・別タブ・JSON 取込 ── でこの行が消えた）。
+    // 見た目だけ変えて store と食い違わせず、消えた事実を伝えて画面をストアへ合わせ直す。
+    // 無言で元に戻すと「なぜか編集が効かない行」に見える（削除の空振りを render で合わせ直す
+    // oneonone の removeEntryWithUndo と同じ扱い）。
+    const rejectStale = () => { MK.ui.toast("このスキルは削除されています", "info"); render(); return false; };
     const visChk = ui.checkbox(s.visible !== false);
     visChk.addEventListener("change", () => {
-      if (!L().updateSkill(s.id, { visible: visChk.checked })) visChk.checked = !visChk.checked;
+      if (!L().updateSkill(s.id, { visible: visChk.checked })) rejectStale();
     });
     const coreChk = ui.checkbox(!!s.core);
     coreChk.addEventListener("change", () => {
-      if (!L().updateSkill(s.id, { core: coreChk.checked })) { coreChk.checked = !coreChk.checked; return; }
+      if (!L().updateSkill(s.id, { core: coreChk.checked })) { rejectStale(); return; }
       render(); // コアは目標Lv・必要人数の表示とギャップ集計に効くので、ここは全体を描き直す
     });
     const meta = [];
@@ -81,7 +84,7 @@
       placeholder: "(中分類なし)",
       onCommit: (next) => {
         if (!next) { MK.ui.toast("中分類（スキル項目）を入力してください", "error"); return false; } // 空は拒否＝元値へ
-        if (!L().updateSkill(s.id, { item: next })) return false; // 別経路で消えていたら元値へ
+        if (!L().updateSkill(s.id, { item: next })) return rejectStale(); // 別経路で消えていたら元値へ＋画面を合わせ直す
         s.item = next; // logic が同じオブジェクトを更新済みで今は冗長。store のキャッシュ共有に
                        // 依存せず、削除トースト等がこの行から旧名を読まないようにする防御
         return true; // 一覧は大分類で束ねるだけで項目名では並べ替えないため、行はその場に留まる（§2.5-4）

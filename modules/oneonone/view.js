@@ -108,6 +108,11 @@
 
   function actionsHeadText(n) { return "未完アクション（" + n + "）"; }
 
+  // 掴んだ行の実体が別経路（CSV 取込・JSON 取込・別タブ）で消えていたときの応答。無言で元値へ戻すと
+  // 「なぜか編集が効かない行」に見えるので、消えた事実を伝えて画面をストアへ合わせ直す（削除の空振りを
+  // render で合わせ直す removeEntryWithUndo と同じ扱い）。onCommit へそのまま返せるよう false を返す。
+  function rejectStale() { MK.ui.toast("この 1on1 記録は削除されています", "info"); render(); return false; }
+
   function actionRow(entry, action, head, ul, card) {
     const meta = [el("span", { class: "sub", text: entry.date })];
     if (action.due) meta.push(el("span", { class: "chip", text: "〜" + action.due }));
@@ -118,7 +123,7 @@
       value: action.text,
       onCommit: (next) => {
         if (!next) { MK.ui.toast("アクションを入力してください", "error"); return false; } // 空は拒否＝元値へ
-        if (!L().updateAction(entry.id, action.id, { text: next })) return false; // 別経路で消えていたら元値へ
+        if (!L().updateAction(entry.id, action.id, { text: next })) return rejectStale(); // 消えていたら元値へ＋画面を合わせ直す
         action.text = next; // logic が同じオブジェクトを更新済みで今は冗長。store のキャッシュ共有に
                             // 依存せず、この行を掴んだ後続処理が旧文言を読まないようにする防御
         return true; // 未完のままなので行はこの場に残る。タイムラインの表示（本文冒頭・未完件数）も変わらない
@@ -166,12 +171,15 @@
     if (e.actions && e.actions.length) meta.push(el("span", { class: "sub", text: "アクション " + openN + "/" + e.actions.length + " 未完" }));
 
     const bodyPreview = (e.body || "").split("\n")[0] || "（本文なし）";
-    const grow = el("div", { class: "grow", style: "cursor:pointer;" }, [
+    const grow = el("div", { class: "grow" }, [
       el("div", { text: bodyPreview }),
       el("div", { class: "sub" }, meta),
     ]);
-    grow.addEventListener("click", () => openEditor(e));
-    return el("li", { class: "mk-row" }, [grow]);
+    // モーダルへの導線は明示のボタン（questions / techstack / todo と同じ形・CONVENTIONS §2.5-2）。
+    // 行全体クリックは、同じ画面（未完アクションカード）に行内編集口が並んだ時点で誤爆のもとになる。
+    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "実施日・話したこと・温度感・アクションを編集" });
+    editBtn.addEventListener("click", () => openEditor(e));
+    return el("li", { class: "mk-row" }, [grow, editBtn]);
   }
 
   // ---- エントリ編集モーダル ----
