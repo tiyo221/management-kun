@@ -187,14 +187,18 @@
         plannedDate: f.plannedDate.value, actualDate: f.actualDate.value, note: f.note.value,
       };
       const saved = isNew ? L().addRelease(attrs) : L().updateRelease(rel.id, attrs);
+      if (isNew && !saved) { MK.ui.toast("プロダクトとバージョン / 名称が必要です", "error"); return; } // 必須不足はモーダルを閉じない
       close();
+      if (!saved) { rejectStale(); return; } // 編集中に別経路で消えていた（行内編集と同じ応答にする）
       // 保存した1件が絞り込みから外れるなら、絞り込みをその1件へ寄せてから描き直す
       // （CONVENTIONS §2.5-2）。releases は techstack / questions と違い**投入先がモーダルで選べる**
       // ので、寄せ先は固定値ではなく「保存した値」になる。寄せないと、「予定」タブを開いたまま
       // 完了で追加した／別プロダクトへ付け替えた行が、保存できているのに一覧から消える。
-      if (saved && !L().timeline(productId, status).some((x) => x.id === saved.id)) {
-        productId = saved.productId;
-        status = saved.status;
+      // **寄せるのは実際に弾いている軸だけ**。両方を書き換えると、「全プロダクト」で開いていた人が
+      // ステータス違いで追加しただけで1プロダクトへ絞り込まれ、他プロダクトの行が黙って消える。
+      if (!L().timeline(productId, status).some((x) => x.id === saved.id)) {
+        if (productId !== "all" && productId !== saved.productId) productId = saved.productId;
+        if (status !== "all" && status !== saved.status) status = saved.status;
       }
       render();
     } });
