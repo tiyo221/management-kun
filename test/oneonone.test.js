@@ -63,6 +63,14 @@ test("oneonone: updateAction は該当アクションだけ部分更新し、無
   eq(O.updateAction("no-entry", a.id, { text: "X" }), false);
   eq(O.updateAction(e.id, "no-action", { text: "X" }), false);
   eq(O.entriesOf("m1")[0].actions[0].text, "A2");
+
+  // 空振りは save を通らない ── save は削除の退避（pendingUndo）を捨てるので、削除の直後に
+  // 空振り更新しても取り消せることが「保存していない」ことの証拠になる（§2.5-3）
+  const gone = O.addEntry({ memberId: "m1", date: "2026-07-02", body: "消す" });
+  eq(O.removeEntry(gone.id), true);
+  eq(O.updateAction("no-entry", "no-action", { text: "X" }), false);
+  eq(O.undoDelete(), true);
+  eq(O.entriesOf("m1").length, 2);
 });
 
 test("oneonone: updateEntry は部分更新＋actions 正規化、removeEntry で削除", (MK) => {
