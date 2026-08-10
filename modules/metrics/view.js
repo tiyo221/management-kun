@@ -98,7 +98,7 @@
     // depth ぶんインデントして KGI→NSM→KPI の階層を視認できるようにする（14px/段。wbs のツリーと同じ流儀）。
     const grow = el("div", { class: "grow", style: "padding-left:" + (depth * 14) + "px;" }, [title, el("div", { class: "sub" }, meta)]);
     // 指標名のクリックはインライン編集が取るため、モーダルへの導線は明示のボタンにする。
-    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "種別・単位・方向・目標値・親指標・メモ・実績を編集", onClick: () => openEditor(m) });
+    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "まとめて編集（指標名・種別・単位・方向・目標値・親指標・メモ・実績）", onClick: () => openEditor(m) });
     return el("li", { class: "mk-row mk-row-dense" }, [grow, editBtn]);
   }
 

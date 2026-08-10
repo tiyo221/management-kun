@@ -137,6 +137,26 @@ test("releases: loadSample はプロダクト未登録なら空で保存する",
   assert(R.releases().every((r) => R.productName(r) !== ""));
 });
 
+test("releases: updateRelease は空振りで null を返し、保存もしない", (MK) => {
+  // 観点: 行内編集の確定を受け入れるか view が判断できること（removeRelease と同じ契約）。空振りで
+  //       保存すると、直前の削除の退避（pendingUndo）が潰れて取り消しが失敗する
+  // 入力: 実在リリースの version を更新 → 存在しない id で更新 → 削除の直後に空振り更新して undoDelete
+  // 期待: 実在は更新後のレコードを返し、空振りは null で一覧は不変。空振りは save を通らないので
+  //       直前の削除も取り消せる（save は pendingUndo を捨てるため、ここが「保存しない」の証拠）
+  const R = MK.logic.releases;
+  const p = MK.products.create({ name: "P" });
+  ["A", "B"].forEach((v) => R.addRelease({ productId: p.id, version: v }));
+  const a = R.releases()[0];
+  eq(R.updateRelease(a.id, { version: "A2" }).version, "A2");
+  eq(R.updateRelease("no-such-id", { version: "X" }), null);
+  eq(R.releases().map((r) => r.version), ["A2", "B"]);
+
+  eq(R.removeRelease(R.releases()[0].id), true);
+  eq(R.updateRelease("no-such-id", { version: "X" }), null);
+  eq(R.undoDelete(), true);
+  eq(R.releases().map((r) => r.version), ["A2", "B"]);
+});
+
 test("releases: 削除は元の位置へ戻せる／退避は1件だけ", (MK) => {
   // 観点: 削除は「消した1件＋元の位置」を退避し、undoDelete で元の並びへ戻る（CONVENTIONS §2.5-3）。
   //       退避は常に直前の1件だけ（アクティブな undo トーストが1つという前提と揃える）

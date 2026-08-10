@@ -129,7 +129,7 @@
     statusSel.title = "ステータスを変更";
 
     // バージョンのクリックはインライン編集が取るため、モーダルへの導線は明示のボタンにする。
-    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "プロダクト・予定日・実施日・メモを編集", onClick: () => openEditor(r) });
+    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "まとめて編集（プロダクト・バージョン / 名称・ステータス・予定日・実施日・メモ）", onClick: () => openEditor(r) });
 
     [grow, statusSel, editBtn].forEach((n) => row.appendChild(n));
     return row;
@@ -187,7 +187,9 @@
         plannedDate: f.plannedDate.value, actualDate: f.actualDate.value, note: f.note.value,
       };
       const saved = isNew ? L().addRelease(attrs) : L().updateRelease(rel.id, attrs);
-      if (isNew && !saved) { MK.ui.toast("プロダクトとバージョン / 名称が必要です", "error"); return; } // 必須不足はモーダルを閉じない
+      // addRelease が null を返すのは productId が空のときだけ（version は直上で検証済み）。プロダクト
+      // 0件では「リリースを追加」自体を止めているので実際には到達しないが、必須不足で黙って閉じない防御。
+      if (isNew && !saved) { MK.ui.toast("プロダクトを選択してください", "error"); return; }
       close();
       if (!saved) { rejectStale(); return; } // 編集中に別経路で消えていた（行内編集と同じ応答にする）
       // 保存した1件が絞り込みから外れるなら、絞り込みをその1件へ寄せてから描き直す
@@ -211,8 +213,9 @@
     icon: "🚀",
     description: "リリースの予定と実績を管理する",
     mount(container) { root = el("div"); container.appendChild(root); render(); },
-    // listHost / バッジとも手放す。残すと、インライン編集中にモジュールを切り替えたときに blur の
-    // 確定が afterRowChange を通り、画面に無い器・デタッチ済みのバッジへ書き込んでしまう。
+    // listHost / バッジとも手放す。残すと、モジュールを切り替えたあとに blur で確定したインライン編集が
+    // 消えた行を踏んで rejectStale() → render() へ抜け、画面に無い器・デタッチ済みのバッジへ書き込む
+    // （ステータス変更 → afterRowChange → ensureNotEmpty も同じ器を触る）。
     unmount() { root = null; listHost = null; badges.clear(); },
     summary() { return L().summary(); },
     searchItems() { return L().searchItems(); },
