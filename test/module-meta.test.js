@@ -6,9 +6,13 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
+const { ZONE_MODULE_IDS } = require("./harness");
 
-// index.html が積む実装済みモジュール（準備中＝未実装は description を持たなくてよい）。
-const MODULES = ["todo", "goals", "questions", "dashboard", "wbs", "skills", "resource", "oneonone", "techstack", "releases"];
+// ゾーンに載る実装済みモジュール（準備中＝未実装は description を持たなくてよい）。
+// 一覧はハードコードせず構成マニフェストから導出する（手写しは追加のたびに遅れ、
+// 実際 daily / metrics が長く漏れていた）。view.js が無い id は「準備中」として除く。
+const MODULES = ZONE_MODULE_IDS.filter((id) =>
+  fs.existsSync(path.join(__dirname, "..", "modules", id, "view.js")));
 
 // 各 view.js を読み込んで MK.modules に def（title/icon/description）を揃える。
 function loadDefs(MK, rootDir) {

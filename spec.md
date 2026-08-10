@@ -592,7 +592,7 @@ DESIGN.md の `components` をクラスとして提供（最低限の初期セ�
   1. 外したモジュールがあっても**アプリが起動し、全画面が壊れない**。
   2. 外したモジュールの**データ（`mk:module:<id>`）は消えない**。名前空間規約の結果として自然に生存し、再装着で復活する（機構ではなく規約で満たす）。
   3. 他モジュール／マスタの**横断表示は該当枠を黙って省く**（エラーにしない）。
-- 「機構」は作らない。担保は**規律＋テスト**: 横断表示は「任意契約（`summary()` / `summaryFor()`・§3.6）をコアのリーダ **`MK.readSummary` / `MK.readEntitySummary`**（`shared/core.js`）経由で問い合わせ → 無ければ枠を省く」で書き、他モジュールへのハード参照を禁止する。`MK_CONFIG` からモジュールを外しても起動・全画面・横断表示が壊れないことは [`test/module-detach.test.js`](test/module-detach.test.js) が検証し、DOM 層は CONVENTIONS §6 の完成チェックリストで点検する。
+- 「機構」は作らない。担保は**規律＋テスト**: 横断表示は「任意契約（`summary()` / `summaryFor()`・§3.6）をコアのリーダ **`MK.readSummary` / `MK.readEntitySummary`**（`shared/core.js`）経由で問い合わせ → 無ければ枠を省く」で書き、他モジュールへのハード参照を禁止する。`MK_CONFIG` からモジュールを外しても起動・全画面・横断表示が壊れないことは [`test/module-detach.test.js`](test/module-detach.test.js) が検証し、DOM 層は [`TESTING.md`](TESTING.md) §3.1 の手動スモークで点検する（CONVENTIONS §6.3）。
 
 ### 9.6 統廃合（モジュール／データ名前空間／マスタ）
 
