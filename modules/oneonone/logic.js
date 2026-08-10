@@ -223,6 +223,30 @@
     save(d);
   }
 
+  /**
+   * 指定エントリ内アクションを部分更新して保存する。該当なしなら何もしない。
+   * 未完アクション一覧の行内編集（文言の直し）から、記録全体を書き戻さずに1アクションだけ更新するための口
+   * （view が entries() を直接書き換えないため。CONVENTIONS §1 / §2.5-2）。
+   * @param {string} entryId - 対象エントリID
+   * @param {string} actionId - 対象アクションID
+   * @param {{text?: string, done?: boolean, due?: (string|null)}} patch - 変更する項目だけを含むオブジェクト。
+   *   `updateEntry` と違い `normalizeActions` を通さないので、trim と「text を空にしない」は呼び出し側が持つ
+   *   （必須項目の拒否は view に置く。CONVENTIONS §2.5-2）。
+   * @returns {boolean} 更新したら true、エントリまたはアクションが無ければ false（何も変えない）
+   * ※ 更新できたときのみ store へ保存する副作用あり。
+   */
+  function updateAction(entryId, actionId, patch) {
+    const d = load();
+    const e = d.entries.find((x) => x.id === entryId);
+    if (!e) return false;
+    const a = (e.actions || []).find((x) => x.id === actionId);
+    if (!a) return false;
+    Object.assign(a, patch);
+    e.updatedAt = MK.util.nowISO();
+    save(d);
+    return true;
+  }
+
   // ---- CSV（整形・取込はロジック。ファイル選択/DLは view）spec §4.6.2 / spec/modules/oneonone.md ----
   /**
    * 日付を "YYYY-MM-DD" に正規化する。形式が違う・空なら "" を返す。
@@ -446,7 +470,7 @@
   MK.logic = MK.logic || {};
   MK.logic.oneonone = {
     MOODS, load, save, entries, entriesOf, openActionsOf, openActionCount, lastDateOf,
-    normalizeActions, addEntry, updateEntry, removeEntry, undoDelete, forgetUndo, toggleAction,
+    normalizeActions, addEntry, updateEntry, removeEntry, undoDelete, forgetUndo, toggleAction, updateAction,
     moodFromCSV, actionsToCell, parseActionsCell, buildCSVRows, applyCSV,
     summary, summaryFor, searchItems, exportData, importData, loadSample,
   };

@@ -59,14 +59,38 @@
   }
 
   function skillRow(s) {
+    // 行内の3つの編集口（表示・コア・スキル項目名）はどれも updateSkill の戻り値を見る。false＝
+    // その id がもう無い（別経路 ── CSV 取込・JSON 取込・同一タブの別画面での削除 ── でこの行が消えた）。
+    // 見た目だけ変えて store と食い違わせず、消えた事実を伝えて画面をストアへ合わせ直す。
+    // 無言で元に戻すと「なぜか編集が効かない行」に見える（削除の空振りを render で合わせ直す
+    // oneonone の removeEntryWithUndo と同じ扱い）。
+    const rejectStale = () => { MK.ui.toast("このスキルは削除されています", "info"); render(); return false; };
     const visChk = ui.checkbox(s.visible !== false);
-    visChk.addEventListener("change", () => L().updateSkill(s.id, { visible: visChk.checked }));
+    visChk.addEventListener("change", () => {
+      if (!L().updateSkill(s.id, { visible: visChk.checked })) rejectStale();
+    });
     const coreChk = ui.checkbox(!!s.core);
-    coreChk.addEventListener("change", () => { L().updateSkill(s.id, { core: coreChk.checked }); render(); });
+    coreChk.addEventListener("change", () => {
+      if (!L().updateSkill(s.id, { core: coreChk.checked })) { rejectStale(); return; }
+      render(); // コアは目標Lv・必要人数の表示とギャップ集計に効くので、ここは全体を描き直す
+    });
     const meta = [];
     if (s.core) meta.push("コア");
     if (s.core && s.targetLevel != null) meta.push("目標Lv" + s.targetLevel + "×" + (s.requiredCount != null ? s.requiredCount : "?") + "人");
-    const info = el("div", { class: "grow" }, [el("div", { text: s.item || "(中分類なし)" }), el("div", { class: "sub", text: [s.description, meta.join(" / ")].filter(Boolean).join("　") })]);
+    // スキル項目名（中分類）はインライン編集（Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）。
+    // 誤字直しのために7項目のモーダルを開かせない。大分類・小分類・コア関連は「編集」モーダルに残す。
+    const nameEdit = ui.inlineEdit({
+      value: s.item,
+      placeholder: "(中分類なし)",
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("中分類（スキル項目）を入力してください", "error"); return false; } // 空は拒否＝元値へ
+        if (!L().updateSkill(s.id, { item: next })) return rejectStale(); // 別経路で消えていたら元値へ＋画面を合わせ直す
+        s.item = next; // logic が同じオブジェクトを更新済みで今は冗長。store のキャッシュ共有に
+                       // 依存せず、削除トースト等がこの行から旧名を読まないようにする防御
+        return true; // 一覧は大分類で束ねるだけで項目名では並べ替えないため、行はその場に留まる（§2.5-4）
+      },
+    });
+    const info = el("div", { class: "grow" }, [nameEdit, el("div", { class: "sub", text: [s.description, meta.join(" / ")].filter(Boolean).join("　") })]);
     return el("div", { class: "skill-list-item" }, [
       labeled("表示", visChk), labeled("コア", coreChk), info,
       ui.button("編集", { variant: "btn-ghost", onClick: () => editSkill(s) }),

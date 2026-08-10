@@ -108,11 +108,31 @@
 
   function actionsHeadText(n) { return "未完アクション（" + n + "）"; }
 
+  // 掴んだ行の実体が別経路（CSV 取込・JSON 取込・同一タブの別画面での削除）で消えていたときの応答。
+  // 無言で元値へ戻すと「なぜか編集が効かない行」に見えるので、消えた事実を伝えて画面をストアへ
+  // 合わせ直す（削除の空振りを render で合わせ直す removeEntryWithUndo と同じ扱い）。
+  // 文言は「記録が消えた」と「記録は在るがそのアクションだけ消えた」の両方を含むので中立にする
+  // ── updateAction はどちらも false で返し、view は区別できない。onCommit へ返せるよう false を返す。
+  function rejectStale() { MK.ui.toast("このアクションは見つかりません（記録が更新・削除された可能性があります）", "info"); render(); return false; }
+
   function actionRow(entry, action, head, ul, card) {
     const meta = [el("span", { class: "sub", text: entry.date })];
     if (action.due) meta.push(el("span", { class: "chip", text: "〜" + action.due }));
+    // アクションの文言はインライン編集（Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）。このカードは
+    // 「いま追いかけている約束」の一覧で微修正の頻度が高いのに、記録編集モーダルの奥にしか手が無かった。
+    // 期限（due）と記録本体（実施日・本文・温度感）はモーダル継続。
+    const textEdit = ui.inlineEdit({
+      value: action.text,
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("アクションを入力してください", "error"); return false; } // 空は拒否＝元値へ
+        if (!L().updateAction(entry.id, action.id, { text: next })) return rejectStale(); // 消えていたら元値へ＋画面を合わせ直す
+        action.text = next; // logic が同じオブジェクトを更新済みで今は冗長。store のキャッシュ共有に
+                            // 依存せず、この行を掴んだ後続処理が旧文言を読まないようにする防御
+        return true; // 未完のままなので行はこの場に残る。タイムラインの表示（本文冒頭・未完件数）も変わらない
+      },
+    });
     const info = el("div", { class: "grow" }, [
-      el("div", { text: action.text }),
+      textEdit,
       el("div", { class: "sub" }, meta),
     ]);
     const cb = ui.checkbox(action.done);
@@ -153,12 +173,15 @@
     if (e.actions && e.actions.length) meta.push(el("span", { class: "sub", text: "アクション " + openN + "/" + e.actions.length + " 未完" }));
 
     const bodyPreview = (e.body || "").split("\n")[0] || "（本文なし）";
-    const grow = el("div", { class: "grow", style: "cursor:pointer;" }, [
+    const grow = el("div", { class: "grow" }, [
       el("div", { text: bodyPreview }),
       el("div", { class: "sub" }, meta),
     ]);
-    grow.addEventListener("click", () => openEditor(e));
-    return el("li", { class: "mk-row" }, [grow]);
+    // モーダルへの導線は明示のボタン（questions / techstack / todo と同じ形・CONVENTIONS §2.5-2）。
+    // 行全体クリックは、同じ画面（未完アクションカード）に行内編集口が並んだ時点で誤爆のもとになる。
+    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "実施日・話したこと・温度感・アクションを編集", onClick: () => openEditor(e) });
+    // 本文プレビュー＋ボタンが並ぶので、375px ではボタンを次の行へ逃がす（.mk-row-dense・§2.2）。
+    return el("li", { class: "mk-row mk-row-dense" }, [grow, editBtn]);
   }
 
   // ---- エントリ編集モーダル ----

@@ -77,6 +77,27 @@ test("skills: radarData は評価ゼロ/存在しないメンバーを安全に�
   eq(d.hasRating, false);
 });
 
+test("skills: updateSkill は更新できたかを返し、空振りでは保存しない", (MK) => {
+  // 観点: 行内編集の確定を受け入れるか view が判断できること（removeSkill と同じ契約）。空振りで
+  //       保存すると、別経路の変更を読み込み直した内容で巻き戻しかねない
+  // 入力: 実在スキルの item を更新 → 存在しない id で更新 → 削除の直後に空振り更新して undoDelete
+  // 期待: 実在は true で値が変わり、空振りは false で一覧は不変。空振りは save を通らないので
+  //       直前の削除の退避も潰さない（save は pendingUndo を捨てるため、ここが「保存しない」の証拠）
+  const S = MK.logic.skills;
+  S.addSkill({ domain: "共通", item: "A" });
+  S.addSkill({ domain: "共通", item: "B" });
+  const a = S.skills()[0];
+  eq(S.updateSkill(a.id, { item: "A2" }), true);
+  eq(S.skills()[0].item, "A2");
+  eq(S.updateSkill("no-such-id", { item: "X" }), false);
+  eq(S.skills().map((s) => s.item).join(","), "A2,B");
+
+  eq(S.removeSkill(S.skills()[0].id), true);
+  eq(S.updateSkill("no-such-id", { item: "X" }), false);
+  eq(S.undoDelete(), true);
+  eq(S.skills().map((s) => s.item).join(","), "A2,B");
+});
+
 test("skills: 削除→undoDelete でスキルと評価が元に戻る", (MK) => {
   // 観点: スキル削除は紐づく評価（ratings）も消す。スキルだけ戻して評価が空だと、消したときより
   //       悪い状態（全メンバー分を入力し直し）になるので、退避に評価も含める（§2.5-3）

@@ -547,8 +547,12 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 /* 選択状態のフォールバック（inline の heatStyle に依存せず選択を示す。低レベルの薄い配色でも判別可能に） */
 .mk-seg.is-sel { font-weight: 700; box-shadow: inset 0 0 0 1px var(--color-primary); }
 .mk-seg-na { min-width: 42px; font-size: 11px; font-weight: 500; }
-.skill-list-item { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-xs) var(--space-md); border-bottom: 1px solid var(--color-hairline); }
-.skill-list-item .grow { flex: 1; min-width: 0; }
+/* スキル一覧の行。チェックボックス2つ＋ボタン2つが並ぶので .mk-row-dense と同じ事情で
+   375px では .grow が 57px まで潰れ、インライン編集（#291）の入力欄が使い物にならない。
+   同じ手当て（折り返し＋タイトルの下限幅）を当てる。行の見た目が .mk-row と違う（区切り線・
+   余白）ので .mk-row-dense へ寄せず、この行の規則としてまとめて書く。 */
+.skill-list-item { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-sm); padding: var(--space-xs) var(--space-md); border-bottom: 1px solid var(--color-hairline); }
+.skill-list-item .grow { flex: 1; min-width: 160px; }
 .skill-domain-head { font-weight: 600; color: var(--color-slate); padding: var(--space-sm) var(--space-md); background: var(--color-surface); border-bottom: 1px solid var(--color-hairline); }
 .gap-ok { color: var(--color-success); }
 .gap-short { color: var(--color-error); }
