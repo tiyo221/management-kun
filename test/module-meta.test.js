@@ -6,9 +6,25 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
+const { ZONE_MODULE_IDS } = require("./harness");
 
-// index.html が積む実装済みモジュール（準備中＝未実装は description を持たなくてよい）。
-const MODULES = ["todo", "goals", "questions", "dashboard", "wbs", "skills", "resource", "oneonone", "techstack", "releases"];
+// ゾーンに載る実装済みモジュール（準備中＝未実装は description を持たなくてよい）。
+// 一覧はハードコードせず構成マニフェストから導出する（手写しは追加のたびに遅れ、
+// 実際 daily / metrics が長く漏れていた）。view.js が無い id は「準備中」として除く。
+const MODULES = ZONE_MODULE_IDS.filter((id) =>
+  fs.existsSync(path.join(__dirname, "..", "modules", id, "view.js")));
+
+// 走査対象の番人。トップレベルで throw すると test/run.js の require ループが保護されていない
+// ため実行全体がクラッシュし、後続のテストファイルが丸ごと未実行になる（サマリも出ない）。
+// 必ず test() の中で落とす。
+test("meta: 走査対象のモジュールが揃っている（空ループで緑にしない・#312）", () => {
+  // 観点: MODULES はマニフェスト由来なので、導出が壊れると以下3テストが全部「空ループで緑」になる。
+  // 入力: ゾーンに載る id のうち view.js を持つもの
+  // 期待: 十分な数が残っている。**「ゾーンに載る id と一致すること」は要求しない** ──
+  //   カタログに登録済みで def 未実装の「準備中」は CONVENTIONS §5 手順3 / spec §3.6 が
+  //   正式にサポートする状態で、それを1件足した瞬間に落ちる番人は規約と矛盾する。
+  assert(MODULES.length >= 10, "走査対象のモジュールが減っている（導出の破損を疑う）: " + MODULES.length);
+});
 
 // 各 view.js を読み込んで MK.modules に def（title/icon/description）を揃える。
 function loadDefs(MK, rootDir) {
@@ -62,8 +78,9 @@ test("meta: 実装済み id の catalog 値は空（title/icon の二重定義�
   const rootDir = path.join(__dirname, "..");
   loadDefs(MK, rootDir);
   const catalog = loadCatalog(rootDir);
+  // MODULES は view.js の実在で絞ってあり、直前のテストで def の登録も固定済みなので、
+  // 「準備中なら飛ばす」分岐はここには要らない（catalog 値は必ず空であるべき）。
   MODULES.forEach((id) => {
-    if (!MK.modules[id]) return; // 準備中はフォールバックを持ってよい
     const v = catalog[id] || {};
     assert(v.title == null && v.icon == null,
       id + " は def が単一ソースなので catalog 値に title/icon を持たない");

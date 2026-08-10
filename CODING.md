@@ -1,6 +1,6 @@
 # CODING.md — コーディング規約
 
-このリポジトリのコードを書くときの規約。**どう作るか**の詳細を定める（**何を作るか**は [`spec.md`](spec.md)、UI・アーキテクチャの型と完成チェックリストは [`CONVENTIONS.md`](CONVENTIONS.md)）。
+このリポジトリのコードを書くときの規約。**どう作るか**の詳細を定める（**何を作るか**は [`spec.md`](spec.md)、UI・アーキテクチャの型と完成の点検（DoD）は [`CONVENTIONS.md`](CONVENTIONS.md)）。
 
 設計思想（重要）: **ビルド不要・外部依存ゼロ・`file://` 動作・ローカル完結**を崩さない。ファイルは分割するが、`file://` で確実に動かすため **ES Modules / `fetch()` は使わず**、classic `<script src>` + グローバル名前空間 `window.MK` で連携する（詳細は [`spec.md`](spec.md) §3）。画像はインライン SVG か絵文字、グラフは外部ライブラリを使わず Canvas / インライン SVG で自前描画、フォントはシステムフォントスタック（[`DESIGN.md`](DESIGN.md) の Notion Sans は外部読込しない）。
 
@@ -19,7 +19,7 @@
 ## 構造・命名
 - 共有ロジックは `shared/` に置き、モジュール間で重複させない。ただし共有化は **実際に2か所以上で必要になってから**（先回りの抽象化を避ける）。
 - モジュールは自分の名前空間 `mk:module:<id>` のみ書き込み、マスタは `ctx.people` / `ctx.projects` 経由で触る（直接 localStorage を読み書きしない・[`spec.md`](spec.md) §3.5）。
-- 色 / 余白 / 角丸 / タイポは [`DESIGN.md`](DESIGN.md) のトークン（CSS変数）経由で指定し、値の直書きをしない（§6.1）。
+- 色 / 余白 / 角丸 / タイポは [`DESIGN.md`](DESIGN.md) のトークン（CSS変数）経由で指定し、値の直書きをしない（[`spec.md`](spec.md) §6.1。※ `CONVENTIONS.md` §6.1 とは別物）。
 - ID 採番・JSON 入出力・CSV・名寄せは `shared/` の共通実装を使い、各モジュールで再実装しない。
 
 ## ドキュメンテーション（JSDoc）
