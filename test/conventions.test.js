@@ -272,6 +272,11 @@ test("検出器が実際に違反へ当たる（無検出で緑になる罠を�
   const sp = /style\s*=\s*["'`][^"'`]*(?:margin|padding)|\.style\.(?:margin|padding)/;
   assert(fire(sp, "el.style.marginTop = 4;", textOf), "style.margin 代入を検出");
   assert(fire(sp, 'h = `<div style="margin:2px">`;', textOf), "テンプレート内の style 属性を検出");
+  const color = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b|\b(?:rgba?|hsla?)\s*\(\s*(?!var\()/;
+  assert(fire(color, 'el.style.color = "#ff0000";', textOf), "16進カラーを検出");
+  assert(fire(color, 'const c = "rgba(0,0,0,.3)";', textOf), "rgba の直書きを検出");
+  assert(!fire(color, 'const c = "rgba(var(--color-primary-rgb), .3)";', textOf), "トークン経由の rgba は違反にしない");
+  assert(!fire(color, 'const c = "var(--color-primary)";', textOf), "var 参照は違反にしない");
   const dlg = /(?<![.\w])(?:confirm|alert|prompt)\s*\(/;
   assert(fire(dlg, "confirm(1);"), "ネイティブ confirm を検出");
   assert(!fire(dlg, "MK.ui.confirm(1);"), "MK.ui.confirm は違反にしない");
@@ -368,9 +373,23 @@ test("§2.1: モジュールに余白のインライン直書きが無い（#312
   // 入力: 全モジュールの logic.js / view.js（style 属性・style.margin 代入の両方）
   // 期待: margin / padding のインライン指定がゼロ
   // ※ style 属性はテンプレートリテラルの中に書けるので textOf（コメントだけ落とす）で走査する。
+  //   `style.margin` の直代入だけでなく `cssText` / `setProperty("margin"…)` の迂回路も見る。
   const files = moduleFiles("logic").concat(moduleFiles("view"));
-  const bad = scanText(files, /style\s*=\s*["'`][^"'`]*(?:margin|padding)|\.style\.(?:margin|padding)/);
+  const bad = scanText(files, /style\s*=\s*["'`][^"'`]*(?:margin|padding)|\.style\.(?:margin|padding)|cssText[^\n]*(?:margin|padding)|setProperty\(\s*["'`](?:margin|padding)/);
   eq(bad, [], "余白をインラインで直書きしている");
+});
+
+test("§2.1: 色をトークン経由で指定している（値の直書きが無い・#312）", () => {
+  // 観点: 色は DESIGN トークン（CSS 変数）経由。直書きするとダークテーマに追従しない
+  //       （§2.1 末尾「値の直書き禁止」の静的な半分。ダークで実際に見るのは TESTING.md §3.1）。
+  // 入力: 全モジュールの logic.js / view.js（リテラルの中身を見るので textOf で走査）
+  // 期待: 16進カラー（`#fff` 等）と rgb()/hsl() の直書きがゼロ。
+  //   `rgba(var(--color-primary-rgb), .3)` のように**チャンネルをトークンから取る**書き方は
+  //   トークン経由なので違反にしない（skills の評価セルが実際にこの形）。
+  //   コメント中の Issue 番号（`#213` = 3桁16進に見える）は textOf が落とす。
+  const files = moduleFiles("logic").concat(moduleFiles("view"));
+  const bad = scanText(files, /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b|\b(?:rgba?|hsla?)\s*\(\s*(?!var\()/);
+  eq(bad, [], "色を直書きしている（var(--token) を使う）");
 });
 
 test("§2.3: ネイティブ confirm / alert / prompt を使っていない（#312）", () => {

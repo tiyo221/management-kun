@@ -13,8 +13,18 @@ const { ZONE_MODULE_IDS } = require("./harness");
 // 実際 daily / metrics が長く漏れていた）。view.js が無い id は「準備中」として除く。
 const MODULES = ZONE_MODULE_IDS.filter((id) =>
   fs.existsSync(path.join(__dirname, "..", "modules", id, "view.js")));
-// 下限の番人: 導出が壊れて空配列になると、以下3テストが全部「空ループで緑」になる。
-if (MODULES.length < 12) throw new Error("走査対象のモジュールが減っている（導出の破損を疑う）: " + MODULES.length);
+
+// 走査対象の番人。トップレベルで throw すると test/run.js の require ループが保護されていない
+// ため実行全体がクラッシュし、後続のテストファイルが丸ごと未実行になる（サマリも出ない）。
+// 必ず test() の中で落とす。
+test("meta: 走査対象のモジュールが揃っている（空ループで緑にしない・#312）", () => {
+  // 観点: MODULES はマニフェスト由来なので、導出が壊れると以下3テストが全部「空ループで緑」になる。
+  // 入力: ゾーンに載る id と、そのうち view.js を持つもの
+  // 期待: 両者が一致する（＝準備中の id がゼロ）。ずれたら導出の破損か view.js の欠落。
+  eq(MODULES.length, ZONE_MODULE_IDS.length,
+    "ゾーンに載る id と view.js を持つ id が一致しない: " +
+      ZONE_MODULE_IDS.filter((id) => MODULES.indexOf(id) < 0).join(", "));
+});
 
 // 各 view.js を読み込んで MK.modules に def（title/icon/description）を揃える。
 function loadDefs(MK, rootDir) {
