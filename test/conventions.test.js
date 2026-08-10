@@ -23,6 +23,28 @@ function moduleFiles(kind) {
     .filter((f) => fs.existsSync(path.join(rootDir, f.rel)));
 }
 
+/* 「準備中」（def をまだ書かず名前だけカタログに出したモジュール）の id。
+   CONVENTIONS §5 手順3 の「カタログ値に { title, icon } をフォールバックとして書く（def 実装時に
+   空へ戻す）」がその宣言なので、そこを正とする。実装の有無をファイルの存在から推測すると
+   「消えた」と「まだ無い」が区別できず、**準備中を1件足した瞬間に落ちる番人**になる
+   （それが規約と矛盾することは test/module-meta.js 側で先に確認済み・#312 レビュー）。 */
+function pendingIds() {
+  const code = fs.readFileSync(path.join(rootDir, "shared/manifest.js"), "utf8");
+  const sandbox = { window: {}, document: undefined }; // document 無しでスクリプト注入をスキップ
+  vm.runInNewContext(code, sandbox, { filename: "shared/manifest.js" });
+  const catalog = sandbox.window.MK_MANIFEST.catalog;
+  return Object.keys(catalog).filter((id) => {
+    const v = catalog[id] || {};
+    return v.title != null || v.icon != null;
+  });
+}
+
+/** 実装済み（＝準備中でない）モジュール id。各種の存在要求はこれだけに掛ける。 */
+function implementedIds() {
+  const pending = pendingIds();
+  return ALL_MODULE_IDS.filter((id) => pending.indexOf(id) < 0);
+}
+
 /* 検出器の定義。**トリップワイヤ（発火確認）と本番の走査は必ずここを共有する。**
    同じ正規表現をテスト側へ書き写すと、枝を足すたびに「本番にはあるが発火確認されていない枝」が
    静かに増える（実際 cssText / setProperty と window.confirm( の枝がそうなっていた・#312 レビュー）。
@@ -80,7 +102,8 @@ const DETECTORS = {
   },
   undoToast: {
     files: "view", on: "code",
-    re: /(?<!Delete)\bundoToast\s*\(/,
+    // `\b` があるので `undoDeleteToast` には当たらない（`(?<!Delete)` は到達しないので置かない）。
+    re: /\bundoToast\s*\(/,
     fires: ["MK.ui.undoToast(m, fn);"],
     passes: ["MK.ui.undoDeleteToast(m, fn);"],
   },
@@ -268,14 +291,16 @@ test("走査対象のファイルが欠けていない（静かに検査から�
   // 観点: moduleFiles() は存在しないファイルを黙って落とすので、logic.js が消えた／改名された
   //       モジュールは logic 系の全検査から静かに外れる。種類ごとに欠落を違反として出す。
   //       合計での下限（logic＋view で 20 以上）では logic.js が4本消えても通ってしまう。
-  // 入力: マニフェストのカタログに載る全モジュール id
-  // 期待: 各 id に logic.js と view.js の両方がある
+  // 入力: 実装済み（＝準備中でない）モジュール id
+  // 期待: 各 id に logic.js と view.js の両方がある。準備中（カタログに title/icon の
+  //   フォールバックを持つ id）は「まだ無い」が正常なので要求しない。
+  const ids = implementedIds();
   ["logic", "view"].forEach((kind) => {
     const have = moduleFiles(kind).map((f) => f.id);
-    eq(ALL_MODULE_IDS.filter((id) => have.indexOf(id) < 0), [],
-      "カタログにあるのに modules/<id>/" + kind + ".js が無い");
+    eq(ids.filter((id) => have.indexOf(id) < 0), [],
+      "実装済みなのに modules/<id>/" + kind + ".js が無い");
   });
-  assert(ALL_MODULE_IDS.length >= 10, "カタログのモジュールが減っている: " + ALL_MODULE_IDS.length);
+  assert(ids.length >= 10, "実装済みモジュールが減っている: " + ids.length);
 });
 
 // ---- codeOf 自体の検査（この土台が壊れると、以下の検査が黙って全部通る） ----
@@ -502,13 +527,14 @@ test("§1.1.1-(2): 全モジュールに test/<id>.test.js がある（#312）",
   // 観点: 「取り出せる形に保つ」の判定材料 (2)。テストの期待値が別 PJ 側の受入条件になる。
   //       個々のドメイン規則が固定されているかは機械では見られないので、器の存在だけを固定する
   //       （中身の追加義務は TESTING.md §5）。
-  // 入力: マニフェストのカタログに載る全モジュール id
+  // 入力: 実装済み（＝準備中でない）モジュール id
   // 期待: `test/<id>.test.js` が**完全一致で**存在する。
   //   接頭辞一致（`<id>-*.test.js` も可）は逃げ道が広すぎる ── 仮に id が `read` なら無関係な
   //   `read-summary.test.js` が満たしてしまう。全モジュールが実際に完全一致のファイルを
   //   持っているので、緩める理由が無い（`wbs-scope.test.js` のような追加ファイルは妨げにならない）。
+  //   準備中はロジックがまだ無いので要求しない（上の走査対象の番人と同じ扱い）。
   const files = fs.readdirSync(__dirname).filter((f) => f.endsWith(".test.js"));
-  const missing = ALL_MODULE_IDS.filter((id) => files.indexOf(id + ".test.js") < 0);
+  const missing = implementedIds().filter((id) => files.indexOf(id + ".test.js") < 0);
   eq(missing, [], "ロジックのテストが無いモジュール");
 });
 
