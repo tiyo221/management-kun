@@ -119,7 +119,8 @@
       onCommit: (next) => {
         if (!next) { MK.ui.toast("アクションを入力してください", "error"); return false; } // 空は拒否＝元値へ
         if (!L().updateAction(entry.id, action.id, { text: next })) return false; // 別経路で消えていたら元値へ
-        action.text = next; // 行が握るのは描画時のスナップショット
+        action.text = next; // logic が同じオブジェクトを更新済みで今は冗長。store のキャッシュ共有に
+                            // 依存せず、この行を掴んだ後続処理が旧文言を読まないようにする防御
         return true; // 未完のままなので行はこの場に残る。タイムラインの表示（本文冒頭・未完件数）も変わらない
       },
     });
