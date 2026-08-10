@@ -40,7 +40,7 @@ npx --yes http-server -p 8777 -c-1
 | [`spec/modules/<id>.md`](spec/modules/) | **何を作るか（モジュール個別）**。各モジュールの位置づけ・固有データ・CSV 列・旧データ移行 |
 | [`CLAUDE.md`](CLAUDE.md) | **どう作るか**。作業ガイド・開発ワークフロー（コーディング規約は CODING.md） |
 | [`CODING.md`](CODING.md) | コーディング規約（言語/実行環境・モダン JS・構造/命名・安全・オーバーエンジニアリング防止） |
-| [`CONVENTIONS.md`](CONVENTIONS.md) | UI/レイアウト規約・logic/view 分割・共有資産リファレンス・**新規モジュール追加手順**・完成チェックリスト |
+| [`CONVENTIONS.md`](CONVENTIONS.md) | UI/レイアウト規約・logic/view 分割・共有資産リファレンス・**新規モジュール追加手順**・完成の点検（DoD） |
 | [`TESTING.md`](TESTING.md) | テスト指針・変更影響マトリクス・自動テストの実行/書き方（`node test/run.js`） |
 | [`DESIGN.md`](DESIGN.md) | Notion 風デザインシステム（トークン・コンポーネント） |
 | [`.claude/agents/`](.claude/agents/) | サブエージェント定義（探索・ドキュメント同期検査・テスト実行・DoD 点検）。委譲ルールは CLAUDE.md「サブエージェントへの委譲」 |

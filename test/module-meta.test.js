@@ -13,6 +13,8 @@ const { ZONE_MODULE_IDS } = require("./harness");
 // 実際 daily / metrics が長く漏れていた）。view.js が無い id は「準備中」として除く。
 const MODULES = ZONE_MODULE_IDS.filter((id) =>
   fs.existsSync(path.join(__dirname, "..", "modules", id, "view.js")));
+// 下限の番人: 導出が壊れて空配列になると、以下3テストが全部「空ループで緑」になる。
+if (MODULES.length < 12) throw new Error("走査対象のモジュールが減っている（導出の破損を疑う）: " + MODULES.length);
 
 // 各 view.js を読み込んで MK.modules に def（title/icon/description）を揃える。
 function loadDefs(MK, rootDir) {
@@ -66,8 +68,9 @@ test("meta: 実装済み id の catalog 値は空（title/icon の二重定義�
   const rootDir = path.join(__dirname, "..");
   loadDefs(MK, rootDir);
   const catalog = loadCatalog(rootDir);
+  // MODULES は view.js の実在で絞ってあり、直前のテストで def の登録も固定済みなので、
+  // 「準備中なら飛ばす」分岐はここには要らない（catalog 値は必ず空であるべき）。
   MODULES.forEach((id) => {
-    if (!MK.modules[id]) return; // 準備中はフォールバックを持ってよい
     const v = catalog[id] || {};
     assert(v.title == null && v.icon == null,
       id + " は def が単一ソースなので catalog 値に title/icon を持たない");

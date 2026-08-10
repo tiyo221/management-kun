@@ -23,71 +23,149 @@ function moduleFiles(kind) {
     .filter((f) => fs.existsSync(path.join(rootDir, f.rel)));
 }
 
-/* 走査の下ごしらえは2段。行番号と桁を保つため、落とす文字は空白へ置き換える（改行は残す）。
-   正規表現リテラルは除算と区別が付かないので触らない（本リポジトリのコードで誤判定を生む
-   書き方が無いことを検査側で担保する）。
+/* 走査の下ごしらえ。ソースを1回だけ舐めて2つの見え方を同時に作る。行番号と桁を保つため、
+   落とす文字は空白へ置き換える（改行は残す）。
 
-   - textOf() … コメントだけを落とす。**文字列の中身を見たい検査**に使う
+   - text … コメント・正規表現の中身だけを落とす。**文字列の中身を見たい検査**に使う
      （`=== "project"` の決め打ち・テンプレート内の `style="margin…"`）。
-   - codeOf() … さらに文字列リテラルの中身も落とす。**識別子を探す検査**に使う
-     （説明文や JSDoc の `localStorage` / `render()` を違反にしないため）。 */
+   - code … さらに文字列リテラルの中身も落とす。**識別子を探す検査**に使う
+     （説明文や JSDoc の `localStorage` / `render()` を違反にしないため）。
+
+   正規表現リテラルは除算と区別が付かないので、直前の意味のあるトークンで判別する（値が
+   来た直後の `/` は除算、演算子・記号・キーワードの直後は正規表現）。ここを飛ばすと
+   `/[",\r\n]/`（`shared/io.js` にある実在の書き方）のバッククォート／引用符が文字列の
+   開始と誤読され、**以降のコードが丸ごと空白化されて全検出器が黙って素通りする**。
+   テンプレートリテラルの `${…}` は中身をコードとして残す（置換式に書いた違反を見逃さない）。 */
 const blank = (s) => s.replace(/[^\n]/g, " ");
 
-function textOf(src) {
-  let out = "";
+// 直前がこれらで終わっていれば、続く `/` は除算ではなく正規表現の開始とみなす。
+const REGEX_PRECEDERS = "(,=:[!&|?{};+-*%~^<>";
+const REGEX_KEYWORDS = /(?:^|[^\w$.])(?:return|typeof|instanceof|case|in|of|new|delete|void|throw|do|else|yield|await)$/;
+
+/** ソースを走査して { text, code } を返す（どちらも元と同じ長さ・同じ行数）。 */
+function split(src) {
+  let text = "", code = "";
   let i = 0;
+  let prev = ""; // これまでに出力したコード部分（正規表現／除算の判別に使う）
+  const emit = (t, c) => { text += t; code += c; prev += c; };
   while (i < src.length) {
     const two = src.slice(i, i + 2);
     if (two === "//") {
       const end = src.indexOf("\n", i);
       const stop = end < 0 ? src.length : end;
-      out += blank(src.slice(i, stop)); i = stop; continue;
+      const b = blank(src.slice(i, stop));
+      text += b; code += b; i = stop; continue;
     }
     if (two === "/*") {
       const end = src.indexOf("*/", i + 2);
       const stop = end < 0 ? src.length : end + 2;
-      out += blank(src.slice(i, stop)); i = stop; continue;
+      const b = blank(src.slice(i, stop));
+      text += b; code += b; i = stop; continue;
     }
-    // 文字列は中身を残すが、その中の `//` `/*` をコメント開始と誤読しないよう読み飛ばす。
-    const q = src[i];
-    if (q === '"' || q === "'" || q === "`") {
-      const j = endOfString(src, i);
-      out += src.slice(i, j); i = j; continue;
+    const ch = src[i];
+    if (ch === "/" && isRegexStart(prev)) {
+      const j = endOfRegex(src, i);
+      emit(src.slice(i, j), blank(src.slice(i, j)));
+      i = j; continue;
     }
-    out += src[i]; i++;
+    if (ch === '"' || ch === "'") {
+      const j = endOfQuoted(src, i);
+      const closed = src[j - 1] === ch && j - 1 > i;
+      emit(src.slice(i, j), ch + blank(src.slice(i + 1, closed ? j - 1 : j)) + (closed ? ch : ""));
+      i = j; continue;
+    }
+    if (ch === "`") {
+      const j = scanTemplate(src, i, emit);
+      i = j; continue;
+    }
+    emit(ch, ch); i++;
   }
-  return out;
+  return { text, code };
 }
 
-/** src[i] の引用符から始まる文字列リテラルの終端（閉じ引用符の次）を返す。 */
-function endOfString(src, i) {
+/** 直前に出力したコード部分から、続く `/` が正規表現の開始かを判定する。 */
+function isRegexStart(prev) {
+  const t = prev.replace(/\s+$/, "");
+  if (t === "") return true; // 行頭・ファイル先頭
+  const last = t[t.length - 1];
+  if (REGEX_PRECEDERS.indexOf(last) >= 0) return true;
+  return REGEX_KEYWORDS.test(t);
+}
+
+/** src[i] の `/` から始まる正規表現リテラルの終端（フラグの次）を返す。 */
+function endOfRegex(src, i) {
+  let j = i + 1;
+  let inClass = false;
+  while (j < src.length) {
+    const c = src[j];
+    if (c === "\\") { j += 2; continue; }
+    if (c === "\n") return j; // 正規表現は行を跨がない（判別を誤ったときの暴走止め）
+    if (c === "[") inClass = true;
+    else if (c === "]") inClass = false;
+    else if (c === "/" && !inClass) { j++; break; }
+    j++;
+  }
+  while (j < src.length && /[a-z]/.test(src[j])) j++; // フラグ
+  return j;
+}
+
+/** src[i] の `'` / `"` から始まる文字列リテラルの終端（閉じ引用符の次）を返す。 */
+function endOfQuoted(src, i) {
   const q = src[i];
   let j = i + 1;
   while (j < src.length) {
     if (src[j] === "\\") { j += 2; continue; }
     if (src[j] === q) return j + 1;
-    if (q !== "`" && src[j] === "\n") return j; // 未閉じの引用符で暴走させない
+    if (src[j] === "\n") return j; // 未閉じの引用符で暴走させない
     j++;
   }
   return j;
 }
 
-function codeOf(src) {
-  const text = textOf(src);
-  let out = "";
-  let i = 0;
-  while (i < text.length) {
-    const q = text[i];
-    if (q === '"' || q === "'" || q === "`") {
-      const j = endOfString(text, i);
-      const closed = text[j - 1] === q && j - 1 > i;
-      out += q + blank(text.slice(i + 1, closed ? j - 1 : j)) + (closed ? q : "");
-      i = j; continue;
+/** src[i] の `` ` `` から始まるテンプレートリテラルを走査し、終端の次を返す。
+    素の部分は文字列として（code 側は空白化して）、`${…}` の中身はコードとして出す。 */
+function scanTemplate(src, i, emit) {
+  emit("`", "`");
+  let j = i + 1;
+  let chunk = "";
+  const flushChunk = () => { emit(chunk, blank(chunk)); chunk = ""; };
+  while (j < src.length) {
+    if (src[j] === "\\") { chunk += src.slice(j, j + 2); j += 2; continue; }
+    if (src[j] === "`") { flushChunk(); emit("`", "`"); return j + 1; }
+    if (src[j] === "$" && src[j + 1] === "{") {
+      flushChunk();
+      emit("${", "${");
+      const end = endOfSubstitution(src, j + 2);
+      const inner = split(src.slice(j + 2, end));
+      // 置換式の中身はコードとして残す（`${MK.ui.x()}` に書いた違反を見逃さないため）。
+      emit(inner.text, inner.code);
+      if (src[end] === "}") { emit("}", "}"); j = end + 1; } else { j = end; }
+      continue;
     }
-    out += text[i]; i++;
+    chunk += src[j]; j++;
   }
-  return out;
+  flushChunk();
+  return j;
 }
+
+/** `${` の直後 i から、対応する `}` の位置を返す（中の文字列・テンプレート・入れ子の波括弧を飛ばす）。 */
+function endOfSubstitution(src, i) {
+  let depth = 0;
+  let j = i;
+  while (j < src.length) {
+    const c = src[j];
+    if (c === "}" && depth === 0) return j;
+    if (c === "{") depth++;
+    else if (c === "}") depth--;
+    else if (c === '"' || c === "'") { j = endOfQuoted(src, j); continue; }
+    else if (c === "`") { j = scanTemplate(src, j, () => {}); continue; }
+    j++;
+  }
+  return j;
+}
+
+const textOf = (src) => split(src).text;
+const codeOf = (src) => split(src).code;
 
 /** code の中で re に当たる箇所を `rel:line` の配列で返す。 */
 function hits(rel, code, re) {
@@ -149,6 +227,33 @@ test("textOf(): コメントだけを落とし、文字列の中身は残す（#
   assert(lines[1].indexOf("example.com") >= 0, "文字列内の // で後続を消さない");
 });
 
+test("split(): 正規表現リテラルで後続のコードを飲まない（#312）", () => {
+  // 観点: `/[",\r\n]/`（shared/io.js の CSV エスケープと同型）の引用符を文字列の開始と誤読すると、
+  //       以降が丸ごと空白化されて全検出器が黙って素通りする。除算との判別も併せて固定する。
+  // 入力: バッククォート／引用符を含む正規表現の後ろに違反コードを置いたソースと、除算のソース
+  // 期待: 正規表現の中身は落ち、後続の違反は残る。除算は正規表現と誤認しない
+  const code = codeOf('const q = /[`",]/;\nMK.ui.toast(1);\nlocalStorage.getItem(1);');
+  const lines = code.split("\n");
+  assert(lines[0].indexOf('"') < 0, "正規表現の中身は落ちる");
+  assert(lines[1].indexOf("MK.ui") >= 0, "後続の MK.ui が残る");
+  assert(lines[2].indexOf("localStorage") >= 0, "後続の localStorage が残る");
+  const div = codeOf('const r = (a) / b / c;\nlocalStorage.getItem(1);');
+  assert(div.split("\n")[1].indexOf("localStorage") >= 0, "除算を正規表現と誤認しない");
+});
+
+test("split(): テンプレートリテラルの ${…} はコードとして残る（#312）", () => {
+  // 観点: 置換式に書いた違反（`${MK.ui.x()}`）を見逃さない。素の部分は文字列扱いのまま。
+  // 入力: 素の部分と置換式の両方に検出対象の語を置いたテンプレート
+  // 期待: code 側で置換式の MK.ui は残り、素の部分の localStorage は落ちる
+  const code = codeOf("const h = `localStorage ${MK.ui.toast(1)}`;");
+  assert(code.indexOf("MK.ui.toast") >= 0, "置換式はコードとして残る");
+  assert(code.indexOf("localStorage") < 0, "素の部分は文字列として落ちる");
+  // 入れ子（置換式の中のテンプレート・波括弧）で終端を見失わない
+  const nested = codeOf("const h = `a${ f({ k: `b${ MK.ui.x() }` }) }z`;\nlocalStorage.getItem(1);");
+  assert(nested.indexOf("MK.ui.x") >= 0, "入れ子の置換式も残る");
+  assert(nested.split("\n")[1].indexOf("localStorage") >= 0, "入れ子の後もコードが続く");
+});
+
 test("検出器が実際に違反へ当たる（無検出で緑になる罠を塞ぐ・#312）", () => {
   // 観点: 走査の正規表現が何かの拍子に何にも当たらなくなると、規約検査が全部素通りで緑になる。
   //       各検出器へ「必ず違反」のソースを1本ずつ通して、当たることと当たらない書き方を固定する。
@@ -175,15 +280,22 @@ test("検出器が実際に違反へ当たる（無検出で緑になる罠を�
   assert(!fire(ut, "MK.ui.undoDeleteToast(m, fn);"), "undoDeleteToast は違反にしない");
 });
 
-test("codeOf(): 走査対象が空にならない（無効化の番人・#312）", () => {
-  // 観点: codeOf が何かの拍子に全部を空白へ潰すと、以下の検査が全部素通りで緑になる。
+test("codeOf(): 走査対象が痩せていない（無効化の番人・#312）", () => {
+  // 観点: split が何かの拍子にコードを空白へ潰すと、以下の検査が全部素通りで緑になる。
+  //       絶対量（「200 文字以上残っている」）ではファイル末尾が丸ごと消えても通るので、比で見る。
   // 入力: 全モジュールの logic.js / view.js
-  // 期待: どのファイルもコード部分に中身が残っている
+  // 期待: code / text（＝コメントを除いたうちコードとして残る割合）が 60% 以上。
+  //   分母を素のソースにするとコメントの厚いファイルが 44% まで落ちて閾値を張れない。
+  //   一方、誤読は「そこから先を全部文字列として飲む」形で出る ── text は残るが code だけが
+  //   消えるので、この比なら急落する（実測の下限は 80%＝ view.js 群）。
   const files = moduleFiles("logic").concat(moduleFiles("view"));
   assert(files.length >= 20, "走査対象が十分ある: " + files.length);
   files.forEach((f) => {
-    const code = codeOf(read(f.rel)).replace(/\s/g, "");
-    assert(code.length > 200, f.rel + " のコード部分が空に近い（codeOf の破損を疑う）");
+    const r = split(read(f.rel));
+    const text = r.text.replace(/\s/g, "").length;
+    const code = r.code.replace(/\s/g, "").length;
+    assert(code / text >= 0.6,
+      f.rel + " のコード残存率が低い（split の誤読を疑う）: " + Math.round((code / text) * 100) + "%");
   });
 });
 
@@ -213,15 +325,22 @@ test("§1.3: logic が render を呼ばない（描画は view の責務・#312�
 
 test("§1.3: logic の store 名前空間が自分の `module:<id>` に閉じている（#312）", () => {
   // 観点: モジュールは自分の名前空間だけを書く（scoped は `module:<id>:<targetId>`）。
-  // 入力: 各 logic.js の MK.store.scope(...) / collection(...) の第1引数リテラル
-  // 期待: すべて "module:<id>" か "module:<id>:" 始まり（他モジュールの領域を書かない）
+  // 入力: 各 logic.js の MK.store.scope(...) / collection(...) の第1引数（コメントは textOf が落とす）
+  // 期待: すべて "module:<id>" か "module:<id>:" 始まり（他モジュールの領域を書かない）。
+  //   scoped モジュールは `"module:wbs:" + targetId` と組み立てるので、**先頭の文字列リテラル**で
+  //   判定する（接頭辞さえ自分のものなら、後ろに何を継いでも他の領域へは出られない）。
+  //   先頭がリテラルでない（丸ごと変数渡し）ものは黙って対象外にせず「検査不能」として落とす
+  //   ── 静かな抜け道になるため、通したくなったらこの検査の側を直す。
   const bad = [];
   moduleFiles("logic").forEach((f) => {
-    const src = read(f.rel);
-    const re = /MK\.store\.(?:scope|collection)\(\s*(?:"([^"]*)"|'([^']*)'|`([^`$]*)`)/g;
+    const text = textOf(read(f.rel));
+    const re = /MK\.store\.(?:scope|collection)\(\s*([^,)]*)/g;
     let m;
-    while ((m = re.exec(src))) {
-      const ns = m[1] || m[2] || m[3] || "";
+    while ((m = re.exec(text))) {
+      const arg = m[1].trim();
+      const lit = /^(?:"([^"]*)"|'([^']*)'|`([^`$]*)`)/.exec(arg);
+      if (!lit) { bad.push(f.rel + " → 第1引数の先頭がリテラルでなく検査できない: " + arg); continue; }
+      const ns = lit[1] || lit[2] || lit[3] || "";
       if (ns !== "module:" + f.id && ns.indexOf("module:" + f.id + ":") !== 0) bad.push(f.rel + " → " + ns);
     }
   });
@@ -257,9 +376,11 @@ test("§2.1: モジュールに余白のインライン直書きが無い（#312
 test("§2.3: ネイティブ confirm / alert / prompt を使っていない（#312）", () => {
   // 観点: 確認・通知は MK.ui へ寄せる（トークン描画・ダーク追従・Esc）。
   // 入力: 全モジュールの logic.js / view.js のコード部分
-  // 期待: MK.ui 経由でない confirm( / alert( / prompt( がゼロ
+  // 期待: MK.ui 経由でない confirm( / alert( / prompt( がゼロ。
+  //   `window.` / `globalThis.` / `self.` を前置した呼び方も同じネイティブ呼び出しなので違反にする
+  //   （logic は window 検査で塞がるが view.js は素通りしていた）。
   const files = moduleFiles("logic").concat(moduleFiles("view"));
-  const bad = scan(files, /(?<![.\w])(?:confirm|alert|prompt)\s*\(/);
+  const bad = scan(files, /(?:\b(?:window|globalThis|self)\.|(?<![.\w]))(?:confirm|alert|prompt)\s*\(/);
   eq(bad, [], "ネイティブダイアログを使っている");
 });
 
@@ -290,10 +411,12 @@ test("§1.1.1-(2): 全モジュールに test/<id>.test.js がある（#312）",
   //       個々のドメイン規則が固定されているかは機械では見られないので、器の存在だけを固定する
   //       （中身の追加義務は TESTING.md §5）。
   // 入力: マニフェストのカタログに載る全モジュール id
-  // 期待: 対応する test/<id>.test.js が存在する（scoped 等で名前が割れるものは接頭辞一致を許す）
+  // 期待: `test/<id>.test.js` が**完全一致で**存在する。
+  //   接頭辞一致（`<id>-*.test.js` も可）は逃げ道が広すぎる ── 仮に id が `read` なら無関係な
+  //   `read-summary.test.js` が満たしてしまう。全モジュールが実際に完全一致のファイルを
+  //   持っているので、緩める理由が無い（`wbs-scope.test.js` のような追加ファイルは妨げにならない）。
   const files = fs.readdirSync(__dirname).filter((f) => f.endsWith(".test.js"));
-  const missing = ALL_MODULE_IDS.filter((id) =>
-    files.indexOf(id + ".test.js") < 0 && !files.some((f) => f.indexOf(id + "-") === 0));
+  const missing = ALL_MODULE_IDS.filter((id) => files.indexOf(id + ".test.js") < 0);
   eq(missing, [], "ロジックのテストが無いモジュール");
 });
 
@@ -303,13 +426,17 @@ test("追跡下の .js が構文エラーなく解析できる（node --check �
   // 観点: view.js はハーネスの既定ロード対象に入らないため、構文エラーが全テスト緑のまますり抜ける。
   // 入力: Git 追跡下の .js 全部（未追跡の下書きは対象外）
   // 期待: すべて new vm.Script() で解析できる。取得できない環境では素通りさせず落とす。
+  //   既定の core.quotepath は非 ASCII のパスを `"..."` でクォートして返し、その行は直後の
+  //   存在チェックで黙って落ちる（＝検査されないまま緑）。off ＋ NUL 区切りで生のパスを受ける。
   let list;
   try {
-    list = cp.execSync('git ls-files "*.js"', { cwd: rootDir, encoding: "utf8" });
+    list = cp.execSync('git -c core.quotepath=off ls-files -z "*.js"', { cwd: rootDir, encoding: "utf8" });
   } catch (e) {
     throw new Error("git ls-files が使えないため構文検査が成立しない（素通りで緑にしない）");
   }
-  const files = list.split(/\r?\n/).filter(Boolean).filter((f) => fs.existsSync(path.join(rootDir, f)));
+  const names = list.split("\0").filter(Boolean);
+  const files = names.filter((f) => fs.existsSync(path.join(rootDir, f)));
+  eq(names.filter((f) => files.indexOf(f) < 0), [], "追跡下なのに作業ツリーに無い .js（未検査で緑にしない）");
   assert(files.length >= 30, "走査対象が極端に少ない（取得の破損を疑う）: " + files.length);
   const bad = [];
   files.forEach((rel) => {

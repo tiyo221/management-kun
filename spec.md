@@ -119,7 +119,7 @@ management-kun/
 │   └── <id>/{logic,view}.js … id の一覧・ゾーン・CSV 対応は §5 のモジュール一覧表を正とする
 ├── test/                   … 依存ゼロの自動テスト（node test/run.js。TESTING.md）
 ├── DESIGN.md               … デザインシステム
-├── CONVENTIONS.md          … UI/レイアウト規約・logic/view 分割・完成チェックリスト
+├── CONVENTIONS.md          … UI/レイアウト規約・logic/view 分割・完成の点検（DoD）
 ├── CODING.md               … コーディング規約
 ├── CLAUDE.md               … 作業ガイド
 ├── TESTING.md              … テスト指針・変更影響マトリクス

@@ -1,6 +1,6 @@
 # CODING.md — コーディング規約
 
-このリポジトリのコードを書くときの規約。**どう作るか**の詳細を定める（**何を作るか**は [`spec.md`](spec.md)、UI・アーキテクチャの型と完成チェックリストは [`CONVENTIONS.md`](CONVENTIONS.md)）。
+このリポジトリのコードを書くときの規約。**どう作るか**の詳細を定める（**何を作るか**は [`spec.md`](spec.md)、UI・アーキテクチャの型と完成の点検（DoD）は [`CONVENTIONS.md`](CONVENTIONS.md)）。
 
 設計思想（重要）: **ビルド不要・外部依存ゼロ・`file://` 動作・ローカル完結**を崩さない。ファイルは分割するが、`file://` で確実に動かすため **ES Modules / `fetch()` は使わず**、classic `<script src>` + グローバル名前空間 `window.MK` で連携する（詳細は [`spec.md`](spec.md) §3）。画像はインライン SVG か絵文字、グラフは外部ライブラリを使わず Canvas / インライン SVG で自前描画、フォントはシステムフォントスタック（[`DESIGN.md`](DESIGN.md) の Notion Sans は外部読込しない）。
 

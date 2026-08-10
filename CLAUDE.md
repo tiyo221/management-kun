@@ -16,7 +16,7 @@
 - モジュール個別仕様: [`spec/modules/<id>.md`](spec/modules/) — 各モジュールの位置づけ・固有データ・CSV 列・旧データ移行（そのモジュールを直すときに読む）
 - デザイン定義: [`DESIGN.md`](DESIGN.md) — Notion 風デザインシステム（トークン・コンポーネント）
 - コーディング規約: [`CODING.md`](CODING.md) — 言語/実行環境・モダン JS・構造/命名・安全/堅牢性・オーバーエンジニアリング防止（**コードを書く前に参照**）
-- 規約・チェックリスト: [`CONVENTIONS.md`](CONVENTIONS.md) — UI/レイアウト規約・モジュール分割（logic/view）・完成チェックリスト（**モジュール追加/修正時は必ず参照・自己点検**）
+- 規約・チェックリスト: [`CONVENTIONS.md`](CONVENTIONS.md) — UI/レイアウト規約・モジュール分割（logic/view）・完成の点検＝DoD（**モジュール追加/修正時は必ず参照・自己点検**）
 - データ永続化: ブラウザの `localStorage`（`mk:` プレフィックスで統一）。外部送信は行わない。
 - 共有・バックアップ・AI 保守: JSON エクスポート / インポート（全体 / モジュール / 人 / プロジェクト単位）。一部モジュールは CSV にも対応（対象は [`spec.md`](spec.md) §5 の一覧表を正とする）。
 
@@ -34,7 +34,7 @@
 
 仕様は2層＋トピック分離。全モジュールに効く**共通仕様**は [`spec.md`](spec.md)（§3.2 構成 / §4 データ規格 など。取込・移行・名寄せ ＝ §4.6・§7・§8 は [`spec/import-migration.md`](spec/import-migration.md) に分離）、**モジュール固有の仕様**は [`spec/modules/<id>.md`](spec/modules/)（位置づけ・固有データ・CSV 列・旧データ移行）。修正・機能追加時は「共通仕様＋対象モジュールの個別仕様」だけ読めば足りる。本書では重複させず、作業で常に守る**運用ルール**だけを挙げる:
 
-- **logic/view を必ず分割する**。各モジュールは `MK.registerModule(id, def)` で登録し、シェルが `def.mount(container, ctx)` を呼ぶ（logic＝DOM 非依存の `MK.logic[id]`、view＝描画のみ。API 契約は [`spec.md`](spec.md) §3.5）。共有ヘルパ・追加手順・完成チェックリストは [`CONVENTIONS.md`](CONVENTIONS.md)。
+- **logic/view を必ず分割する**。各モジュールは `MK.registerModule(id, def)` で登録し、シェルが `def.mount(container, ctx)` を呼ぶ（logic＝DOM 非依存の `MK.logic[id]`、view＝描画のみ。API 契約は [`spec.md`](spec.md) §3.5）。共有ヘルパ・追加手順・完成の点検（DoD）は [`CONVENTIONS.md`](CONVENTIONS.md)。
 - モジュールは**自分の名前空間 `mk:module:<id>` のみ**書き込む。マスタの変更は必ず `ctx.people` / `ctx.projects` 経由で行う（直接 localStorage を触らない）。
 
 ## コーディング規約
