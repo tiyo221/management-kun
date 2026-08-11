@@ -195,9 +195,8 @@
   ui.toolbar = function (children) { return el("div", { class: "mk-toolbar" }, children || []); };
   ui.card = function (children, opts) {
     opts = opts || {};
-    const attrs = { class: "card" };
-    if (opts.flush) attrs.style = "padding:0;overflow:hidden;";
-    return el("div", attrs, children || []);
+    // flush＝内側の一覧を縁まで敷き詰める（余白・はみ出しの扱いは .card-flush が持つ）。
+    return el("div", { class: "card" + (opts.flush ? " card-flush" : "") }, children || []);
   };
   // 空状態ガイド（Issue #41）。文字列は従来どおり1行表示。
   // オブジェクト { title, hint, action:{label, onClick, variant} } で「次の一手」を案内する。

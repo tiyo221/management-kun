@@ -132,7 +132,7 @@
       });
       tr.appendChild(el("td", {}, [el("span", { class: "wbs-num", text: nums[idx] })]));
 
-      const nameWrap = el("div", { class: "wbs-name", style: "padding-left:" + (t.level * 14) + "px;" });
+      const nameWrap = el("div", { class: "wbs-name mk-indent", style: "--mk-depth:" + t.level + ";" });
       if (parent) { const tg = el("span", { class: "wbs-toggle", text: t.collapsed ? "▶" : "▼" }); tg.addEventListener("click", () => { L().toggleCollapse(idx); render(); }); nameWrap.appendChild(tg); }
       else nameWrap.appendChild(el("span", { class: "wbs-toggle", text: "" }));
       nameWrap.appendChild(cellInput(t.name, "text", (v) => { L().update(idx, { name: v }); render(); }, parent ? "summary" : ""));
@@ -163,7 +163,7 @@
 
   function assigneeCell(idx, t) {
     const cur = t.assigneeId ? MK.people.get(t.assigneeId) : null;
-    const inputEl = el("input", { class: "cell", list: "mk-people-list", value: cur ? cur.name : "", placeholder: "—", style: "width:90px;" });
+    const inputEl = el("input", { class: "cell wbs-cell-person", list: "mk-people-list", value: cur ? cur.name : "", placeholder: "—" });
     // 既存の担当者へ寄せる場合は行内で完結する（他行・統計・ガントに波及しない）ので全再描画しない。
     // ただし未登録名は resolveOrCreate がマスタへ新規作成し、masters:changed 経由でシェルがモジュールを
     // 再マウントする（この場合ここは行内完結にならず inputEl は切り離される）。再マウント時は旧ノードを
@@ -292,7 +292,7 @@
     const nameCol = el("div", { class: "wbs-gantt-names" });
     visible.forEach((idx) => {
       const t = tasks[idx], parent = L().isParent(tasks, idx);
-      const inner = el("div", { class: "wbs-gantt-name", style: "padding-left:" + (t.level * 14) + "px;" });
+      const inner = el("div", { class: "wbs-gantt-name mk-indent", style: "--mk-depth:" + t.level + ";" });
       if (parent) { const tg = el("span", { class: "wbs-toggle", text: t.collapsed ? "▶" : "▼" }); tg.addEventListener("click", () => { L().toggleCollapse(idx); render(); }); inner.appendChild(tg); }
       else inner.appendChild(el("span", { class: "wbs-toggle", text: "" }));
       inner.appendChild(el("span", { class: "wbs-num", text: nums[idx] }));
@@ -307,7 +307,7 @@
 
   function cellInput(value, type, onChange, cls) {
     const i = el("input", { class: "cell " + (cls || ""), type: type || "text", value: value || "" });
-    if (type === "number") { i.min = "0"; i.max = "100"; i.style.width = "52px"; }
+    if (type === "number") { i.min = "0"; i.max = "100"; i.classList.add("wbs-cell-num"); }
     i.addEventListener("change", () => onChange(i.value));
     return i;
   }

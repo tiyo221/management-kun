@@ -55,7 +55,7 @@
       (v) => { category = v; render(); });
     filterBar.appendChild(ui.field("カテゴリ", catSel));
     const searchBox = ui.input({ placeholder: "検索…", value: search });
-    searchBox.style.maxWidth = "220px";
+    searchBox.classList.add("mk-search-input");
     searchBox.addEventListener("input", () => { search = searchBox.value; renderList(listHost); });
     filterBar.appendChild(searchBox);
 

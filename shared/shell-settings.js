@@ -70,7 +70,7 @@
     const startCb = el("input", { type: "checkbox" });
     startCb.checked = getSettings().startView === "last";
     startCb.addEventListener("change", () => setSettings({ startView: startCb.checked ? "last" : "home" }));
-    const startLabel = el("label", { class: "mk-toolbar", style: "gap:var(--space-xs);cursor:pointer;" }, [startCb, el("span", { text: "起動時に前回のモジュールを開く" })]);
+    const startLabel = el("label", { class: "mk-check-label" }, [startCb, el("span", { text: "起動時に前回のモジュールを開く" })]);
     card.appendChild(startLabel);
 
     // 旧ツール移行（検出されたら表示。spec §7.5）
@@ -82,16 +82,19 @@
       mig.addEventListener("click", () => migrateLegacy(legacy));
       card.appendChild(mig);
     }
-    main.appendChild(card);
-    main.appendChild(renderBackupFreshness());
-    main.appendChild(renderStorageUsage());
-    main.appendChild(renderModuleVisibility());
+    // カード間の間隔は .mk-stack に委ねる（インラインで余白を置かない・CONVENTIONS §2.1）。
+    const stack = el("div", { class: "mk-stack" });
+    main.appendChild(stack);
+    stack.appendChild(card);
+    stack.appendChild(renderBackupFreshness());
+    stack.appendChild(renderStorageUsage());
+    stack.appendChild(renderModuleVisibility());
 
     if (MK.store.errors.length) {
-      const warn = el("div", { class: "card", style: "margin-top:var(--space-md);border-color:var(--color-error);" });
+      const warn = el("div", { class: "card card-alert" });
       warn.appendChild(el("h3", { text: "⚠ 破損データ" }));
       MK.store.errors.forEach((e) => warn.appendChild(el("div", { class: "sub", text: e.key + ": " + e.message })));
-      main.appendChild(warn);
+      stack.appendChild(warn);
     }
   }
 
@@ -104,17 +107,16 @@
 
   function renderBackupFreshness() {
     const f = MK.io.backupFreshness();
-    const card = el("div", { class: "card", style: "margin-top:var(--space-md);" + (f.stale ? "border-color:var(--color-error);" : "") });
+    const card = el("div", { class: "card" + (f.stale ? " card-alert" : "") });
     card.appendChild(el("h3", { text: "バックアップ鮮度" }));
     card.appendChild(el("p", { class: "sub", text: "データはこのブラウザの保存領域にのみ存在します。ブラウザのデータ削除・端末移行に備え、定期的に全体バックアップ（JSON）を取得してください。" }));
     const when = f.lastBackupAt
       ? (f.days === 0 ? "今日" : f.days + "日前") + "（" + f.date + "）"
       : "未実施";
-    card.appendChild(el("div", { style: "font-weight:600;", text: "最終バックアップ: " + when }));
+    card.appendChild(el("div", { class: "mk-strong", text: "最終バックアップ: " + when }));
     if (f.stale) {
       card.appendChild(el("p", {
-        class: "sub",
-        style: "margin-top:var(--space-xs);color:var(--color-error);",
+        class: "sub mk-error-text",
         text: f.lastBackupAt
           ? "⚠ 最後のバックアップから " + MK.io.BACKUP_STALE_DAYS + " 日以上経過しています。全体バックアップ（JSON）を取得してください。"
           : "⚠ まだ一度もバックアップを取得していません。全体バックアップ（JSON）を取得してください。",
@@ -140,17 +142,16 @@
     const u = MK.store.usage();
     const pct = Math.round(u.ratio * 100);
     const warn = u.ratio >= USAGE_WARN_RATIO;
-    const card = el("div", { class: "card", style: "margin-top:var(--space-md);" + (warn ? "border-color:var(--color-error);" : "") });
+    const card = el("div", { class: "card" + (warn ? " card-alert" : "") });
     card.appendChild(el("h3", { text: "ストレージ使用量" }));
     card.appendChild(el("p", { class: "sub", text: "ブラウザの保存領域（localStorage・約 5MB）の使用量です。上限に近づいたら不要データの整理と JSON バックアップを検討してください。" }));
-    card.appendChild(el("div", { style: "font-weight:600;", text: formatBytes(u.bytes) + " / 約 " + formatBytes(u.quota) + "（" + pct + "%・" + u.count + " キー）" }));
-    // 使用量バー
-    const track = el("div", { style: "margin-top:var(--space-xs);height:8px;border-radius:4px;background:var(--color-hairline);overflow:hidden;" });
-    const fill = el("div", { style: "height:100%;width:" + Math.min(100, pct) + "%;background:" + (warn ? "var(--color-error)" : "var(--color-primary)") + ";" });
-    track.appendChild(fill);
+    card.appendChild(el("div", { class: "mk-strong", text: formatBytes(u.bytes) + " / 約 " + formatBytes(u.quota) + "（" + pct + "%・" + u.count + " キー）" }));
+    // 使用量バー（共通の .progress を使う。閾値超過はバーだけ警告色へ）
+    const track = el("div", { class: "progress mk-usage-bar" });
+    track.appendChild(el("i", { class: warn ? "warn" : "", style: "width:" + Math.min(100, pct) + "%;" }));
     card.appendChild(track);
     if (warn) {
-      card.appendChild(el("p", { class: "sub", style: "margin-top:var(--space-xs);color:var(--color-error);", text: "⚠ 使用量が上限の " + Math.round(USAGE_WARN_RATIO * 100) + "% を超えています。全体バックアップ（JSON）を取得し、不要なデータを整理してください。" }));
+      card.appendChild(el("p", { class: "sub mk-error-text", text: "⚠ 使用量が上限の " + Math.round(USAGE_WARN_RATIO * 100) + "% を超えています。全体バックアップ（JSON）を取得し、不要なデータを整理してください。" }));
     }
     return card;
   }
@@ -158,7 +159,7 @@
   // モジュールの表示・非表示トグル（ゾーンでグルーピング。Issue #35）。
   // 変更は即ナビ・HOME へ反映する。非表示にしてもデータ・マスタ連携は保持される。
   function renderModuleVisibility() {
-    const card = el("div", { class: "card", style: "margin-top:var(--space-md);" });
+    const card = el("div", { class: "card" });
     card.appendChild(el("h3", { text: "モジュールの表示" }));
     card.appendChild(el("p", { class: "sub", text: "ナビと HOME に表示するモジュールを選びます。非表示にしてもデータは保持されます。" }));
     ZONES.forEach((zone) => {
@@ -171,7 +172,7 @@
         const cb = MK.ui.checkbox(!isHiddenModule(id));
         cb.addEventListener("change", () => { setModuleHidden(id, !cb.checked); S.renderNav(); });
         const label = (m.icon ? m.icon + " " : "") + m.title + (MK.modules[id] ? "" : "・準備中");
-        list.appendChild(el("label", { style: "display:flex;gap:var(--space-xs);align-items:center;cursor:pointer;" }, [cb, el("span", { text: label })]));
+        list.appendChild(el("label", { class: "mk-check-label" }, [cb, el("span", { text: label })]));
       });
       card.appendChild(list);
     });

@@ -79,14 +79,17 @@ const DETECTORS = {
   },
   spacing: {
     files: "both", on: "text",
-    re: /style\s*=\s*["'`][^"'`]*(?:margin|padding)|\.style\.(?:margin|padding)|cssText[^\n]*(?:margin|padding)|setProperty\(\s*["'`](?:margin|padding)/,
+    // `style="…"`（テンプレート内の属性）だけでなく `style: "…"`（el() の属性オブジェクト）も見る。
+    // 本アプリの DOM 生成はほぼ後者なので、属性形だけだと余白の直書きが素通りしていた（#264）。
+    re: /style\s*[=:]\s*["'`][^"'`]*(?:margin|padding)|\.style\.(?:margin|padding)|cssText[^\n]*(?:margin|padding)|setProperty\(\s*["'`](?:margin|padding)/,
     fires: [
       "el.style.marginTop = 4;",
       'h = `<div style="margin:2px">`;',
+      'el("div", { style: "padding-left:8px;" });',
       'el.style.cssText = "margin:0;padding:0";',
       'el.style.setProperty("padding", "0");',
     ],
-    passes: ["el.style.width = 4;", 'h = `<div class="mk-stack">`;'],
+    passes: ["el.style.width = 4;", 'h = `<div class="mk-stack">`;', 'el("div", { style: "--mk-depth:" + n + ";" });'],
   },
   color: {
     files: "both", on: "text",
