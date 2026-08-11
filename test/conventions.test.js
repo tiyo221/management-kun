@@ -342,22 +342,28 @@ test("共通規約系の検出器が shared/*.js まで届いている（#318）
   //       （`shared/shell-settings.js` の余白の直書きが素通りした実例＝#264）。`files` を "both" へ
   //       戻す変更は**違反が減ったようにしか見えない**ので、分類そのものをここで固定する。
   // 入力: DETECTORS の分類（共通規約系＝誰が書いても守るルール／責務分離系＝logic と view の分業）
-  // 期待: 共通規約系は shared を走査対象に含み、責務分離系は含まない。
+  // 期待: 共通規約系は shared を **全件** 走査対象に含み、責務分離系は1本も含まない。
+  //   「shared が1本でも入っている」で済ませると、"all" の分岐が sharedFiles().filter(…) のように
+  //   痩せても代表の1本さえ残れば通る ── それはこの Issue が塞いだ穴と同じ形なので、全件を要求する。
   //   責務分離系を掛けない理由は shared が抽象の実装本体だから（store.js が localStorage を叩き
-  //   ui.js が document を叩くのは仕様）。`color` は #267 の色設計待ちで modules 限定に据え置く。
+  //   ui.js が document を叩くのは仕様）。`color` は理由が違う（共通規約系だが #267 の色設計待ち）
+  //   ので別の箱に分ける ── 同じ箱に入れると、#267 で外すときに事実と違う理由で落ちる。
   const shouldScanShared = ["spacing", "dialog", "scopeDim"];
-  const modulesOnly = ["dom", "localStorage", "render", "undoToast", "color"];
-  eq(shouldScanShared.concat(modulesOnly).sort(), Object.keys(DETECTORS).sort(),
+  const responsibility = ["dom", "localStorage", "render", "undoToast"];
+  const deferred = ["color"];
+  eq(shouldScanShared.concat(responsibility, deferred).sort(), Object.keys(DETECTORS).sort(),
     "分類していない検出器がある（足したら shared へ掛けるか決める）");
+  const sharedRels = sharedFiles().map((f) => f.rel);
   shouldScanShared.forEach((name) => {
     const rels = targetsOf(name).map((f) => f.rel);
-    assert(rels.some((r) => r.indexOf("shared/") === 0), name + " が shared を走査していない");
-    assert(rels.indexOf("shared/ui.js") >= 0, name + " の shared 走査が痩せている（ui.js が居ない）");
+    eq(sharedRels.filter((r) => rels.indexOf(r) < 0), [],
+      name + " の shared 走査が痩せている（shared/*.js が全件は入っていない）");
   });
-  modulesOnly.forEach((name) => {
-    assert(!targetsOf(name).some((f) => f.rel.indexOf("shared/") === 0),
-      name + " は責務分離系なので shared へ掛けない（抽象の実装本体を違反にしてしまう）");
-  });
+  const noShared = (name, why) => assert(!targetsOf(name).some((f) => f.rel.indexOf("shared/") === 0), why);
+  responsibility.forEach((name) => noShared(name,
+    name + " は責務分離系なので shared へ掛けない（抽象の実装本体を違反にしてしまう）"));
+  deferred.forEach((name) => noShared(name,
+    name + " は #267 の色設計が決まるまで modules 限定（外すときは CONVENTIONS §6.1 の表も直す）"));
 });
 
 // ---- codeOf 自体の検査（この土台が壊れると、以下の検査が黙って全部通る） ----
