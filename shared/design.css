@@ -491,8 +491,9 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .text-input.mk-daily-at { max-width: 120px; }
 
 /* ---- todo 固有（期日入力の幅・低頻度操作を退避する帯）---- */
-.mk-todo-due { max-width: 150px; }
-.text-input.mk-todo-sort { max-width: 150px; }
+/* 期日入力（行内）と並び順 select（ツールバー）は同じ幅に揃える。値は1回だけ書く。
+   `.text-input` と組にするのは詳細度のため（基底が `select.text-input`＝0,1,1）。 */
+.text-input.mk-todo-due, .text-input.mk-todo-sort { max-width: 150px; }
 /* 低頻度操作（CSV）を退避する最下部の帯。主操作から視覚的に切り離す（§2.5-5）。 */
 .mk-todo-footer { display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-lg); padding-top: var(--space-md); border-top: 1px solid var(--color-hairline-soft); }
 
@@ -522,8 +523,10 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 
 /* 階段UI（目標=頂上を上・スタートを下、完了ステップが積み上がる。Issue #13） */
 .mk-staircase { display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-sm) 0; }
-/* 段のインデント。何段目かは JS が --mk-depth で渡し（頭打ちも JS 側）、1段の幅はここで持つ。 */
-.mk-stair-indent { margin-left: calc(var(--mk-depth, 0) * 26px); }
+/* 段のインデント。何段目かは JS が --mk-stair-depth で渡し（頭打ちも JS 側）、1段の幅はここで持つ。
+   ツリーの .mk-indent（14px/段）とは1段の幅が違うので、変数名も分ける ── カスタムプロパティは
+   継承するため、同名にすると入れ子になったとき外側の段数が内側へ漏れる。 */
+.mk-stair-indent { margin-left: calc(var(--mk-stair-depth, 0) * 26px); }
 .mk-summit { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); font-weight: 700; color: var(--color-ink); }
 .mk-summit-flag { font-size: 18px; }
 .mk-summit.reached { color: var(--color-success); }

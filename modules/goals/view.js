@@ -193,7 +193,7 @@
 
   // 段のインデント（先頭=0、上へ行くほど深くして階段状に見せる。過大な段数は頭打ち）。
   // 何段目かだけを CSS 変数で渡し、1段あたりの幅は .mk-stair-indent が持つ（design.css）。
-  function indent(i) { const cap = 10; return "--mk-depth:" + Math.min(i, cap) + ";"; }
+  function indent(i) { const cap = 10; return "--mk-stair-depth:" + Math.min(i, cap) + ";"; }
 
   function stairRow(g, s, idx, curId) {
     const done = s.status === "done";
