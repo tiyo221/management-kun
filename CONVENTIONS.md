@@ -169,27 +169,32 @@ DoD が持つ固有の情報は「**いつ確かめるか**」だけで、規約
 
 下記はテストが**全モジュールを走査して**落とすので、**目視のチェック項目として持たない**（テストが正。ここに表を置くのは「何が自動で守られているか」を知るためで、人が1つずつ確かめるためではない）。
 
-`test/conventions.test.js` の走査対象は **`modules/*/logic.js` / `view.js` だけ**で、`shared/*` は含まない（共有層を触るときは自分で確かめる）。
+`test/conventions.test.js` の走査対象は検査の性質で2段になっている（下表の「対象」列）。
 
-| 規約 | 担保するテスト |
-|---|---|
-| logic が DOM / `document` / `MK.ui` に触れない（§1.3・§1.1.1-(1)） | [`test/conventions.test.js`](test/conventions.test.js) |
-| logic が `localStorage` を直叩きしない（§1.3 / §1.4） | 〃 |
-| logic が `render` を呼ばない（§1.3） | 〃 |
-| store 名前空間が自分の `module:<id>` に閉じている（§1.3） | 〃 |
-| 次元を `"project"` で決め打ち比較していない（§3 / spec §3.7.6） | 〃 |
-| 余白のインライン直書きが無い（§2.1） | 〃 |
-| 色がトークン経由で直書きが無い（§2.1。角丸・タイポは §6.2。ダークで実際に見るのは §6.3） | 〃 |
-| ネイティブ `confirm` / `alert` / `prompt` が無い（§2.3） | 〃 |
-| 削除が `undoDeleteToast` 経由（`undoToast` の直呼びが無い。§2.5-3） | 〃 |
-| undo 退避を持つ logic に `forgetUndo()` がある（§2.5-3） | 〃 |
-| 全モジュールに `test/<id>.test.js` がある（§1.1.1-(2)） | 〃 |
-| Git 追跡下の `.js` に構文エラーが無い（`node --check` 相当） | 〃 |
-| def に `title` / `icon` / `description` がある（§1.3 / spec §3.6） | [`test/module-meta.test.js`](test/module-meta.test.js) |
-| `exportData()` の空判定でサンプル投入バーが出る（spec §3.6.2） | [`test/sample-bar.test.js`](test/sample-bar.test.js) |
-| 着脱耐性の logic＋core 層（spec §9.5。DOM 層は §6.3） | [`test/module-detach.test.js`](test/module-detach.test.js) |
-| [`spec.md`](spec.md) §5 表 ⇄ manifest の id・CSV・個別仕様の有無・md のリンク切れ | [`test/spec-consistency.test.js`](test/spec-consistency.test.js) |
-| 秘密情報・ローカル固有値の混入（[`TESTING.md`](TESTING.md) §7.2） | [`test/secrets.test.js`](test/secrets.test.js) |
+- **共通規約系**（余白・ネイティブダイアログ・次元の決め打ち）＝ 誰が書いても守るルールなので、`modules/*/logic.js` / `view.js` に加えて **`shared/*.js` も走査する**。共有層こそ影響範囲が広い。
+- **責務分離系**（logic と view の分業）＝ **`modules/*` だけ**。`shared/*` はその抽象の実装本体（`store.js` が `localStorage` を叩き、`ui.js` が `document` を叩く）なので、掛けると仕様が違反として並ぶ。
+- 色の直書き検査は共通規約系だが、`shared/sample.js` の識別色データ（保存・エクスポートされるデータ値で `var(--token)` を書けない）の扱いが色設計と絡むため、いまは `modules/*` 限定。
+- `shared/design.css` は CSS なので対象外（検出器は JS のコード／テキストを見る）。
+
+| 規約 | 対象 | 担保するテスト |
+|---|---|---|
+| logic が DOM / `document` / `MK.ui` に触れない（§1.3・§1.1.1-(1)） | modules | [`test/conventions.test.js`](test/conventions.test.js) |
+| logic が `localStorage` を直叩きしない（§1.3 / §1.4） | modules | 〃 |
+| logic が `render` を呼ばない（§1.3） | modules | 〃 |
+| store 名前空間が自分の `module:<id>` に閉じている（§1.3） | modules | 〃 |
+| 次元を `"project"` で決め打ち比較していない（§3 / spec §3.7.6） | modules ＋ shared | 〃 |
+| 余白のインライン直書きが無い（§2.1） | modules ＋ shared | 〃 |
+| 色がトークン経由で直書きが無い（§2.1。角丸・タイポは §6.2。ダークで実際に見るのは §6.3） | modules | 〃 |
+| ネイティブ `confirm` / `alert` / `prompt` が無い（§2.3） | modules ＋ shared | 〃 |
+| 削除が `undoDeleteToast` 経由（`undoToast` の直呼びが無い。§2.5-3） | modules | 〃 |
+| undo 退避を持つ logic に `forgetUndo()` がある（§2.5-3） | modules | 〃 |
+| 全モジュールに `test/<id>.test.js` がある（§1.1.1-(2)） | modules | 〃 |
+| Git 追跡下の `.js` に構文エラーが無い（`node --check` 相当） | 全体 | 〃 |
+| def に `title` / `icon` / `description` がある（§1.3 / spec §3.6） | modules | [`test/module-meta.test.js`](test/module-meta.test.js) |
+| `exportData()` の空判定でサンプル投入バーが出る（spec §3.6.2） | modules | [`test/sample-bar.test.js`](test/sample-bar.test.js) |
+| 着脱耐性の logic＋core 層（spec §9.5。DOM 層は §6.3） | modules | [`test/module-detach.test.js`](test/module-detach.test.js) |
+| [`spec.md`](spec.md) §5 表 ⇄ manifest の id・CSV・個別仕様の有無・md のリンク切れ | 全体 | [`test/spec-consistency.test.js`](test/spec-consistency.test.js) |
+| 秘密情報・ローカル固有値の混入（[`TESTING.md`](TESTING.md) §7.2） | 全体 | [`test/secrets.test.js`](test/secrets.test.js) |
 
 変更したモジュール＋依存側（[`TESTING.md`](TESTING.md) §2 マトリクス）のテストを回し、バグ修正には再発防止テストを1つ足す。既存モジュールへドメイン規則を足したときも、その規則のテストを足す（[`TESTING.md`](TESTING.md) §5）。
 

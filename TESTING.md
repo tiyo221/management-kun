@@ -41,7 +41,7 @@
 | `index.html` / `shared/shell*.js`（シェル/ナビ/移行/設定。責務別分割・Issue #140） | シェル・該当移行 | 手動（切替・バックアップ・移行） |
 | `*.md`（仕様・ガイドの追加/移動/改名） | ドキュメント間の相対リンク（Git 追跡下の md が対象）とコードフェンスの閉じ忘れ | 自動（`spec-consistency`＝リンク切れ検出・#241） |
 | 追跡対象に入るファイル全般（`.claude/agents/*` の追加・`.gitignore` の追跡範囲変更など） | 秘密情報・ローカル固有値の混入 | 自動（`secrets`＝§7.2・#305） |
-| `modules/*/logic.js` / `view.js`（新規追加を含む） | CONVENTIONS の規約のうち機械で見られるもの（logic の DOM 非依存・store 名前空間・undo・ネイティブダイアログ等。CONVENTIONS §6.1） | 自動（`conventions`・#312。全モジュールを走査するので個別の追記は不要） |
+| `modules/*/logic.js` / `view.js`（新規追加を含む）／`shared/*.js` | CONVENTIONS の規約のうち機械で見られるもの（logic の DOM 非依存・store 名前空間・undo・ネイティブダイアログ等。CONVENTIONS §6.1） | 自動（`conventions`・#312。走査対象を舐めるので個別の追記は不要。`shared/*.js` に掛かるのは共通規約系＝余白・ネイティブダイアログ・次元の決め打ちだけ・#318） |
 
 > 各モジュールは基本独立で、共通の依存は「shared」と「人/プロジェクトのマスタ」。例外は **dashboard**（横断集約ビュー）で、共有マスタに加え **wbs の対象別データ（`exportData(projectId)`）を読み取り専用で集約**する（編集はしない）。wbs の進捗集計を変えたら dashboard も確認する。
 
