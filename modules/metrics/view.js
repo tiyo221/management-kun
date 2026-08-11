@@ -81,12 +81,31 @@
     }
     if (m.note) meta.push(el("span", { class: "sub", text: m.note }));
 
-    const title = el("div", {}, [el("span", { text: m.name })]);
+    // 指標名はインライン編集（Enter/blur 確定・Esc 取消。CONVENTIONS §2.5-2）。微修正のために
+    // 7項目のモーダルを開かせない。種別・単位・方向・目標値・親指標は互いに絡む（方向と目標値で
+    // 達成判定が決まり、親指標は循環チェックが要る）のでモーダル継続。
+    const nameEdit = ui.inlineEdit({
+      value: m.name,
+      onCommit: (next) => {
+        if (!next) { MK.ui.toast("指標名を入力してください", "error"); return false; } // 空は拒否＝元値へ
+        if (!L().updateMetric(m.id, { name: next })) return rejectStale(); // 消えていたら元値へ＋画面を合わせ直す
+        m.name = next; // logic が同じオブジェクトを更新済みで今は冗長。store のキャッシュ共有に
+                       // 依存せず、削除トーストが旧名を出さないようにする防御
+        return true; // 木（tree）の並びも親子関係も指標名では変わらないので、行はその場で完結（§2.5-4）
+      },
+    });
+    const title = el("div", {}, [nameEdit]);
     // depth ぶんインデントして KGI→NSM→KPI の階層を視認できるようにする（14px/段。wbs のツリーと同じ流儀）。
-    const grow = el("div", { class: "grow", style: "cursor:pointer;padding-left:" + (depth * 14) + "px;" }, [title, el("div", { class: "sub" }, meta)]);
-    grow.addEventListener("click", () => openEditor(m));
-    return el("li", { class: "mk-row" }, [grow]);
+    const grow = el("div", { class: "grow", style: "padding-left:" + (depth * 14) + "px;" }, [title, el("div", { class: "sub" }, meta)]);
+    // 指標名のクリックはインライン編集が取るため、モーダルへの導線は明示のボタンにする。
+    const editBtn = ui.button("編集", { variant: "btn-ghost", title: "まとめて編集（指標名・種別・単位・方向・目標値・親指標・メモ・実績）", onClick: () => openEditor(m) });
+    return el("li", { class: "mk-row mk-row-dense" }, [grow, editBtn]);
   }
+
+  // 掴んだ行の実体が別経路（JSON 取込・対象プロダクトの切替・同一タブの別画面での削除）で消えていた
+  // ときの応答。無言で元値へ戻すと「なぜか編集が効かない行」に見えるので、消えた事実を伝えて画面を
+  // ストアへ合わせ直す（CONVENTIONS §2.5-2）。onCommit へそのまま返せるよう false を返す。
+  function rejectStale() { MK.ui.toast("この指標は見つかりません（削除された可能性があります）", "info"); render(); return false; }
 
   function kindLabel(kind) { const k = L().KINDS.find((x) => x.key === kind); return k ? k.label : kind; }
   function dirLabel(dir) { const d = L().DIRECTIONS.find((x) => x.key === dir); return d ? d.label : dir; }
@@ -151,7 +170,8 @@
         // 親は addMetric でも受けるが、循環防止の一元管理のため setParent を通す（新規は循環しないが経路を1つに）。
         if (created && f.parentId.value) L().setParent(created.id, f.parentId.value);
       } else {
-        L().updateMetric(metric.id, attrs);
+        // 編集中に別経路で消えていたら、閉じたうえで行内編集と同じ応答をする（無言で閉じない・§2.5-2）
+        if (!L().updateMetric(metric.id, attrs)) { close(); rejectStale(); return; }
         if (!L().setParent(metric.id, f.parentId.value || null)) {
           // 循環する親指定は setParent が false を返す。スカラー更新は済んでいるので理由だけ知らせる。
           MK.ui.toast("その指標は子孫のため親に設定できません", "error");

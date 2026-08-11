@@ -99,6 +99,26 @@ test("metrics: setParent は自分自身・子孫を親にできない（循環�
   eq(M.setParent(a.id, null), true);       // トップへ（正常）
 });
 
+test("metrics: updateMetric は空振りで null を返し、保存もしない", (MK) => {
+  // 観点: 行内編集の確定を受け入れるか view が判断できること（removeMetric と同じ契約）。空振りで
+  //       保存すると、直前の削除の退避（pendingUndo）が潰れて取り消しが失敗する
+  // 入力: 実在指標の name を更新 → 存在しない id で更新 → 削除の直後に空振り更新して undoDelete
+  // 期待: 実在は更新後のレコードを返し、空振りは null で一覧は不変。空振りは save を通らないので
+  //       直前の削除も取り消せる（save は pendingUndo を捨てるため、ここが「保存しない」の証拠）
+  const M = MK.logic.metrics;
+  M.addMetric({ name: "A", kind: "kgi" });
+  M.addMetric({ name: "B", kind: "kpi" });
+  const a = M.metrics()[0];
+  eq(M.updateMetric(a.id, { name: "A2" }).name, "A2");
+  eq(M.updateMetric("no-such-id", { name: "X" }), null);
+  eq(M.metrics().map((m) => m.name), ["A2", "B"]);
+
+  eq(M.removeMetric(M.metrics()[0].id), true);
+  eq(M.updateMetric("no-such-id", { name: "X" }), null);
+  eq(M.undoDelete(), true);
+  eq(M.metrics().map((m) => m.name), ["A2", "B"]);
+});
+
 test("metrics: removeMetric は子を親へ引き上げる（葉を失わない）", (MK) => {
   // 観点: 中間ノードを削除しても子孫を巻き込まず、子は削除ノードの親へ付け替わる
   // 入力: KGI←NSM←KPI の木で NSM を削除
