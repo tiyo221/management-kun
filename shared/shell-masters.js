@@ -195,7 +195,8 @@
   function renderPeople(container) {
     renderMaster(container, {
       api: MK.people,
-      addPlaceholder: "氏名を入力して追加",      csvBase: "people",
+      addPlaceholder: "氏名を入力して追加",
+      csvBase: "people",
       exportToast: "人マスタCSVを書き出しました",
       importToast: (n) => n + " 件のメンバーを取り込みました",
       emptyText: "メンバーがいません",
@@ -238,7 +239,8 @@
   function renderProjects(container) {
     renderMaster(container, {
       api: MK.projects,
-      addPlaceholder: "プロジェクト名を入力して追加",      csvBase: "projects",
+      addPlaceholder: "プロジェクト名を入力して追加",
+      csvBase: "projects",
       exportToast: "プロジェクトCSVを書き出しました",
       importToast: (n) => n + " 件のプロジェクトを取り込みました",
       emptyText: "プロジェクトがありません",
@@ -279,7 +281,8 @@
   function renderProducts(container) {
     renderMaster(container, {
       api: MK.products,
-      addPlaceholder: "プロダクト名を入力して追加",      csvBase: "products",
+      addPlaceholder: "プロダクト名を入力して追加",
+      csvBase: "products",
       exportToast: "プロダクトCSVを書き出しました",
       importToast: (n) => n + " 件のプロダクトを取り込みました",
       onImport: () => { productFilter = "all"; },
