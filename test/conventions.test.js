@@ -23,6 +23,15 @@ function moduleFiles(kind) {
     .filter((f) => fs.existsSync(path.join(rootDir, f.rel)));
 }
 
+/** 共有層（`shared/*.js`）の相対パス一覧。ディレクトリを直接読むので、足したファイルは自動で対象に入る。
+    `shared/design.css` は CSS なので当然含まれない（検出器は JS のコード／テキストを見る前提）。 */
+function sharedFiles() {
+  return fs.readdirSync(path.join(rootDir, "shared"))
+    .filter((f) => f.endsWith(".js"))
+    .sort()
+    .map((f) => ({ id: "shared", rel: "shared/" + f }));
+}
+
 /* 「準備中」（def をまだ書かず名前だけカタログに出したモジュール）の id。
    CONVENTIONS §5 手順3 の「カタログ値に { title, icon } をフォールバックとして書く（def 実装時に
    空へ戻す）」がその宣言なので、そこを正とする。実装の有無をファイルの存在から推測すると
@@ -49,7 +58,20 @@ function implementedIds() {
    同じ正規表現をテスト側へ書き写すと、枝を足すたびに「本番にはあるが発火確認されていない枝」が
    静かに増える（実際 cssText / setProperty と window.confirm( の枝がそうなっていた・#312 レビュー）。
 
-   - `files` … "logic" / "view" / "both"（走査対象の種類）
+   検出器は性質で2種類に分かれ、**走査対象の広さがそれで決まる**（#318）。
+
+   - **共通規約系**（`spacing` / `dialog` / `scopeDim`）… 誰が書いても守るルール。共有層こそ影響範囲が
+     広いので `shared/*.js` も走査する（`files: "all"`）。実際 `shared/shell-settings.js` の余白の
+     直書きが検査を素通りしていた（#264）。
+   - **責務分離系**（`dom` / `localStorage` / `render` / `undoToast`）… logic と view の分業。
+     **shared はその抽象の実装そのもの**なので掛けない。`store.js` が localStorage を叩き `ui.js` が
+     document を叩くのは違反ではなく仕様で、掛ければ 96 件を例外リストで塗りつぶすことになり
+     番人の意味が消える（`undoToast` の1件も `undoDeleteToast` の定義箇所）。
+
+   `color`（色の直書き）は共通規約系だが、`shared/sample.js` の識別色データ（保存・エクスポートされる
+   データ値で `var(--token)` を書けない）の扱いが色設計（#267）と絡むため、今は modules 限定で据え置く。
+
+   - `files` … "logic" / "view" / "both"（modules のみ）/ "all"（modules ＋ shared）
    - `on`    … "code"（文字列の中身も落とす）/ "text"（コメントだけ落とす。リテラルを見る検査）
    - `fires` / `passes` … 発火確認用の合成スニペット（違反する書き方／違反ではない対照）。 */
 const DETECTORS = {
@@ -72,13 +94,13 @@ const DETECTORS = {
     passes: ["renderer.x();"],
   },
   scopeDim: {
-    files: "both", on: "text",
+    files: "all", on: "text",
     re: /\w*(?:dim|scope)\w*\s*[=!]==\s*["'`]project["'`]|["'`]project["'`]\s*[=!]==\s*\w*(?:dim|scope)\w*/i,
     fires: ['if (dim === "project") {}', 'if (a.scopeAttr !== "project") {}'],
     passes: ['const dim = d || "project";', 'if (sort === "project") {}'],
   },
   spacing: {
-    files: "both", on: "text",
+    files: "all", on: "text",
     // `style="…"`（テンプレート内の属性）だけでなく `style: "…"`（el() の属性オブジェクト）も見る。
     // 本アプリの DOM 生成はほぼ後者なので、属性形だけだと余白の直書きが素通りしていた（#264）。
     re: /style\s*[=:]\s*["'`][^"'`]*(?:margin|padding)|\.style\.(?:margin|padding)|cssText[^\n]*(?:margin|padding)|setProperty\(\s*["'`](?:margin|padding)/,
@@ -98,7 +120,7 @@ const DETECTORS = {
     passes: ['const c = "rgba(var(--color-primary-rgb), .3)";', 'const c = "var(--color-primary)";'],
   },
   dialog: {
-    files: "both", on: "code",
+    files: "all", on: "code",
     re: /(?:\b(?:window|globalThis|self)\.|(?<![.\w]))(?:confirm|alert|prompt)\s*\(/,
     fires: ["confirm(1);", "window.confirm(1);", "globalThis.alert(1);", "self.prompt(1);"],
     passes: ["MK.ui.confirm(1);", "ui.confirm(1);"],
@@ -273,15 +295,24 @@ function hits(rel, code, re) {
   return found;
 }
 
+/** 検出器 name が実際に舐めるファイル一覧。**本番の走査と番人が必ずここを共有する**
+    （検査側で対象を組み直すと、片方だけ痩せても気づけない）。 */
+function targetsOf(name) {
+  const d = DETECTORS[name];
+  assert(d, "未定義の検出器: " + name);
+  const both = () => moduleFiles("logic").concat(moduleFiles("view"));
+  const files = d.files === "all" ? both().concat(sharedFiles())
+    : d.files === "both" ? both()
+    : moduleFiles(d.files);
+  assert(files.length > 0, name + " の走査対象が空（静かに素通りさせない）");
+  return files;
+}
+
 /** DETECTORS の1つを走らせて違反箇所（`rel:line`）を集める。走査対象と見え方は定義側が持つ。 */
 function detect(name) {
   const d = DETECTORS[name];
-  assert(d, "未定義の検出器: " + name);
-  const files = d.files === "both"
-    ? moduleFiles("logic").concat(moduleFiles("view"))
-    : moduleFiles(d.files);
   const out = [];
-  files.forEach((f) => {
+  targetsOf(name).forEach((f) => {
     const src = read(f.rel);
     out.push(...hits(f.rel, d.on === "text" ? textOf(src) : codeOf(src), d.re));
   });
@@ -304,6 +335,29 @@ test("走査対象のファイルが欠けていない（静かに検査から�
       "実装済みなのに modules/<id>/" + kind + ".js が無い");
   });
   assert(ids.length >= 10, "実装済みモジュールが減っている: " + ids.length);
+});
+
+test("共通規約系の検出器が shared/*.js まで届いている（#318）", () => {
+  // 観点: 共有層こそ影響範囲が広いのに、規約の番人がモジュールにしか掛かっていないと向きが逆になる
+  //       （`shared/shell-settings.js` の余白の直書きが素通りした実例＝#264）。`files` を "both" へ
+  //       戻す変更は**違反が減ったようにしか見えない**ので、分類そのものをここで固定する。
+  // 入力: DETECTORS の分類（共通規約系＝誰が書いても守るルール／責務分離系＝logic と view の分業）
+  // 期待: 共通規約系は shared を走査対象に含み、責務分離系は含まない。
+  //   責務分離系を掛けない理由は shared が抽象の実装本体だから（store.js が localStorage を叩き
+  //   ui.js が document を叩くのは仕様）。`color` は #267 の色設計待ちで modules 限定に据え置く。
+  const shouldScanShared = ["spacing", "dialog", "scopeDim"];
+  const modulesOnly = ["dom", "localStorage", "render", "undoToast", "color"];
+  eq(shouldScanShared.concat(modulesOnly).sort(), Object.keys(DETECTORS).sort(),
+    "分類していない検出器がある（足したら shared へ掛けるか決める）");
+  shouldScanShared.forEach((name) => {
+    const rels = targetsOf(name).map((f) => f.rel);
+    assert(rels.some((r) => r.indexOf("shared/") === 0), name + " が shared を走査していない");
+    assert(rels.indexOf("shared/ui.js") >= 0, name + " の shared 走査が痩せている（ui.js が居ない）");
+  });
+  modulesOnly.forEach((name) => {
+    assert(!targetsOf(name).some((f) => f.rel.indexOf("shared/") === 0),
+      name + " は責務分離系なので shared へ掛けない（抽象の実装本体を違反にしてしまう）");
+  });
 });
 
 // ---- codeOf 自体の検査（この土台が壊れると、以下の検査が黙って全部通る） ----
@@ -397,8 +451,14 @@ test("codeOf(): 走査対象が痩せていない（無効化の番人・#312）
   //   消えるので、この比なら急落する（実測の下限は 80%＝ view.js 群）。
   //   落ちたときは2通りを疑う: (a) split の誤読（比が数%まで落ちる）、(b) 文字列・テンプレートの
   //   比重が極端に高い新しい view（60〜80% を下回る）。後者なら閾値の側を実測で引き直す。
-  const files = moduleFiles("logic").concat(moduleFiles("view"));
-  assert(files.length >= 20, "走査対象が十分ある: " + files.length);
+  //   共有層も同じ土台に載る（#318）。**種類ごとに下限を置く**のが肝で、合計だけだと shared が
+  //   走査対象から丸ごと外れても modules の本数で通ってしまう ── それはこの Issue が塞いだ穴と
+  //   同じ形（shared 実測の残存率は 77〜99% で、閾値 60% はそのまま足りる）。
+  const modules = moduleFiles("logic").concat(moduleFiles("view"));
+  const shared = sharedFiles();
+  assert(modules.length >= 20, "modules の走査対象が十分ある: " + modules.length);
+  assert(shared.length >= 15, "shared の走査対象が十分ある: " + shared.length);
+  const files = modules.concat(shared);
   files.forEach((f) => {
     const r = split(read(f.rel));
     const text = r.text.replace(/\s/g, "").length;
@@ -463,9 +523,10 @@ test("§1.3: logic の store 名前空間が自分の `module:<id>` に閉じて
 
 // ---- §3 / spec §3.7 スコープ次元 ----
 
-test("§3: スコープ次元を `\"project\"` で決め打ち分岐していない（spec §3.7.6・#312）", () => {
+test("§3: スコープ次元を `\"project\"` で決め打ち分岐していない（spec §3.7.6・#312・#318）", () => {
   // 観点: 次元は config／配列を回して汎用に扱う。Product を足すだけで成立する状態を保つ。
-  // 入力: 全モジュールの logic.js / view.js（リテラルの中身を見るので textOf で走査）
+  //       次元の実装本体は shared/scope.js なので、共有層こそ効き目が大きい（#318）。
+  // 入力: 全モジュールの logic.js / view.js ＋ shared/*.js（リテラルの中身を見るので textOf で走査）
   // 期待: dim / scope 名の値を "project" と等値比較する箇所がゼロ。
   //   既定値（`d || "project"`）・属性値（`dim: "project"`）は分岐ではないので対象外。
   //   `sort === "project"`（並び順キー）のような同名の別概念に当てないため、左辺は dim / scope 名に限る。
@@ -475,9 +536,9 @@ test("§3: スコープ次元を `\"project\"` で決め打ち分岐していな
 
 // ---- §2.1 余白 / §2.3 ダイアログ / §2.5-3 undo ----
 
-test("§2.1: モジュールに余白のインライン直書きが無い（#312）", () => {
+test("§2.1: モジュールと共有層に余白のインライン直書きが無い（#312・#318）", () => {
   // 観点: ブロック間隔は共通のレイアウト土台（ui.stack / design.css）に委ねる。
-  // 入力: 全モジュールの logic.js / view.js（style 属性・style.margin 代入の両方）
+  // 入力: 全モジュールの logic.js / view.js ＋ shared/*.js（style 属性・style.margin 代入の両方）
   // 期待: margin / padding のインライン指定がゼロ
   // ※ style 属性はテンプレートリテラルの中に書けるので textOf（コメントだけ落とす）で走査する。
   //   `style.margin` の直代入だけでなく `cssText` / `setProperty("margin"…)` の迂回路も見る。
@@ -495,9 +556,9 @@ test("§2.1: 色をトークン経由で指定している（値の直書きが�
   eq(detect("color"), [], "色を直書きしている（var(--token) を使う）");
 });
 
-test("§2.3: ネイティブ confirm / alert / prompt を使っていない（#312）", () => {
+test("§2.3: ネイティブ confirm / alert / prompt を使っていない（#312・#318）", () => {
   // 観点: 確認・通知は MK.ui へ寄せる（トークン描画・ダーク追従・Esc）。
-  // 入力: 全モジュールの logic.js / view.js のコード部分
+  // 入力: 全モジュールの logic.js / view.js ＋ shared/*.js のコード部分
   // 期待: MK.ui 経由でない confirm( / alert( / prompt( がゼロ。
   //   `window.` / `globalThis.` / `self.` を前置した呼び方も同じネイティブ呼び出しなので違反にする
   //   （logic は window 検査で塞がるが view.js は素通りしていた）。
