@@ -309,9 +309,12 @@ textarea.text-input { min-height: 80px; resize: vertical; }
    1回限りの真にローカルな指定・値が動的な指定（識別色・進捗の width 等）はインラインのままでよい。 */
 .mk-strong { font-weight: 600; }
 .mk-error-text { color: var(--color-error); }
+/* 一覧行の二次テキスト（`.mk-row .sub` ＝ 0,2,0 の steel）はこのクラス（0,1,0）に詳細度で勝つので、
+   行内で警告色を出す場合は明示して戻す（移行前はインラインで必ず勝っていた）。 */
+.mk-row .sub.mk-error-text { color: var(--color-error); }
 .mk-clickable { cursor: pointer; }
 /* 識別色のドット（人・プロジェクト・プロダクト責任者）。色そのものは動的なので inline で渡す。 */
-.mk-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; flex: 0 0 auto; }
+.mk-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 .mk-dot.sm { width: 8px; height: 8px; margin-right: var(--space-xxs); }
 /* チェックボックス＋ラベルの1行（設定・マスタ・モーダル・一覧行）。
    .inline＝行内に並べる（幅を内容に収める）／.tight＝曜日など多数を横に詰める。 */
@@ -478,8 +481,11 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-daily-time { min-width: 92px; font-variant-numeric: tabular-nums; }
 /* 固定時刻の手前にできる空き行。実在の予定より控えめに見せる。 */
 .mk-daily-gap { opacity: .55; }
-/* 合計行に添える警告チップ（前のテキストから離す）。 */
+/* 合計行に添える警告チップ（前のテキストから離す）。
+   ダークの `[data-theme="dark"] .chip`（0,2,0）はこのクラス（0,1,0）に詳細度で勝つので、
+   文字色だけダーク側にも明示して戻す（ライトは宣言順で勝つが、両テーマで同じ色にする）。 */
 .mk-daily-warn-chip { margin-left: var(--space-xs); color: var(--color-error); }
+[data-theme="dark"] .chip.mk-daily-warn-chip { color: var(--color-error); }
 /* 所要時間 select と固定時刻 input（追加行・ルーチン設定。時間割行は .mk-row-control 側で内容幅） */
 .text-input.mk-daily-min { max-width: 110px; }
 .text-input.mk-daily-at { max-width: 120px; }
@@ -646,3 +652,6 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .text-input.mk-master-add { max-width: 300px; }
 /* ストレージ使用量のバー（.progress を数値の直下に置く）。 */
 .mk-usage-bar { margin-top: var(--space-xs); }
+/* 警告文（p）。`.card > .sub + *` は直前が .sub のときだけ効き、ここは直前が数値行／バーなので
+   当たらず UA 既定の 1em に開く。カード内の刻み（8px）を明示する。 */
+.mk-alert-note { margin: var(--space-xs) 0 0; }

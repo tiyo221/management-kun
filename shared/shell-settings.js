@@ -116,7 +116,7 @@
     card.appendChild(el("div", { class: "mk-strong", text: "最終バックアップ: " + when }));
     if (f.stale) {
       card.appendChild(el("p", {
-        class: "sub mk-error-text",
+        class: "sub mk-error-text mk-alert-note",
         text: f.lastBackupAt
           ? "⚠ 最後のバックアップから " + MK.io.BACKUP_STALE_DAYS + " 日以上経過しています。全体バックアップ（JSON）を取得してください。"
           : "⚠ まだ一度もバックアップを取得していません。全体バックアップ（JSON）を取得してください。",
@@ -148,10 +148,10 @@
     card.appendChild(el("div", { class: "mk-strong", text: formatBytes(u.bytes) + " / 約 " + formatBytes(u.quota) + "（" + pct + "%・" + u.count + " キー）" }));
     // 使用量バー（共通の .progress を使う。閾値超過はバーだけ警告色へ）
     const track = el("div", { class: "progress mk-usage-bar" });
-    track.appendChild(el("i", { class: warn ? "warn" : "", style: "width:" + Math.min(100, pct) + "%;" }));
+    track.appendChild(el("i", { class: warn ? "warn" : undefined, style: "width:" + Math.min(100, pct) + "%;" }));
     card.appendChild(track);
     if (warn) {
-      card.appendChild(el("p", { class: "sub mk-error-text", text: "⚠ 使用量が上限の " + Math.round(USAGE_WARN_RATIO * 100) + "% を超えています。全体バックアップ（JSON）を取得し、不要なデータを整理してください。" }));
+      card.appendChild(el("p", { class: "sub mk-error-text mk-alert-note", text: "⚠ 使用量が上限の " + Math.round(USAGE_WARN_RATIO * 100) + "% を超えています。全体バックアップ（JSON）を取得し、不要なデータを整理してください。" }));
     }
     return card;
   }
