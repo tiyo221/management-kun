@@ -41,10 +41,10 @@
       { value: "project", label: "プロジェクト別" },
       { value: "context", label: "コンテキスト別" },
     ], sort, (v) => { sort = v; renderList(listHost); });
-    sortSel.style.maxWidth = "150px";
+    sortSel.classList.add("mk-todo-sort");
     tabsBar.appendChild(sortSel);
     const searchBox = ui.input({ placeholder: "検索…", value: search });
-    searchBox.style.maxWidth = "220px";
+    searchBox.classList.add("mk-search-input");
     searchBox.addEventListener("input", () => { search = searchBox.value; renderList(listHost); });
     tabsBar.appendChild(searchBox);
 

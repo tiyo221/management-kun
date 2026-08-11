@@ -66,6 +66,9 @@ modules/
 - **末尾アクション（「開く →」等）に `ui.toolbar` を使わない（気を付ける点）**: `.mk-toolbar` は `margin-bottom` だけを持つ**先頭ツールバー**用。これをカード末尾のアクション行に使うと、上は margin-top が無く**前のブロックと密着**し、下は `margin-bottom` ＋ カード padding で**死に余白**が出る（top/bottom マージン不整合。dashboard で実際に発生）。末尾のボタンは **`mk-stack` の一員として直接置く**（上に `--space-xl`、下は margin なし＝カード padding のみ）。
 - **一覧は `ul.mk-list > li.mk-row` で組む（罫線に頼らない・Issue #173）**: カード内リスト（`.mk-list .mk-row`）は**全行下線を持たず**、極薄ゼブラ（even 行が `--color-surface-soft`）＋ hover 面で区切る。行に自前の `border-bottom` を足さない。カード外で単独の `.mk-row` を置く場合のみ、既定で薄い下線（`--color-hairline-soft`）が付く。
 - 色・余白・角丸・タイポは [`DESIGN.md`](DESIGN.md) トークン（CSS変数）経由。値の直書き禁止。
+- **インライン `style` に残してよいのは「値が動的なもの」だけ（Issue #264）**: 識別色（`background:` ＋ 人/プロジェクトの色）・進捗の `width:X%`・段の深さ（`--mk-depth`）のように**描画のたびに変わる値**はインラインで渡す。それ以外（幅・色・`min-width`・`opacity` 等の固定値）は `design.css` のクラスへ寄せる。目安は「2か所以上で繰り返す」か「意味がある（警告色・警告枠など）」で、1回限りの真にローカルな指定まで**過剰にクラス化はしない**。
+  - 受け皿は3層: 汎用ユーティリティ（`.mk-strong` / `.mk-error-text` / `.mk-clickable` / `.mk-dot` / `.mk-check-label` / `.mk-indent` / `.mk-search-input`）→ コンポーネントの状態クラス（`.card-flush` / `.card-alert` / `.progress > i.warn`）→ モジュール固有（`.mk-daily-*` / `.mk-todo-*` / `.wbs-cell-*` 等）。
+  - **幅の値をモジュールに書かない**: 同じ `max-width` が複数箇所へ散ると変更時に取りこぼす。`classList.add("…")` でクラスを当て、値は `design.css` に1回だけ置く（`.text-input` を基底に持つコントロールは `.text-input.mk-…` の組で書く ── 詳細度で基底に負けないため）。
 
 ### 2.2 レスポンシブ（崩さない）
 - 検証幅の基準: **375 / 768 / 1280 px**。この3点でヘッダー・テーブル・カード・グラフが破綻しないこと。

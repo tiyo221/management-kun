@@ -83,7 +83,7 @@
       selectedMemberId,
       (v) => { selectedMemberId = v; render(); }
     );
-    picker.style.maxWidth = "240px";
+    picker.classList.add("mk-1on1-picker");
     bar.appendChild(ui.field("メンバー", picker));
     bar.appendChild(ui.button("＋ 1on1 を記録", { variant: "btn-primary", onClick: () => openEditor(null) }));
     // CSV（メンバー名寄せ・アクションは1セル複数行）
@@ -203,7 +203,7 @@
       const textEl = ui.input({ value: a.text || "", placeholder: "ネクストアクション" });
       const doneEl = ui.checkbox(a.done);
       const dueEl = ui.input({ type: "date", value: a.due || "" });
-      dueEl.style.maxWidth = "160px";
+      dueEl.classList.add("mk-1on1-due");
       const rec = { id: a.id || null, textEl, doneEl, dueEl };
       const del = ui.button("削除", { variant: "btn-ghost", onClick: () => { rec.removed = true; wrap.remove(); } });
       const wrap = el("div", { class: "mk-row" }, [doneEl, textEl, dueEl, del]);

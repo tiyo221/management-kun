@@ -101,7 +101,7 @@
       ) }),
     ]);
   }
-  function labeled(label, ctrl) { return el("label", { class: "sub", style: "display:flex;align-items:center;gap:var(--space-xxs);" }, [ctrl, label]); }
+  function labeled(label, ctrl) { return el("label", { class: "sub mk-check-label" }, [ctrl, label]); }
 
   function editSkill(s) {
     const f = {
@@ -135,7 +135,7 @@
     if (!ms.length) content = membersEmpty("スキルを紐づけるには、まず「人の管理」でメンバーを登録してください。");
     else if (!vs.length) content = ui.emptyState("表示中のスキルがありません。");
     else {
-      const hint = el("div", { class: "sub mk-muted", style: "margin-bottom:6px;", text: "数字をクリックしてレベルを設定（同じ数字を再クリックで解除）。右端「対象外」は評価対象外。色が濃いほど高レベル。" });
+      const hint = el("div", { class: "sub mk-muted mk-matrix-hint", text: "数字をクリックしてレベルを設定（同じ数字を再クリックで解除）。右端「対象外」は評価対象外。色が濃いほど高レベル。" });
       content = el("div", {}, [hint, matrixTable(ms, vs, (m, s) => el("td", { class: "mk-rate-td" }, [rateCell(m.id, s.id)]))]);
     }
     root.appendChild(ui.stack([bar, content]));

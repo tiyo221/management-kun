@@ -58,11 +58,9 @@
   // 人の基本情報（マスタ: 役割・備考・表示色）＋編集導線。
   function personInfoCard(person) {
     const meta = [];
-    if (person.color) meta.push(el("span", {
-      style: "display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:" + person.color + ";vertical-align:middle;",
-    }));
+    if (person.color) meta.push(el("span", { class: "mk-dot", style: "background:" + person.color + ";" }));
     if (person.role) meta.push(el("span", { class: "chip", text: person.role }));
-    const kids = [el("h3", { text: "基本情報" }), el("div", { style: "font-weight:600;", text: person.name })];
+    const kids = [el("h3", { text: "基本情報" }), el("div", { class: "mk-strong", text: person.name })];
     if (meta.length) kids.push(el("div", { class: "sub" }, meta));
     if (person.note) kids.push(el("p", { class: "sub", text: person.note }));
     const edit = el("button", { class: "btn btn-secondary", text: "編集" });
@@ -82,7 +80,7 @@
       kids.push(MK.ui.statsRow(sum.stats.map((s) => ({ num: s.value, label: s.label }))));
     }
     if (Array.isArray(sum.attention)) {
-      sum.attention.forEach((a) => { if (a && a.label) kids.push(el("p", { class: "sub", style: "color:var(--color-error);", text: "⚠ " + a.label })); });
+      sum.attention.forEach((a) => { if (a && a.label) kids.push(el("p", { class: "sub mk-error-text", text: "⚠ " + a.label })); });
     }
     // 遷移導線は集約ビュー側が組み立てる（契約には持たせない・§3.6.1）。到達可能なモジュールのみ。
     if (ALLOWED[id] && !isHiddenModule(id)) {
@@ -126,7 +124,7 @@
   // masters:changed（shell.js の bus ハンドラ）に一任し、手動の再描画コールバックは持たない。
   //   cfg.api          … マスタ本体（create/all/remove/buildCSVRows/applyCSV を持つ）
   //   cfg.list()       … 一覧に出す配列（絞り込み後。省略時は api.all()）
-  //   cfg.addPlaceholder / cfg.addMaxWidth … 追加入力欄の文言・幅
+  //   cfg.addPlaceholder … 追加入力欄の文言（幅は .mk-master-add で3マスタ共通）
   //   cfg.csvBase / cfg.exportToast / cfg.importToast(n) … CSV ファイル名接頭辞・トースト
   //   cfg.emptyText    … 0件時の文言
   //   cfg.renderInfo(item) … 行の左側（.grow）を作る（編集・削除ボタンは共通で付与）
@@ -135,7 +133,7 @@
   //   cfg.onImport()   … CSV 取込後の副作用（例: 絞り込みを全件へ戻す）
   function renderMaster(container, cfg) {
     const bar = el("div", { class: "mk-toolbar" });
-    const nameInput = el("input", { class: "text-input", placeholder: cfg.addPlaceholder, style: "max-width:" + cfg.addMaxWidth + ";" });
+    const nameInput = el("input", { class: "text-input mk-master-add", placeholder: cfg.addPlaceholder });
     const addBtn = el("button", { class: "btn btn-primary", text: "追加" });
     // create は masters:changed を発火し、bus ハンドラがビュー全体を再描画する（手動再描画は不要）。
     const add = () => { const n = nameInput.value.trim(); if (n) { cfg.api.create({ name: n }); nameInput.value = ""; } };
@@ -157,7 +155,7 @@
     bar.appendChild(expBtn); bar.appendChild(impBtn);
     container.appendChild(bar);
     if (cfg.beforeList) cfg.beforeList(container);
-    const host = el("div", { class: "card", style: "padding:0;overflow:hidden;" });
+    const host = MK.ui.card([], { flush: true });
     container.appendChild(host);
     renderMasterList(host, cfg);
   }
@@ -198,7 +196,6 @@
     renderMaster(container, {
       api: MK.people,
       addPlaceholder: "氏名を入力して追加",
-      addMaxWidth: "260px",
       csvBase: "people",
       exportToast: "人マスタCSVを書き出しました",
       importToast: (n) => n + " 件のメンバーを取り込みました",
@@ -243,7 +240,6 @@
     renderMaster(container, {
       api: MK.projects,
       addPlaceholder: "プロジェクト名を入力して追加",
-      addMaxWidth: "300px",
       csvBase: "projects",
       exportToast: "プロジェクトCSVを書き出しました",
       importToast: (n) => n + " 件のプロジェクトを取り込みました",
@@ -286,7 +282,6 @@
     renderMaster(container, {
       api: MK.products,
       addPlaceholder: "プロダクト名を入力して追加",
-      addMaxWidth: "300px",
       csvBase: "products",
       exportToast: "プロダクトCSVを書き出しました",
       importToast: (n) => n + " 件のプロダクトを取り込みました",
@@ -312,7 +307,7 @@
         const meta = [el("span", { class: "chip", text: productStatusLabel(p.status) })];
         const owner = MK.products.ownerPerson(p);
         if (owner) meta.push(el("span", { class: "chip" }, [
-          el("span", { style: "display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:var(--space-xxs);background:" + (owner.color || "var(--color-steel)") + ";" }),
+          el("span", { class: "mk-dot sm", style: "background:" + (owner.color || "var(--color-steel)") + ";" }),
           "責任者: " + owner.name,
         ]));
         if (p.repo) meta.push(el("span", { class: "sub", text: p.repo }));
@@ -338,11 +333,11 @@
   function projectCheckboxList(selectedIds) {
     const list = MK.projects.all();
     if (!list.length) return el("div", { class: "sub", text: "プロジェクトがありません" });
-    const wrap = el("div", { class: "mk-stack", style: "max-height:160px;overflow:auto;" });
+    const wrap = el("div", { class: "mk-stack mk-check-scroll" });
     const boxes = list.map((proj) => {
       const cb = MK.ui.checkbox((selectedIds || []).indexOf(proj.id) >= 0);
       cb.dataset.projectId = proj.id;
-      wrap.appendChild(el("label", { style: "display:flex;gap:var(--space-xs);align-items:center;cursor:pointer;" }, [cb, el("span", { text: proj.name })]));
+      wrap.appendChild(el("label", { class: "mk-check-label" }, [cb, el("span", { text: proj.name })]));
       return cb;
     });
     wrap.getSelected = () => boxes.filter((b) => b.checked).map((b) => b.dataset.projectId);

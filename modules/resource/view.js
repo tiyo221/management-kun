@@ -178,7 +178,7 @@
 
   function allocRow(a, opts) {
     const period = (a.startDate || "?") + " 〜 " + (a.endDate || "?");
-    const info = el("div", { class: "grow", style: "cursor:pointer;" }, [
+    const info = el("div", { class: "grow mk-clickable" }, [
       el("div", { text: memberName(a.memberId) + " → " + targetLabel(opts, a.targetId) }),
       el("div", { class: "sub", text: L().fteLabel(a.percent) + "（" + a.percent + "%） / " + period }),
     ]);
@@ -258,7 +258,7 @@
   }
   // 数値 key の pill 群（ui.pillTabs は文字列 key 前提のため）
   function inlinePills(items, active, onChange) {
-    const wrap = el("span", { style: "display:inline-flex;gap:var(--space-xxs);" });
+    const wrap = el("span", { class: "mk-pills-inline" });
     items.forEach((it) => { const b = el("button", { class: "pill-tab" + (it.key === active ? " active" : ""), text: it.label }); b.addEventListener("click", () => onChange(it.key)); wrap.appendChild(b); });
     return wrap;
   }
@@ -266,7 +266,7 @@
   function demandRow(d, opts) {
     const period = (d.startDate || "?") + " 〜 " + (d.endDate || "?");
     const roleText = (d.role || "").trim();
-    const info = el("div", { class: "grow", style: "cursor:pointer;" }, [
+    const info = el("div", { class: "grow mk-clickable" }, [
       el("div", { text: targetLabel(opts, d.targetId) + (roleText ? "（" + roleText + "）" : "") }),
       el("div", { class: "sub", text: "必要 " + L().fteLabel(d.requiredPercent) + "（" + d.requiredPercent + "%） / " + period }),
     ]);

@@ -44,12 +44,10 @@
   // ---- プロジェクト基本情報（マスタ: ステータス等）----
   function infoCard(project) {
     const meta = [el("span", { class: "chip", text: L().projectStatusLabel(project.status) })];
-    if (project.color) meta.unshift(el("span", {
-      style: "display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:" + project.color + ";vertical-align:middle;",
-    }));
+    if (project.color) meta.unshift(el("span", { class: "mk-dot", style: "background:" + project.color + ";" }));
     const kids = [
       el("h3", { text: "プロジェクト" }),
-      el("div", { style: "font-weight:600;", text: project.name }),
+      el("div", { class: "mk-strong", text: project.name }),
       el("div", { class: "sub" }, meta),
     ];
     if (project.note) kids.push(el("p", { class: "sub", text: project.note }));
@@ -69,7 +67,7 @@
         { num: s.inprogress, label: "進行中" },
         { num: s.overdue, label: "期限超過" },
       ]));
-      if (s.overdue > 0) kids.push(el("p", { class: "sub", style: "color:var(--color-error);", text: "⚠ 期限を過ぎた未完タスクが " + s.overdue + " 件あります。" }));
+      if (s.overdue > 0) kids.push(el("p", { class: "sub mk-error-text", text: "⚠ 期限を過ぎた未完タスクが " + s.overdue + " 件あります。" }));
     }
     kids.push(ui.button("WBS を開く →", { variant: "btn-secondary", onClick: () => goTo("wbs") }));
     return card(kids);

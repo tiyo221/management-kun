@@ -149,7 +149,7 @@
     summitTextNode = null;
     const pr = L().progress(g);
     const head = ui.card([
-      el("div", { class: "mk-row", style: "border:none;padding:0 0 var(--space-xs);" }, [
+      el("div", { class: "mk-row mk-goal-head" }, [
         el("div", { class: "grow" }, [
           // 見出しはインライン編集（CONVENTIONS §2.5-2）。説明・期限との3項目まとめ編集は
           // 「編集」ボタンのモーダルに残す。改名は左リストの見出しにも出るので、そこも揃える。
@@ -161,7 +161,7 @@
       ]),
       g.description ? el("p", { class: "sub", text: g.description }) : null,
       L().isAchieved(g) ? el("div", { class: "mk-goal-done-banner", text: "🎉 ゴール到達！全ステップ完了" }) : null,
-      el("div", { class: "progress", style: "margin:var(--space-xs) 0;" }, [el("i", { style: "width:" + pr.pct + "%;" })]),
+      el("div", { class: "progress mk-barline" }, [el("i", { style: "width:" + pr.pct + "%;" })]),
       el("div", { class: "sub", text: "進捗 " + pr.pct + "%（" + pr.done + "/" + pr.total + "）" }),
     ]);
 
@@ -182,7 +182,7 @@
     const wrap = el("div", { class: "mk-staircase" });
     // 頂上（目標）— 全ステップの上・最も奥（インデント最大）に置く
     summitTextNode = el("span", { text: (g.title || "(無題)") + (reached ? " 到達！" : "") });
-    wrap.appendChild(el("div", { class: "mk-summit" + (reached ? " reached" : ""), style: indent(n) }, [
+    wrap.appendChild(el("div", { class: "mk-summit mk-stair-indent" + (reached ? " reached" : ""), style: indent(n) }, [
       el("span", { class: "mk-summit-flag", text: reached ? "🏁" : "🎯" }),
       summitTextNode,
     ]));
@@ -192,7 +192,8 @@
   }
 
   // 段のインデント（先頭=0、上へ行くほど深くして階段状に見せる。過大な段数は頭打ち）。
-  function indent(i) { const unit = 26, cap = 10; return "margin-left:" + Math.min(i, cap) * unit + "px;"; }
+  // 何段目かだけを CSS 変数で渡し、1段あたりの幅は .mk-stair-indent が持つ（design.css）。
+  function indent(i) { const cap = 10; return "--mk-stair-depth:" + Math.min(i, cap) + ";"; }
 
   function stairRow(g, s, idx, curId) {
     const done = s.status === "done";
@@ -219,7 +220,7 @@
     const grow = el("div", { class: "grow" }, [titleEl].concat(meta));
 
     // 表示は上=目標寄りのため、視覚の上/下に合わせて moveStep 方向を反転（↑=末尾方向=+1、↓=先頭方向=-1）
-    return el("div", { class: "mk-stair" + (done ? " done" : "") + (current ? " current" : ""), style: indent(idx) }, [
+    return el("div", { class: "mk-stair mk-stair-indent" + (done ? " done" : "") + (current ? " current" : ""), style: indent(idx) }, [
       dot, grow,
       ui.button("↑", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, 1); afterStepChange(g.id); } }),
       ui.button("↓", { variant: "btn-ghost", onClick: () => { L().moveStep(g.id, s.id, -1); afterStepChange(g.id); } }),

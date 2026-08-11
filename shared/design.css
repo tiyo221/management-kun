@@ -220,6 +220,10 @@ a { color: var(--color-link-blue); }
   background: var(--color-canvas); border: 1px solid var(--color-hairline);
   border-radius: var(--rounded-lg); padding: var(--space-xl);
 }
+/* 内側の一覧を縁まで敷き詰めるカード（ui.card(…, { flush: true }) が付ける）。 */
+.card.card-flush { padding: 0; overflow: hidden; }
+/* 警告状態のカード（バックアップ鮮度・ストレージ使用量・破損データ）。枠だけ error 色にする。 */
+.card.card-alert { border-color: var(--color-error); }
 
 /* ---- 入力 ---- */
 .text-input, select.text-input, textarea.text-input {
@@ -298,6 +302,32 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-row .grow { flex: 1; min-width: 0; }
 .mk-row .sub { font-size: 13px; color: var(--color-steel); }
 .mk-muted { color: var(--color-muted); }
+
+/* ---- 汎用ユーティリティ（反復するインライン style の受け皿。Issue #264）----
+   view から幅・色のマジックナンバーを追い出すための最小限の共通クラス。
+   「2か所以上で繰り返す」か「意味がある（警告色など）」ものだけここに置き、
+   1回限りの真にローカルな指定・値が動的な指定（識別色・進捗の width 等）はインラインのままでよい。 */
+.mk-strong { font-weight: 600; }
+.mk-error-text { color: var(--color-error); }
+/* 一覧行の二次テキスト（`.mk-row .sub` ＝ 0,2,0 の steel）はこのクラス（0,1,0）に詳細度で勝つので、
+   行内で警告色を出す場合は明示して戻す（移行前はインラインで必ず勝っていた）。 */
+.mk-row .sub.mk-error-text { color: var(--color-error); }
+.mk-clickable { cursor: pointer; }
+/* 識別色のドット（人・プロジェクト・プロダクト責任者）。色そのものは動的なので inline で渡す。 */
+.mk-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.mk-dot.sm { width: 8px; height: 8px; margin-right: var(--space-xxs); }
+/* チェックボックス＋ラベルの1行（設定・マスタ・モーダル・一覧行）。
+   .inline＝行内に並べる（幅を内容に収める）／.tight＝曜日など多数を横に詰める。 */
+.mk-check-label { display: flex; align-items: center; gap: var(--space-xs); cursor: pointer; }
+.mk-check-label.inline { display: inline-flex; }
+.mk-check-label.tight { gap: 2px; }
+/* 高さを抑えてスクロールさせるチェックボックス一覧（モーダル内の紐付け選択）。 */
+.mk-check-scroll { max-height: 160px; overflow: auto; }
+/* 一覧上部の検索欄。todo / questions / techstack が同じ幅で並ぶ。 */
+.text-input.mk-search-input { max-width: 220px; }
+/* 階層インデント（wbs のテーブル/ガント・metrics のツリー）。段の深さだけ JS が --mk-depth で渡し、
+   1段あたりの幅は CSS 側に1回だけ置く（3か所に 14px が散っていた）。 */
+.mk-indent { padding-left: calc(var(--mk-depth, 0) * 14px); }
 
 /* ---- ナレッジ（Q→A）カード（questions・Issue #81）---- */
 /* カード全体のクリックでモーダルを開くのはやめ、質問文はインライン編集・付随情報は「編集」ボタン
@@ -419,6 +449,8 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 /* ---- 進捗バー（汎用）---- */
 .progress { height: 8px; background: var(--color-hairline); border-radius: var(--rounded-full); overflow: hidden; }
 .progress > i { display: block; height: 100%; background: var(--color-primary); border-radius: var(--rounded-full); transition: width .25s; }
+/* 閾値超過（ストレージ使用量など）。バーだけ警告色へ振る。 */
+.progress > i.warn { background: var(--color-error); }
 
 /* ---- 操作コントロールを並べる一覧行（CONVENTIONS §2.5 / §2.2）----
    インライン編集＋select＋ボタンが並ぶ行は要素が多く、狭幅（375px）では1行に収まらない。
@@ -442,8 +474,26 @@ textarea.text-input { min-height: 80px; resize: vertical; }
   .text-input.mk-row-control { min-height: 44px; }
 }
 
+/* ---- daily 固有（時間割の列幅・コントロール幅。Issue #264）----
+   同じ幅が追加行・ルーチン設定・時間割行に散っていたので、値はここに1回だけ置く。 */
+.mk-daily-date { font-weight: 600; font-size: 16px; }
+/* 算出時刻の列。桁を揃えて（tabular-nums）行間で数字が踊らないようにする。 */
+.mk-daily-time { min-width: 92px; font-variant-numeric: tabular-nums; }
+/* 固定時刻の手前にできる空き行。実在の予定より控えめに見せる。 */
+.mk-daily-gap { opacity: .55; }
+/* 合計行に添える警告チップ（前のテキストから離す）。
+   ダークの `[data-theme="dark"] .chip`（0,2,0）はこのクラス（0,1,0）に詳細度で勝つので、
+   文字色だけダーク側にも明示して戻す（ライトは宣言順で勝つが、両テーマで同じ色にする）。 */
+.mk-daily-warn-chip { margin-left: var(--space-xs); color: var(--color-error); }
+[data-theme="dark"] .chip.mk-daily-warn-chip { color: var(--color-error); }
+/* 所要時間 select と固定時刻 input（追加行・ルーチン設定。時間割行は .mk-row-control 側で内容幅） */
+.text-input.mk-daily-min { max-width: 110px; }
+.text-input.mk-daily-at { max-width: 120px; }
+
 /* ---- todo 固有（期日入力の幅・低頻度操作を退避する帯）---- */
-.mk-todo-due { max-width: 150px; }
+/* 期日入力（行内）と並び順 select（ツールバー）は同じ幅に揃える。値は1回だけ書く。
+   `.text-input` と組にするのは詳細度のため（基底が `select.text-input`＝0,1,1）。 */
+.text-input.mk-todo-due, .text-input.mk-todo-sort { max-width: 150px; }
 /* 低頻度操作（CSV）を退避する最下部の帯。主操作から視覚的に切り離す（§2.5-5）。 */
 .mk-todo-footer { display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-top: var(--space-lg); padding-top: var(--space-md); border-top: 1px solid var(--color-hairline-soft); }
 
@@ -455,6 +505,8 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-inline-input { width: 100%; min-height: 32px; padding: 4px 8px; font-size: 15px; }
 
 /* ---- goals: ロードマップ ---- */
+/* 詳細ペインの見出し行。カード直下なので区切り線・左右余白を持たない .mk-row とする。 */
+.mk-goal-head { border: none; padding: 0 0 var(--space-xs); }
 .mk-goals-layout { display: flex; gap: var(--space-xl); align-items: flex-start; flex-wrap: wrap; }
 .mk-goals-side { width: 260px; flex: 0 0 260px; display: flex; flex-direction: column; gap: var(--space-xs); }
 .mk-goals-main { flex: 1; min-width: 280px; }
@@ -471,6 +523,10 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 
 /* 階段UI（目標=頂上を上・スタートを下、完了ステップが積み上がる。Issue #13） */
 .mk-staircase { display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-sm) 0; }
+/* 段のインデント。何段目かは JS が --mk-stair-depth で渡し（頭打ちも JS 側）、1段の幅はここで持つ。
+   ツリーの .mk-indent（14px/段）とは1段の幅が違うので、変数名も分ける ── カスタムプロパティは
+   継承するため、同名にすると入れ子になったとき外側の段数が内側へ漏れる。 */
+.mk-stair-indent { margin-left: calc(var(--mk-stair-depth, 0) * 26px); }
 .mk-summit { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); font-weight: 700; color: var(--color-ink); }
 .mk-summit-flag { font-size: 18px; }
 .mk-summit.reached { color: var(--color-success); }
@@ -510,6 +566,9 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .wbs-grid .summary { color: var(--color-steel); }
 .wbs-name { display: flex; align-items: center; gap: 4px; width: 100%; }
 .wbs-name input.cell { flex: 1; min-width: 120px; width: auto; }
+/* 列幅は他の列と同じくスタイルシート側で持つ（担当者＝人名、数値＝0〜100 の進捗率）。 */
+.wbs-grid input.cell.wbs-cell-person { width: 90px; }
+.wbs-grid input.cell.wbs-cell-num { width: 52px; }
 .wbs-toggle { width: 16px; flex: 0 0 16px; cursor: pointer; color: var(--color-steel); text-align: center; }
 .wbs-ops { white-space: nowrap; text-align: right; }
 .wbs-ops button { padding: 2px 6px; font-size: 14px; line-height: 1.2; }
@@ -556,7 +615,13 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .skill-domain-head { font-weight: 600; color: var(--color-slate); padding: var(--space-sm) var(--space-md); background: var(--color-surface); border-bottom: 1px solid var(--color-hairline); }
 .gap-ok { color: var(--color-success); }
 .gap-short { color: var(--color-error); }
-.mk-barline { margin: 8px 0; }
+/* 評価セルの使い方ヒント（マトリクスの直上） */
+.mk-matrix-hint { margin-bottom: var(--space-xs); }
+/* バー（.progress 等）を前後の文言から離す1行。skills のサマリと goals の進捗が同じ形。
+   `.card > .sub + *` はクラス2つ（0,2,0）でこのクラス（0,1,0）に詳細度で勝つため、.sub の
+   直後に置く場合は 12px に上書きされる。移行前のインライン値（8px）を保つよう明示して勝たせる。 */
+.mk-barline { margin: var(--space-xs) 0; }
+.card > .sub + .mk-barline { margin-top: var(--space-xs); }
 /* ---- skills: レーダーチャート（#79）---- */
 .mk-radar-picker { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-bottom: var(--space-sm); }
 .mk-chip-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 5px 10px; border-radius: var(--rounded-full); border: 1px solid var(--color-hairline-strong); background: var(--color-canvas); color: var(--color-steel); cursor: pointer; }
@@ -570,6 +635,8 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-radar-note { text-align: center; color: var(--color-steel); font-size: 13px; margin-top: var(--space-sm); }
 
 /* ---- resource: 月次の供給とキャパ（Issue #52）---- */
+/* 行内に収める pill 群（数値 key のため ui.pillTabs を使えない箇所）。 */
+.mk-pills-inline { display: inline-flex; gap: var(--space-xxs); }
 .mk-month-list { display: flex; flex-direction: column; }
 .mk-month-row { padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-hairline); }
 .mk-month-row:last-child { border-bottom: none; }
@@ -577,3 +644,17 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-month-fill { height: 100%; background: rgba(var(--color-primary-rgb), 0.55); border-radius: var(--rounded-full); }
 .mk-month-fill.tight { background: var(--color-warning); }
 .mk-month-fill.over { background: var(--color-error); }
+
+/* ---- oneonone: メンバー選択・アクションの期日 ---- */
+.text-input.mk-1on1-picker { max-width: 240px; }
+.text-input.mk-1on1-due { max-width: 160px; }
+
+/* ---- シェル: マスタ一覧・設定画面 ---- */
+/* マスタ（人・プロジェクト・プロダクト）の追加入力欄。3マスタで同じ幅に揃える
+   （以前はマスタごとに 260/300px を渡していた。.mk-scope-select と同じ 300px）。 */
+.text-input.mk-master-add { max-width: 300px; }
+/* ストレージ使用量のバー（.progress を数値の直下に置く）。 */
+.mk-usage-bar { margin-top: var(--space-xs); }
+/* 警告文（p）。`.card > .sub + *` は直前が .sub のときだけ効き、ここは直前が数値行／バーなので
+   当たらず UA 既定の 1em に開く。カード内の刻み（8px）を明示する。 */
+.mk-alert-note { margin: var(--space-xs) 0 0; }
