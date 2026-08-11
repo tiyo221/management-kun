@@ -609,7 +609,8 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 /* 評価セルの使い方ヒント（マトリクスの直上） */
 .mk-matrix-hint { margin-bottom: var(--space-xs); }
 /* バー（.progress 等）を前後の文言から離す1行。skills のサマリと goals の進捗が同じ形。
-   `.card > .sub + *`（12px）と詳細度が並ぶので、.sub の直後に置く場合は上余白を明示して勝たせる。 */
+   `.card > .sub + *` はクラス2つ（0,2,0）でこのクラス（0,1,0）に詳細度で勝つため、.sub の
+   直後に置く場合は 12px に上書きされる。移行前のインライン値（8px）を保つよう明示して勝たせる。 */
 .mk-barline { margin: var(--space-xs) 0; }
 .card > .sub + .mk-barline { margin-top: var(--space-xs); }
 /* ---- skills: レーダーチャート（#79）---- */
