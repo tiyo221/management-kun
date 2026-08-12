@@ -201,3 +201,74 @@ test("ui.countBadges: 同じ key で make し直すと新しい要素を覚え�
   eq(second.textContent, "8");
   eq(first.textContent, "1");
 });
+
+// ---- モーダルのライフサイクル（Issue #265）----
+// 開いているモーダルは ui 側の台帳で持ち、離脱時にシェルが一括で畳む。閉じ忘れると overlay だけが
+// 残り、背後は差し替わっているため操作が宙に浮く（todo の詳細モーダルで実際に起きていた）。
+
+// body 直下の overlay（ui.modal は document.body へ挿す）。util.el は class を className へ入れるため、
+// スタブでも実物でも読める className で拾う。
+function overlays() {
+  return global.document.body.children.filter((n) => String(n.className) === "mk-modal-overlay");
+}
+
+test("ui.closeAllModals: 開いている全モーダルを閉じ、onClose を通す（離脱時の一括クローズ）", (MK) => {
+  // 観点: モジュールが unmount で手書きに閉じなくても、シェルの1呼び出しで overlay が残らない
+  // 入力: 2つ開いて closeAllModals
+  // 期待: body から overlay が消え、それぞれの onClose が1度ずつ呼ばれる
+  resetDom();
+  let closedA = 0, closedB = 0;
+  MK.ui.modal({ title: "A", onClose: () => { closedA++; } });
+  MK.ui.modal({ title: "B", onClose: () => { closedB++; } });
+  eq(overlays().length, 2);
+  MK.ui.closeAllModals();
+  eq(overlays().length, 0);
+  eq([closedA, closedB], [1, 1]);
+});
+
+test("ui.modal: close は何度呼んでも onClose は1回だけ（閉じ済みは台帳にも残らない）", (MK) => {
+  // 観点: アクションで閉じたあとに Esc や一括クローズが来るのは普通に起きる。二重発火すると
+  //       onClose で参照を捨てる側が「開き直した新しいモーダル」の参照まで消しかねない
+  // 入力: close() を2回 → さらに closeAllModals
+  // 期待: onClose は1回だけ
+  resetDom();
+  let closed = 0;
+  const m = MK.ui.modal({ title: "A", onClose: () => { closed++; } });
+  m.close();
+  m.close();
+  MK.ui.closeAllModals();
+  eq(closed, 1);
+});
+
+test("ui.modal: Esc・overlay クリックで閉じても onClose が呼ばれる（どう閉じても後始末が走る）", (MK) => {
+  // 観点: 後始末をアクションのハンドラに書くと、Esc や overlay クリックの経路で漏れる
+  // 入力: Esc で閉じる／別のモーダルは overlay クリックで閉じる
+  // 期待: どちらも onClose が呼ばれ、overlay が body から外れる
+  resetDom();
+  let byEsc = 0, byOverlay = 0;
+  MK.ui.modal({ title: "A", onClose: () => { byEsc++; } });
+  fireEvent(global.document, "keydown", { key: "Escape" });
+  eq(byEsc, 1);
+  eq(overlays().length, 0);
+
+  MK.ui.modal({ title: "B", onClose: () => { byOverlay++; } });
+  const ov = overlays()[0];
+  fireEvent(ov, "click", { target: ov });
+  eq(byOverlay, 1);
+  eq(overlays().length, 0);
+});
+
+test("ui.modal: 閉じたあとの Esc は残ったモーダルだけに効く（keydown の解除漏れ防止）", (MK) => {
+  // 観点: close() で document の keydown を外す約束。外し漏れると閉じ済みのモーダルの onClose が
+  //       あとから走る（undoToast の解除漏れと同じ壊れ方）
+  // 入力: A を閉じてから B を開き、Esc
+  // 期待: B だけが閉じ、A の onClose は増えない
+  resetDom();
+  let a = 0, b = 0;
+  const mA = MK.ui.modal({ title: "A", onClose: () => { a++; } });
+  mA.close();
+  MK.ui.modal({ title: "B", onClose: () => { b++; } });
+  fireEvent(global.document, "keydown", { key: "Escape" });
+  eq([a, b], [1, 1]);
+  eq(overlays().length, 0);
+});

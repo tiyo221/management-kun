@@ -308,14 +308,15 @@
       title: "ToDo（Next）から引く",
       body,
       actions: [{ label: "閉じる", variant: "btn-secondary", onClick: (c) => c() }],
+      onClose: () => { _modal = null; },
     });
   }
   // ui.modal() は { close, body } を返す（shared/ui.js）。候補クリックで閉じるために保持する。
+  // 離脱時のクローズはシェルが一括で行うため持たない（MK.ui.closeAllModals・Issue #265）。
   let _modal = null;
-  function closeModal() { if (_modal && typeof _modal.close === "function") _modal.close(); }
+  function closeModal() { if (_modal) _modal.close(); }
 
   // ---- ルーチン（定型業務）設定 ----
-  let _routineModal = null;
   let _routineBody = null;           // 表示中のモーダル本体（開き直すと作り直されるので都度差し替える）
   let newRoutineTitle = "";          // 追加フォームの入力途中タイトル（rebuild で消えないよう退避）
   let newRoutineMin = "30";          // 追加フォームの所要時間（分・文字列）
@@ -427,16 +428,14 @@
     const body = el("div");
     _routineBody = body;
     rebuildRoutineBody(body);
-    _routineModal = MK.ui.modal({
+    MK.ui.modal({
       title: "🔁 ルーチン（定型業務）設定",
       body,
-      actions: [{ label: "閉じる", variant: "btn-secondary", onClick: () => closeRoutineModal() }], // 後始末は1か所（本体参照も手放す）
+      actions: [{ label: "閉じる", variant: "btn-secondary", onClick: (c) => c() }],
+      // 閉じたら本体の参照も手放す（どう閉じても＝Esc・overlay・離脱時の一括クローズでも通る。
+      // 開き直せば openRoutineModal が入れ直す）。
+      onClose: () => { _routineBody = null; },
     });
-  }
-  // 閉じたら本体の参照も手放す（_routineModal と同じ寿命。開き直せば openRoutineModal が入れ直す）。
-  function closeRoutineModal() {
-    if (_routineModal && typeof _routineModal.close === "function") _routineModal.close();
-    _routineBody = null;
   }
 
   MK.registerModule("daily", {
@@ -445,9 +444,9 @@
     description: "今日やることを時間割にして1日を組み立てる",
     scope: "global",
     mount(container) { date = MK.util.todayISO(); root = el("div"); container.appendChild(root); render(); },
-    // モジュール離脱時に開きっぱなしのモーダルを畳む（overlay が残ると、破棄済み root に対して
-    // 候補クリックが走り書き込みだけ効いてしまうため）。
-    unmount() { closeModal(); closeRoutineModal(); _modal = null; _routineModal = null; _routineBody = null; root = null; listNode = null; footerNode = null; },
+    // 開きっぱなしのモーダルはシェルが離脱時に畳む（MK.ui.closeAllModals）。その close が
+    // onClose を通すので、_modal / _routineBody はここへ来るまでに手放されている。
+    unmount() { root = null; listNode = null; footerNode = null; },
     summary() { return L().summary(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },

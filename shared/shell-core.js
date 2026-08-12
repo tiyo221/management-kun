@@ -189,6 +189,10 @@
     // 配布プロファイルに載っていないビュー（例: 自分配布での master-people / master-projects）と
     // 非表示モジュール（Issue #35）は先頭ゾーンの表示中モジュールへ退避
     if (!ALLOWED[view] || isHiddenModule(view)) view = firstView();
+    // 開きっぱなしのモーダルはここで畳む（Issue #265）。残すと overlay だけが画面に残り、背後は
+    // 差し替わっているため操作が宙に浮く／破棄済みのノードへ書き込む。unmount より先に呼ぶのは、
+    // モジュールがモーダルの参照を unmount で手放すため（閉じるのは参照が生きているうちに）。
+    MK.ui.closeAllModals();
     if (S.mountedModule && typeof S.mountedModule.unmount === "function") S.mountedModule.unmount();
     S.mountedModule = null;
     main.innerHTML = "";

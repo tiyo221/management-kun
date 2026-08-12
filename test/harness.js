@@ -54,6 +54,9 @@ function makeNode(tag) {
     },
     remove() { if (this.parentNode) this.parentNode.removeChild(this); },
     contains(other) { for (let n = other; n; n = n.parentNode) if (n === this) return true; return false; },
+    // childNodes は children の別名（このスタブはテキストノードも children に積むため区別が無い）。
+    // 実物と同じ名前で「子がいるか」を見るコード（ui.modal のフッタ）をそのまま動かすために置く。
+    get childNodes() { return this.children; },
     addEventListener(type, fn) { (this._listeners[type] || (this._listeners[type] = [])).push(fn); },
     removeEventListener(type, fn) {
       const arr = this._listeners[type]; if (!arr) return;

@@ -144,7 +144,19 @@
     ui.undoDeleteToast(message, () => api.undoRemove(), onChanged);
   };
 
-  // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }
+  // 開いているモーダルの台帳（Issue #265）。閉じ忘れの後始末をモジュールごとの手書きに任せず、
+  // ここで一括して畳めるようにする（開いたまま離脱すると overlay だけが残り、背後は差し替わって
+  // いるため操作が宙に浮く）。close() 時に自分で抜けるので、閉じたものは残らない。
+  const openModals = new Set();
+
+  // 開いているモーダルを全て閉じる。シェルのビュー切替（unmount の直前）から呼ぶ。
+  ui.closeAllModals = function () {
+    Array.from(openModals).forEach((m) => m.close());
+  };
+
+  // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}], onClose() }
+  // onClose は「どう閉じても」1度だけ呼ばれる（アクション／Esc／overlay クリック／closeAllModals）。
+  // モーダルの寿命に紐づく参照（表示中の本体ノード等）を手放すのに使う。
   ui.modal = function (opts) {
     opts = opts || {};
     const overlay = el("div", { class: "mk-modal-overlay" });
@@ -155,8 +167,19 @@
     else if (opts.body) body.appendChild(opts.body);
     const foot = el("div", { class: "mk-modal-foot" });
 
-    function close() { overlay.remove(); document.removeEventListener("keydown", onKey); }
+    // close() は何度呼ばれても1回だけ効く（アクションで閉じてから Esc、閉じ済みのハンドルへ
+    // closeAllModals、等が普通に起きる。onClose の二重発火を防ぐ）。
+    let closed = false;
+    function close() {
+      if (closed) return;
+      closed = true;
+      openModals.delete(handle);
+      overlay.remove();
+      document.removeEventListener("keydown", onKey);
+      if (typeof opts.onClose === "function") opts.onClose();
+    }
     function onKey(e) { if (e.key === "Escape") close(); }
+    const handle = { close, body };
 
     (opts.actions || []).forEach((a) => {
       foot.appendChild(el("button", {
@@ -173,7 +196,8 @@
     overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
     document.addEventListener("keydown", onKey);
     document.body.appendChild(overlay);
-    return { close, body };
+    openModals.add(handle);
+    return handle;
   };
 
   ui.confirm = function (message) {
@@ -181,9 +205,14 @@
       ui.modal({
         title: "確認",
         body: el("p", { text: message }),
+        // 「閉じた＝キャンセル」で必ず決着させる。Esc・overlay クリック・一括クローズで閉じたとき、
+        // 解決しないままだと待っている呼び出し側が永久に止まる（await の先が動かない）。
+        onClose: () => resolve(false),
+        // 各アクションは close() より先に resolve する ── close() が onClose を同期で呼ぶため、
+        // 後に回すと「先に効いた resolve(false)」に負けて OK が伝わらない（Promise は初回で確定）。
         actions: [
-          { label: "キャンセル", variant: "btn-secondary", onClick: (close) => { close(); resolve(false); } },
-          { label: "OK", variant: "btn-primary", onClick: (close) => { close(); resolve(true); } },
+          { label: "キャンセル", variant: "btn-secondary", onClick: (close) => { resolve(false); close(); } },
+          { label: "OK", variant: "btn-primary", onClick: (close) => { resolve(true); close(); } },
         ],
       });
     });
