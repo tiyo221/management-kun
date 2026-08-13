@@ -473,6 +473,19 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 @media (max-width: 480px) {
   .text-input.mk-row-control { min-height: 44px; }
 }
+/* 行の移動ボタン群（↑↓ など）。常に濃く出すと行が騒がしいので既定は控えめにし、
+   その行に触れている（hover / focus-within）ときだけ前面化する。wbs（#156）と daily（#266）が
+   同じ形なので共通クラスに寄せた。前面化の条件だけは器ごとに書く（行の実体が li と tr で違う）。 */
+.mk-row-move { display: inline-flex; gap: 1px; opacity: .45; transition: opacity .12s; }
+.mk-row-move button { padding: 2px 5px; font-size: 13px; line-height: 1.2; color: var(--color-steel); }
+.mk-row:hover .mk-row-move, .mk-row:focus-within .mk-row-move,
+.wbs-grid tr:hover .mk-row-move, .wbs-grid tr:focus-within .mk-row-move { opacity: 1; }
+/* 行の低頻度操作を寄せる ⋯ メニュー（MK.ui.rowMenu）。body 直下に fixed で浮かせる
+   （行はスクロール容器の中にあり、はみ出すと切れるため）。 */
+.mk-row-menu { position: fixed; z-index: 600; background: var(--color-canvas); border: 1px solid var(--color-hairline); border-radius: var(--rounded-md); box-shadow: rgba(15,15,15,.16) 0 8px 24px -6px; padding: 4px; min-width: 156px; }
+.mk-row-menu-item { display: block; width: 100%; text-align: left; background: transparent; border: none; color: var(--color-ink); font-family: inherit; font-size: 13px; padding: 7px 10px; border-radius: var(--rounded-sm); cursor: pointer; }
+.mk-row-menu-item:hover { background: var(--color-surface); }
+.mk-row-menu-item.danger { color: var(--color-error); }
 
 /* ---- daily 固有（時間割の列幅・コントロール幅。Issue #264）----
    同じ幅が追加行・ルーチン設定・時間割行に散っていたので、値はここに1回だけ置く。 */
@@ -486,6 +499,9 @@ textarea.text-input { min-height: 80px; resize: vertical; }
    文字色だけダーク側にも明示して戻す（ライトは宣言順で勝つが、両テーマで同じ色にする）。 */
 .mk-daily-warn-chip { margin-left: var(--space-xs); color: var(--color-error); }
 [data-theme="dark"] .chip.mk-daily-warn-chip { color: var(--color-error); }
+/* 固定時刻（ピン）の枠。値があるときだけチップが入り、クリックで time 入力へ差し替わる（#266）。
+   空のときは何も置かないので、幅ゼロで畳まれる（未使用の入力欄が行に居座らない）。 */
+.mk-daily-pin { display: inline-flex; align-items: center; vertical-align: middle; }
 /* 所要時間 select と固定時刻 input（追加行・ルーチン設定。時間割行は .mk-row-control 側で内容幅） */
 .text-input.mk-daily-min { max-width: 110px; }
 .text-input.mk-daily-at { max-width: 120px; }
@@ -572,15 +588,10 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .wbs-toggle { width: 16px; flex: 0 0 16px; cursor: pointer; color: var(--color-steel); text-align: center; }
 .wbs-ops { white-space: nowrap; text-align: right; }
 .wbs-ops button { padding: 2px 6px; font-size: 14px; line-height: 1.2; }
-/* 各行常時表示の移動・インデントボタン（Issue #156）。行 hover / フォーカスで前面化。 */
-.wbs-move { display: inline-flex; gap: 1px; margin-right: 4px; opacity: .45; transition: opacity .12s; }
-.wbs-grid tr:hover .wbs-move, .wbs-grid tr:focus-within .wbs-move { opacity: 1; }
-.wbs-move button { padding: 2px 5px; font-size: 13px; line-height: 1.2; color: var(--color-steel); }
+/* 移動・インデントボタン（Issue #156）と ⋯ メニューの見た目は共通クラス（.mk-row-move /
+   .mk-row-menu）が持つ。ここは wbs だけの都合＝隣の ⋯ との間隔だけ。 */
+.wbs-ops .mk-row-move { margin-right: 4px; }
 .wbs-grid tr:focus { outline: 2px solid var(--color-primary); outline-offset: -2px; }
-.wbs-ops-menu { position: fixed; z-index: 600; background: var(--color-canvas); border: 1px solid var(--color-hairline); border-radius: var(--rounded-md); box-shadow: rgba(15,15,15,.16) 0 8px 24px -6px; padding: 4px; min-width: 156px; }
-.wbs-ops-item { display: block; width: 100%; text-align: left; background: transparent; border: none; color: var(--color-ink); font-family: inherit; font-size: 13px; padding: 7px 10px; border-radius: var(--rounded-sm); cursor: pointer; }
-.wbs-ops-item:hover { background: var(--color-surface); }
-.wbs-ops-item.danger { color: var(--color-error); }
 .wbs-num { color: var(--color-steel); font-variant-numeric: tabular-nums; }
 .wbs-dep-chip { display: inline-block; font-size: 11px; padding: 0 5px; border-radius: var(--rounded-sm); background: var(--tint-sky); color: var(--color-charcoal); cursor: pointer; margin-right: 3px; }
 [data-theme="dark"] .wbs-dep-chip { background: #1f3147; color: #bcd6f5; }

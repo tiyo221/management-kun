@@ -165,6 +165,7 @@
   }
   ui.closeAllModals = function () {
     closeEach(Array.from(openModals).filter((m) => !m.persistent));
+    closeRowMenu(); // 行メニューは document.body 直下に浮くので、離脱時に一緒に畳む
   };
 
   // テスト専用: persistent も含めて全部閉じ、台帳を空にする（テスト間の分離）。view からは呼ばない。
@@ -173,7 +174,63 @@
   ui._resetModals = function () {
     closeEach(Array.from(openModals));
     openModals.clear();
+    closeRowMenu();
   };
+
+  // ---- 行の操作メニュー（⋯）。Issue #156（wbs）/ #266（daily）----
+  // 一覧行に並べると密度が上がる低頻度操作を1つのボタンへ寄せるための小さなポップアップ。
+  // 同時に開けるのは1つだけ（別の行で開いたら前のは閉じる）。外側クリック・Esc でも閉じる。
+  // モーダル（overlay を敷いて背後を止める）ではないので openModals の台帳には載せず、
+  // ここで1つだけ参照を持つ ── 代わりにビュー切替では closeAllModals から畳む（上）。
+  let rowMenuNode = null;
+  let rowMenuAnchor = null;
+  function onRowMenuKey(e) { if (e.key === "Escape") closeRowMenu(); }
+  function closeRowMenu() {
+    if (!rowMenuNode) return;
+    const anchor = rowMenuAnchor;
+    rowMenuNode.remove();
+    rowMenuNode = null;
+    rowMenuAnchor = null;
+    document.removeEventListener("click", closeRowMenu);
+    document.removeEventListener("keydown", onRowMenuKey);
+    // 開いたときにメニュー内へフォーカスを移しているので、閉じたら呼び出し元のボタンへ戻す
+    // （戻さないとフォーカスが body へ落ち、キーボードだけで次の行へ進めなくなる。spec §10.2）。
+    // 操作の結果その行ごと消える／作り直されることがあるため、まだ画面にあるときだけ戻す。
+    if (anchor && anchor.focus && document.body.contains(anchor)) anchor.focus();
+  }
+  // anchor: 起点のボタン（この直下に開く）
+  // items : [{ label, onClick, danger }]。null を混ぜてよい（条件で出し分ける呼び出し側のため）。
+  //         onClick はメニューを閉じたあとに呼ぶ（再描画で自分の DOM を消しても安全なように）。
+  ui.rowMenu = function (anchor, items) {
+    closeRowMenu();
+    const menu = el("div", { class: "mk-row-menu", role: "menu" });
+    (items || []).forEach((it) => {
+      if (!it) return;
+      const b = el("button", { class: "mk-row-menu-item" + (it.danger ? " danger" : ""), text: it.label, role: "menuitem" });
+      b.addEventListener("click", (e) => { e.stopPropagation(); closeRowMenu(); if (it.onClick) it.onClick(); });
+      menu.appendChild(b);
+    });
+    const rect = anchor.getBoundingClientRect();
+    const vw = (typeof window !== "undefined" && window.innerWidth) || 0;
+    menu.style.top = (rect.bottom + 4) + "px";
+    menu.style.left = (vw ? Math.min(rect.left, vw - 168) : rect.left) + "px";
+    document.body.appendChild(menu);
+    rowMenuNode = menu;
+    rowMenuAnchor = anchor;
+    const first = menu.children[0];
+    if (first && first.focus) first.focus(); // キーボードでも項目へ到達できるように（spec §10.2）
+    // 購読は次のタスクへ回す ── いま処理中のクリックがそのまま document まで上がって、
+    // 開いた瞬間に閉じるのを避ける。
+    setTimeout(() => {
+      if (rowMenuNode !== menu) return; // その間に閉じ直されていたら購読しない（解除漏れになる）
+      document.addEventListener("click", closeRowMenu);
+      document.addEventListener("keydown", onRowMenuKey);
+    }, 0);
+    return { close: closeRowMenu };
+  };
+  // 開いていれば閉じる（開いていなければ何もしない）。再描画・unmount の後始末から呼ぶ ──
+  // 起点のボタンごと作り直されると、浮いたメニューだけが宙に残る。
+  ui.closeRowMenu = closeRowMenu;
 
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}], onClose(), persistent }
   // onClose は「どう閉じても」1度だけ呼ばれる（アクション／Esc／overlay クリック／closeAllModals）。

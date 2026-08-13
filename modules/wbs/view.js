@@ -11,7 +11,6 @@
   // ガントのズーム段階（1日あたりの px 幅）。日＝従来幅、週/月で圧縮して横長を緩和（Issue #157）。
   const ZOOM = { day: 24, week: 12, month: 5 };
   let root = null;
-  let opsMenu = null;
   let pendingFocusId = null; // 移動・インデント後に再フォーカスする行の task id（Issue #156）
   let viewMode = "table"; // "table" | "gantt"（テーブル/ガントのタブ切替）
   let zoomKey = "day"; // ZOOM のキー
@@ -39,7 +38,7 @@
 
   function render() {
     if (!root) return;
-    closeOpsMenu();
+    ui.closeRowMenu();
     const tasks = L().tasks();
     root.innerHTML = "";
     root.appendChild(ui.sectionTitle("WBS"));
@@ -203,7 +202,7 @@
   // 各行に常時表示する移動・インデントボタン（メニューを開かず1クリック）。Issue #156。
   function moveButtons(idx, id) {
     const mk = (label, title, fn) => { const b = el("button", { class: "btn btn-ghost", text: label, title, "aria-label": title }); b.addEventListener("click", (e) => { e.stopPropagation(); rowOp(id, fn); }); return b; };
-    return el("span", { class: "wbs-move" }, [
+    return el("span", { class: "mk-row-move" }, [
       mk("↑", "上へ移動 (Alt+↑)", () => L().moveUp(idx)),
       mk("↓", "下へ移動 (Alt+↓)", () => L().moveDown(idx)),
       mk("⇤", "字上げ・親へ (Shift+Tab)", () => L().outdent(idx)),
@@ -212,29 +211,21 @@
   }
 
   function opsCell(idx) {
-    const b = el("button", { class: "btn btn-ghost", text: "⋯", title: "操作" });
+    const b = el("button", { class: "btn btn-ghost", text: "⋯", title: "操作", "aria-label": "操作メニュー" });
     b.addEventListener("click", (e) => { e.stopPropagation(); openOpsMenu(b, idx); });
     return b;
   }
+  // メニューの開閉・配置・後始末は共有ヘルパが持つ（MK.ui.rowMenu。daily と同じ器・Issue #266）。
+  // 移動・字下げ/字上げは各行の常時ボタン＋キーボードへ移した（Issue #156）ので、
+  // メニューには頻度の低い追加・削除だけを残す。
   function openOpsMenu(anchor, idx) {
-    closeOpsMenu();
-    const rect = anchor.getBoundingClientRect();
-    const menu = el("div", { class: "wbs-ops-menu" });
-    const run = (fn) => { closeOpsMenu(); fn(); render(); };
-    // 移動・字下げ/字上げは各行の常時ボタン＋キーボードへ移した（Issue #156）。
-    // メニューには頻度の低い追加・削除だけを残す。
-    const items = [
-      ["＋ 子タスク", () => L().addChild(idx), ""], ["＋ 兄弟タスク", () => L().addSibling(idx), ""],
-      ["✕ 削除", () => { L().deleteTask(idx); MK.ui.undoDeleteToast("削除しました", () => L().undoDelete(), render); }, "danger"],
-    ];
-    items.forEach(([label, fn, cls]) => { const it = el("button", { class: "wbs-ops-item " + cls, text: label }); it.addEventListener("click", (e) => { e.stopPropagation(); run(fn); }); menu.appendChild(it); });
-    menu.style.top = (rect.bottom + 4) + "px";
-    menu.style.left = Math.min(rect.left, window.innerWidth - 168) + "px";
-    document.body.appendChild(menu);
-    opsMenu = menu;
-    setTimeout(() => document.addEventListener("click", closeOpsMenu), 0);
+    const run = (fn) => { fn(); render(); };
+    ui.rowMenu(anchor, [
+      { label: "＋ 子タスク", onClick: () => run(() => L().addChild(idx)) },
+      { label: "＋ 兄弟タスク", onClick: () => run(() => L().addSibling(idx)) },
+      { label: "✕ 削除", danger: true, onClick: () => run(() => { L().deleteTask(idx); MK.ui.undoDeleteToast("削除しました", () => L().undoDelete(), render); }) },
+    ]);
   }
-  function closeOpsMenu() { if (!opsMenu) return; opsMenu.remove(); opsMenu = null; document.removeEventListener("click", closeOpsMenu); }
 
   // ---- ガント（freeze panes: 固定名前列＋固定日付ヘッダ＋バーSVG）Issue #165 ----
   // 1つのスクロール容器＋CSS grid（2×2）＋sticky で全同期する（スクロール同期 JS なし）。
@@ -328,7 +319,7 @@
       if (!document.getElementById("mk-people-list")) document.body.appendChild(el("datalist", { id: "mk-people-list" }));
       refreshPeopleDatalist(); render();
     },
-    unmount() { closeOpsMenu(); root = null; statsNode = null; },
+    unmount() { ui.closeRowMenu(); root = null; statsNode = null; },
     summary() { return L().summary(); },
     // 全 PJ 横断（§3.7.4）: 検索・人単位サマリーは表示中 PJ に限らず全 PJ を走査する。
     searchItems() { return L().searchItems(); },
