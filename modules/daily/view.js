@@ -26,6 +26,11 @@
   // 時刻・空き・食い込み・合計へ波及するので、スケジュール領域（リスト＋フッタ）を差し替える。
   let listNode = null;   // 時間割リストのカード（listCard の戻り）
   let footerNode = null; // 合計・繰り越しのフッタ（footer の戻り。項目0件なら null）
+  // 並べ替えの直後に戻すフォーカス（{ id, op }。op は行内ボタンの data-op）。行は作り直されるので、
+  // 押していたボタンは DOM から消える ── 戻さないとフォーカスが body へ落ち、キーボードでは
+  // 続けて並べ替えられない（.mk-row-move は focus-within で前面化するので見た目も薄く戻る）。
+  // wbs の pendingFocusId と同じ手当て（Issue #156 / #266）。
+  let pendingFocus = null;
 
   // 所要時間（分）を "1時間30分" 形式へ。0 分は "0分"。
   function fmtDur(min) {
@@ -70,6 +75,18 @@
     listNode.replaceWith(newList);
     listNode = newList;
     replaceFooter(footer(sched), newList);
+    restorePendingFocus();
+  }
+
+  // 並べ替えで消えたボタンの代わりに、作り直した行の同じボタンへフォーカスを戻す（§2.5-4）。
+  // 対象の行が消えている（他画面で削除された等）ときは何もしない ── body へ落ちるだけで、
+  // 無関係な行へ飛ばすよりはよい。
+  function restorePendingFocus() {
+    const want = pendingFocus;
+    pendingFocus = null;
+    if (!want || !listNode) return;
+    const btn = listNode.querySelector('li[data-id="' + want.id + '"] [data-op="' + want.op + '"]');
+    if (btn) btn.focus();
   }
 
   // フッタ（合計・繰り越し）だけを差し替える。完了チェックは時刻に影響しないので、残り件数の更新に使う。
@@ -231,17 +248,22 @@
     const minSel = ui.select(minOptsFor(it.minutes), String(it.minutes), (v) => { L().setMinutes(it.id, Number(v)); refreshSchedule(); });
     minSel.classList.add("mk-row-control", "mk-row-select");
 
+    // 並べ替えは同日内の順番の付け替えなので、変わるのは時間割リストと合計だけ（日ナビ・追加行は
+    // 動かない）。全再描画せずスケジュール領域だけ差し替え、押していたボタンへフォーカスを戻す
+    // （§2.5-4。追加行の入力途中を消さない／キーボードで続けて並べ替えられるように）。
+    const moveOp = (op, fn) => { fn(); pendingFocus = { id: it.id, op: op }; refreshSchedule(); };
+
     // 主操作＝時間の割当（＝並べ替え）なので 1つ前/1つ後ろは行に残す（§2.5-1）。ただし常時濃く
     // 出すと行が騒がしいので、.mk-row-move が hover / focus のときだけ前面化する（wbs と同じ）。
     const move = el("span", { class: "mk-row-move" }, [
-      iconBtn("↑", "1つ前へ移動", () => { L().moveItem(it.id, -1); render(); }),
-      iconBtn("↓", "1つ後ろへ移動", () => { L().moveItem(it.id, 1); render(); }),
+      iconBtn("↑", "1つ前へ移動", "up", () => moveOp("up", () => L().moveItem(it.id, -1))),
+      iconBtn("↓", "1つ後ろへ移動", "down", () => moveOp("down", () => L().moveItem(it.id, 1))),
     ]);
     // 低頻度の操作（端への一括移動・固定時刻・削除）は ⋯ へ寄せる（Issue #266 の方針検討）。
-    const menuBtn = iconBtn("⋯", "その他の操作", () => {
+    const menuBtn = iconBtn("⋯", "その他の操作", "menu", () => {
       ui.rowMenu(menuBtn, [
-        { label: "↥ 先頭（朝イチ）へ移動", onClick: () => { L().moveItemToTop(it.id); render(); } },
-        { label: "↧ 末尾へ移動", onClick: () => { L().moveItemToEnd(it.id); render(); } },
+        { label: "↥ 先頭（朝イチ）へ移動", onClick: () => moveOp("menu", () => L().moveItemToTop(it.id)) },
+        { label: "↧ 末尾へ移動", onClick: () => moveOp("menu", () => L().moveItemToEnd(it.id)) },
         // 固定済みの行にも「変更」を残す ── チップのクリックだけにするとポインタ無しでは
         // 「解除してから固定し直す」しか手が無くなる（spec §10.2 キーボードで到達可能）。
         { label: it.at ? "📌 開始時刻を変更" : "📌 開始時刻を固定", onClick: editPin },
@@ -250,15 +272,18 @@
       ]);
     });
 
-    return el("li", { class: "mk-row mk-row-dense" }, [cb, time, grow, minSel, move, menuBtn]);
+    // data-id / data-op は差し替え後にフォーカスを戻すための目印（restorePendingFocus）。
+    return el("li", { class: "mk-row mk-row-dense", "data-id": it.id }, [cb, time, grow, minSel, move, menuBtn]);
   }
 
   // 記号だけのボタン。読み上げに何のボタンか伝わるよう title と同じ文言を aria-label にも入れる。
+  // op は行を作り直したあとに同じボタンを見つけるための目印（省略可）。
   // クリックは止めない（stopPropagation しない）── 行に click ハンドラは無く、逆に止めると
   // 開いている ⋯ メニューの「外側クリックで閉じる」（document 購読）に届かなくなる。
-  function iconBtn(label, title, onClick) {
+  function iconBtn(label, title, op, onClick) {
     const b = ui.button(label, { variant: "btn-ghost", title: title, onClick: onClick });
     b.setAttribute("aria-label", title);
+    if (op) b.setAttribute("data-op", op);
     return b;
   }
 
@@ -498,7 +523,7 @@
     mount(container) { date = MK.util.todayISO(); root = el("div"); container.appendChild(root); render(); },
     // 開きっぱなしのモーダルはシェルが離脱時に畳む（MK.ui.closeAllModals）。その close が
     // onClose を通すので、_modal / _routineBody はここへ来るまでに手放されている。
-    unmount() { ui.closeRowMenu(); root = null; listNode = null; footerNode = null; },
+    unmount() { ui.closeRowMenu(); root = null; listNode = null; footerNode = null; pendingFocus = null; },
     summary() { return L().summary(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },
