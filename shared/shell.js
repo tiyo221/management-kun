@@ -24,10 +24,7 @@
   MK.bus.on("masters:changed", () => {
     const rerender = MASTER_VIEWS[S.current];
     if (rerender) {
-      // ここもビューを畳んで組み直す経路なので、route() と同じ後始末をする（開きっぱなしの
-      // モーダルを残すと、作り直した一覧の上に古いモーダルが浮いたままになる。Issue #265）。
-      MK.ui.closeAllModals();
-      S.main.innerHTML = "";
+      S.clearMain(); // 畳んで組み直す経路の後始末（モーダルを畳んでから main を空にする。Issue #265）
       rerender();
     } else if (MK.modules[S.current] && MK.scope.dimOf(MK.modules[S.current].scope)) { route(S.current); }
   });

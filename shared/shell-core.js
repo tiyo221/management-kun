@@ -184,6 +184,14 @@
   }
 
   // ---- ルーティング ----
+  // ビューを畳んで組み直す経路の共通の後始末（Issue #265）。開きっぱなしのモーダルを畳んでから
+  // main を空にする。route() 以外（masters:changed の再描画・マスタ画面内の絞り込み切替）は
+  // unmount を挟まないので、この1本を通す。
+  function clearMain() {
+    MK.ui.closeAllModals();
+    main.innerHTML = "";
+  }
+
   // 各ビューの描画関数は別ファイル（home/masters/settings/nav）にあるため S 経由で遅延解決する。
   function route(view) {
     // 配布プロファイルに載っていないビュー（例: 自分配布での master-people / master-projects）と
@@ -423,6 +431,7 @@
   // 開いている人詳細の personId。null なら一覧。masters:changed 再描画をまたいで保持する（Issue #83）。
   S.peopleDetailId = null;
   S.route = route;
+  S.clearMain = clearMain;
   S.getSettings = getSettings;
   S.setSettings = setSettings;
   S.isHiddenModule = isHiddenModule;

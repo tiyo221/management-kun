@@ -184,13 +184,14 @@ function setup(opts) {
 // （退避はクロージャに載るので localStorage を消しても残り、undo せずに終わったテストの1件が
 //  次のテストのストアへ復活しうる。全データ初期化と同じ後始末＝MK.forgetAllUndo）
 function reset(MK) {
+  // モーダルの台帳を先に空にする（resetDom を呼ぶテストだけでなく既定で分離する）。残すと、後続
+  // テストの closeAllModals が前のテストの onClose を発火させ、原因の追いにくい失敗になる
+  // （ハンドルと document の keydown が漏れる）。データのクリアより先なのは、onClose が後始末で
+  // ストアへ書く実装を許すため ── 後に回すと、消したはずのデータが onClose で復活する。
+  if (MK.ui && MK.ui._resetModals) MK.ui._resetModals();
   global.localStorage.clear();
   MK.store._cache = {};
   MK.forgetAllUndo();
-  // モーダルの台帳も毎テスト空にする（resetDom を呼ぶテストだけでなく既定で分離する）。
-  // 残すと、後続テストの closeAllModals が前のテストの onClose を発火させ、原因の追いにくい
-  // 失敗になる（ハンドルと document の keydown が漏れる）。
-  if (MK.ui && MK.ui._resetModals) MK.ui._resetModals();
 }
 
 // ---- DOM/タイマーを使うテスト（ui.test.js）向けの操作ヘルパ ----
@@ -208,12 +209,7 @@ function setActiveElement(node) { global.document.activeElement = node || null; 
 // DOM/タイマーの状態をテスト間で分離する（body の子・document のリスナ・activeElement・時計をクリア）。
 function resetDom() {
   const doc = global.document; if (!doc) return;
-  // 開きっぱなしのモーダルは ui の台帳に残る（body の子を消しても台帳は空にならない）。
-  // 残すと次のテストの closeAllModals が前のテストの onClose を発火させる（Issue #265）。
-  // closeAllModals ではなく _resetModals を呼ぶ ── 前者は persistent を意図的に残すため、
-  // テストが persistent を開いたまま落ちるとランの最後まで漏れる。
-  const MK = global.window && global.window.MK;
-  if (MK && MK.ui && MK.ui._resetModals) MK.ui._resetModals();
+  // モーダルの台帳は reset()（全 test の先頭で走る）が空にするので、ここでは触らない。
   doc.body.children.slice().forEach((c) => c.remove());
   doc.body._listeners = {}; doc._listeners = {}; doc.activeElement = null;
   if (CLOCK) CLOCK.reset();
