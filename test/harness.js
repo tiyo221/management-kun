@@ -187,6 +187,10 @@ function reset(MK) {
   global.localStorage.clear();
   MK.store._cache = {};
   MK.forgetAllUndo();
+  // モーダルの台帳も毎テスト空にする（resetDom を呼ぶテストだけでなく既定で分離する）。
+  // 残すと、後続テストの closeAllModals が前のテストの onClose を発火させ、原因の追いにくい
+  // 失敗になる（ハンドルと document の keydown が漏れる）。
+  if (MK.ui && MK.ui._resetModals) MK.ui._resetModals();
 }
 
 // ---- DOM/タイマーを使うテスト（ui.test.js）向けの操作ヘルパ ----

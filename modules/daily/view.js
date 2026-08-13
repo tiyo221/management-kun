@@ -304,12 +304,14 @@
         list,
       ]);
     }
-    _modal = MK.ui.modal({
+    const handle = MK.ui.modal({
       title: "ToDo（Next）から引く",
       body,
       actions: [{ label: "閉じる", variant: "btn-secondary", onClick: (c) => c() }],
-      onClose: () => { _modal = null; },
+      // 手放すのは「自分が入れた参照」だけ（開き直したあとに古い方が閉じても、新しいモーダルを消さない）。
+      onClose: () => { if (_modal === handle) _modal = null; },
     });
+    _modal = handle;
   }
   // ui.modal() は { close, body } を返す（shared/ui.js）。ここで保持するのは候補クリックで
   // 閉じるためだけ ── 離脱時のクローズはシェルが一括で行う（MK.ui.closeAllModals・Issue #265）。
@@ -433,8 +435,9 @@
       body,
       actions: [{ label: "閉じる", variant: "btn-secondary", onClick: (c) => c() }],
       // 閉じたら本体の参照も手放す（どう閉じても＝Esc・overlay・離脱時の一括クローズでも通る。
-      // 開き直せば openRoutineModal が入れ直す）。
-      onClose: () => { _routineBody = null; },
+      // 開き直せば openRoutineModal が入れ直す）。手放すのは自分が入れた本体だけ ── 開き直した
+      // あとに古いモーダルが閉じたとき、新しい本体まで消すと rebuild が効かなくなる。
+      onClose: () => { if (_routineBody === body) _routineBody = null; },
     });
   }
 
