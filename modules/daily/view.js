@@ -311,8 +311,8 @@
       onClose: () => { _modal = null; },
     });
   }
-  // ui.modal() は { close, body } を返す（shared/ui.js）。候補クリックで閉じるために保持する。
-  // 離脱時のクローズはシェルが一括で行うため持たない（MK.ui.closeAllModals・Issue #265）。
+  // ui.modal() は { close, body } を返す（shared/ui.js）。ここで保持するのは候補クリックで
+  // 閉じるためだけ ── 離脱時のクローズはシェルが一括で行う（MK.ui.closeAllModals・Issue #265）。
   let _modal = null;
   function closeModal() { if (_modal) _modal.close(); }
 

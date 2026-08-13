@@ -54,13 +54,18 @@
   // 書込失敗（特に容量超過）を握りつぶさず案内する（Issue #76 / §10.1）。容量超過時は
   // 全体 JSON バックアップへの導線を提示する。失敗しても _cache には新値が残るため、
   // ここから書き出せば直近の変更ごと退避できる。
+  // 容量超過の案内は同時に1枚だけ（書込失敗は続けて起きるうえ、この案内はビュー切替でも畳まないため、
+  // 出しっぱなしにすると overlay が枚数分積み上がる）。閉じたら onClose で忘れて、次の失敗でまた出す。
+  let quotaModal = null;
   MK.store.onWriteError = function (info) {
     if (info && info.quota) {
-      MK.ui.modal({
+      if (quotaModal) return;
+      quotaModal = MK.ui.modal({
         title: "保存領域が上限に達しました",
         // ビュー切替の一括クローズで畳まない（Issue #265）。書込失敗は保存を起こした操作と同じ流れで
         // 再描画（masters:changed / route）を呼ぶため、畳むと案内が読まれる前に消える。
         persistent: true,
+        onClose: () => { quotaModal = null; },
         body: el("div", {}, [
           el("p", { text: "データを保存できませんでした（ブラウザ保存領域の容量超過）。直近の変更はこの画面には反映されていますが、まだ保存されていません。" }),
           el("p", { text: "全体バックアップ（JSON）を書き出して退避したうえで、不要なデータを整理してください。" }),

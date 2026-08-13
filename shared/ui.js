@@ -155,15 +155,23 @@
   // 「未保存のままバックアップを取れ」という肝心の案内が読まれる前に消える。
   // 走査はスナップショット（onClose の中で新しく開いたモーダルは、この掃除では畳まれない）。
   // onClose は「参照を手放す場所」であって、そこからモーダルを開かない。
+  // 1枚ずつ例外を隔離する ── onClose はモジュール側が書くコールバックなので、投げないとは
+  // 言い切れない。素通しにすると走査が止まり、例外が呼び出し元（route）まで抜けて、残りの
+  // モーダルが開いたまま画面遷移だけが死ぬ。
+  function closeEach(list) {
+    list.forEach((m) => {
+      try { m.close(); } catch (e) { console.error("モーダルの後始末に失敗:", e); }
+    });
+  }
   ui.closeAllModals = function () {
-    Array.from(openModals).forEach((m) => { if (!m.persistent) m.close(); });
+    closeEach(Array.from(openModals).filter((m) => !m.persistent));
   };
 
-  // テスト専用: persistent も含めて全部閉じ、台帳を空にする（テスト間の分離）。
+  // テスト専用: persistent も含めて全部閉じ、台帳を空にする（テスト間の分離）。view からは呼ばない。
   // closeAllModals と分けるのは、persistent の除外がシェルのビュー切替の都合であって
   // 「後始末」の意味ではないため ── 同じ関数を共用すると、片方の都合が他方を縛る。
   ui._resetModals = function () {
-    Array.from(openModals).forEach((m) => m.close());
+    closeEach(Array.from(openModals));
     openModals.clear();
   };
 
@@ -192,7 +200,14 @@
       document.removeEventListener("keydown", onKey);
       if (typeof opts.onClose === "function") opts.onClose();
     }
-    function onKey(e) { if (e.key === "Escape") close(); }
+    // Esc は最前面の1枚だけ閉じる（台帳は挿入順＝重なり順なので末尾が最前面）。ハンドラは
+    // モーダルごとに document へ張るため、素直に close() すると開いている全部が一度に畳まれ、
+    // 背後に残す約束の persistent（保存失敗の案内）まで巻き込む。
+    function onKey(e) {
+      if (e.key !== "Escape") return;
+      const top = Array.from(openModals).pop();
+      if (top === handle) close(); // 利用者の操作なので persistent でも閉じてよい
+    }
     const handle = { close, body, persistent: !!opts.persistent };
 
     (opts.actions || []).forEach((a) => {

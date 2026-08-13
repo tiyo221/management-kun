@@ -313,3 +313,34 @@ test("ui.confirm: 一括クローズで閉じたら false で決着する（呼�
   MK.ui.closeAllModals();
   return p.then((ok) => { assert(ok === false, "閉じたら false で決着する（got " + ok + "）"); });
 });
+
+test("ui.modal: Esc は最前面の1枚だけ閉じる（背後の persistent を巻き込まない）", (MK) => {
+  // 観点: keydown ハンドラはモーダルごとに document へ張るため、素直に閉じると Esc 1回で全部畳まれ、
+  //       「ビュー切替でも残す」約束の persistent（保存失敗の案内）まで消える
+  // 入力: persistent を出し、その上に通常モーダルを重ねて Esc を2回
+  // 期待: 1回目で上の1枚だけ閉じる。2回目で残った persistent が閉じる（利用者の操作では閉じてよい）
+  resetDom();
+  let closedKeep = 0, closedTop = 0;
+  MK.ui.modal({ title: "保存領域が上限に達しました", persistent: true, onClose: () => { closedKeep++; } });
+  MK.ui.modal({ title: "通常", onClose: () => { closedTop++; } });
+  fireEvent(global.document, "keydown", { key: "Escape" });
+  eq([closedTop, closedKeep], [1, 0]);
+  eq(overlays().length, 1);
+  fireEvent(global.document, "keydown", { key: "Escape" });
+  eq(closedKeep, 1);
+  eq(overlays().length, 0);
+});
+
+test("ui.closeAllModals: onClose が投げても残りを閉じ切る（画面遷移を巻き込まない）", (MK) => {
+  // 観点: onClose はモジュール側が書くコールバック。素通しにすると走査が止まり、例外が route() まで
+  //       抜けて unmount も main のクリアも走らない（残ったモーダルの上で遷移だけが死ぬ）
+  // 入力: 1枚目の onClose が例外を投げる状態で closeAllModals
+  // 期待: 例外は外へ出ず、2枚目も閉じて overlay が残らない
+  resetDom();
+  let closedSecond = 0;
+  MK.ui.modal({ title: "投げる", onClose: () => { throw new Error("onClose の失敗"); } });
+  MK.ui.modal({ title: "後続", onClose: () => { closedSecond++; } });
+  MK.ui.closeAllModals();
+  eq(closedSecond, 1);
+  eq(overlays().length, 0);
+});

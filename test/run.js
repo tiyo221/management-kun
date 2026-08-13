@@ -17,11 +17,14 @@ global.MK = MK;
 // 終了コード 0・サマリ未出力のまま抜け、「無言の成功」になる）。タイマーは harness が差し替える
 // グローバルではなく本物を使い（差し替え後の時計はテストが手で進めるため発火しない）、決着したら
 // 解除して通常の実行を遅らせない。
+// 既定を失敗にしておく（サマリを出さずに抜けた＝異常終了を緑と読み違えないため。正常に集計できた
+// ときだけ最後に 0 へ戻す）。テストファイルの読込中に落ちる経路にも効かせたいので、require より前に置く。
+process.exitCode = 1;
 const timers = require("timers");
 const ASYNC_TIMEOUT_MS = 5000;
 function withTimeout(p, name) {
   return new Promise((resolve, reject) => {
-    const t = timers.setTimeout(() => reject(new Error("timeout: " + ASYNC_TIMEOUT_MS + "ms 以内に Promise が決着しない")), ASYNC_TIMEOUT_MS);
+    const t = timers.setTimeout(() => reject(new Error("timeout: " + ASYNC_TIMEOUT_MS + "ms 以内に Promise が決着しない — " + name)), ASYNC_TIMEOUT_MS);
     p.then((v) => { timers.clearTimeout(t); resolve(v); }, (e) => { timers.clearTimeout(t); reject(e); });
   });
 }
@@ -50,9 +53,6 @@ fs.readdirSync(__dirname)
   .sort()
   .forEach((f) => require(path.join(__dirname, f)));
 
-// 既定を失敗にしておく（サマリを出さずに抜けた＝異常終了を緑と読み違えないため。
-// 正常に集計できたときだけ下で 0 へ戻す）。
-process.exitCode = 1;
 Promise.all(pending).then(() => {
   console.log("\n" + pass + " passed, " + fail + " failed");
   fails.forEach((f) => console.log("  ✗ " + f));
