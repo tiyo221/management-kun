@@ -26,6 +26,11 @@
   // 時刻・空き・食い込み・合計へ波及するので、スケジュール領域（リスト＋フッタ）を差し替える。
   let listNode = null;   // 時間割リストのカード（listCard の戻り）
   let footerNode = null; // 合計・繰り越しのフッタ（footer の戻り。項目0件なら null）
+  // 並べ替えの直後に戻すフォーカス（{ id, op }。op は行内ボタンの data-op）。行は作り直されるので、
+  // 押していたボタンは DOM から消える ── 戻さないとフォーカスが body へ落ち、キーボードでは
+  // 続けて並べ替えられない（.mk-row-move は focus-within で前面化するので見た目も薄く戻る）。
+  // wbs の pendingFocusId と同じ手当て（Issue #156 / #266）。
+  let pendingFocus = null;
 
   // 所要時間（分）を "1時間30分" 形式へ。0 分は "0分"。
   function fmtDur(min) {
@@ -43,6 +48,9 @@
 
   function render() {
     if (!root) return;
+    // 行の ⋯ メニューは body 直下に浮くので、行ごと作り直す前に畳む（起点のボタンが消えると
+    // メニューだけが取り残される）。閉じていれば何もしない。
+    ui.closeRowMenu();
     if (!date) date = MK.util.todayISO();
     // その日を開いたら、該当曜日のルーチンを自動投入する（今日以降のみ・冪等）。schedule の前に呼び、
     // 投入直後の項目も同じ描画へ反映する。過去日・投入済みは logic 側が握るので条件分岐しない。
@@ -61,11 +69,24 @@
   // 上（日ナビ・追加行）は触らないので、入力途中や画面のスクロール位置を保てる。
   function refreshSchedule() {
     if (!listNode) return;
+    ui.closeRowMenu(); // 行を作り直すので、開いている ⋯ メニューは畳む（render() と同じ理由）
     const sched = L().schedule(date);
     const newList = listCard(sched);
     listNode.replaceWith(newList);
     listNode = newList;
     replaceFooter(footer(sched), newList);
+    restorePendingFocus();
+  }
+
+  // 並べ替えで消えたボタンの代わりに、作り直した行の同じボタンへフォーカスを戻す（§2.5-4）。
+  // 対象の行が消えている（他画面で削除された等）ときは何もしない ── body へ落ちるだけで、
+  // 無関係な行へ飛ばすよりはよい。
+  function restorePendingFocus() {
+    const want = pendingFocus;
+    pendingFocus = null;
+    if (!want || !listNode) return;
+    const btn = listNode.querySelector('li[data-id="' + want.id + '"] [data-op="' + want.op + '"]');
+    if (btn) btn.focus();
   }
 
   // フッタ（合計・繰り越し）だけを差し替える。完了チェックは時刻に影響しないので、残り件数の更新に使う。
@@ -174,7 +195,10 @@
       },
     });
     title.classList.toggle("mk-done", it.done);
-    const cb = el("input", { type: "checkbox" });
+    // 読み上げでチェックボックスがどのタスクのものか分かるよう、タイトルのノードと関連付ける。
+    // 文字列を aria-label へ焼くとインライン編集での改名に追従しないので id で指す（Issue #266）。
+    title.id = "mk-daily-title-" + it.id;
+    const cb = el("input", { type: "checkbox", "aria-labelledby": title.id });
     cb.checked = it.done;
     // 完了チェックは時刻に影響しない（schedule は done を時間計算に使わない）ので行内で完結する。
     // 取り消し線を切り替え、残り件数だけフッタで更新する（全再描画しない・CONVENTIONS §2.5-4）。
@@ -184,12 +208,47 @@
     const time = el("div", { class: "sub mk-daily-time" + (r.conflict ? " mk-error-text" : ""), text: r.start + "–" + r.end });
     if (r.conflict) time.title = "固定時刻 " + it.at + " に間に合わず食い込んでいます";
 
-    const chips = [];
+    // 開始時刻の固定（ピン）。値があるときだけチップで見せ、クリックでその場編集する（§2.5-2）。
+    // 常時 time 入力を置くと、ほとんどの行で使わない入力欄が居座って行が過密になる（Issue #266）。
+    // 未固定の行は ⋯ メニューの「開始時刻を固定」から同じ入力欄を呼ぶ。
+    // ピンの追加/解除・変更は空き・食い込みを生むためスケジュール領域を差し替える（§2.5-4）。
+    const pinSlot = el("span", { class: "mk-daily-pin" });
+    function paintPin() {
+      pinSlot.innerHTML = "";
+      if (!it.at) return;
+      // 食い込み時は警告チップ、通常固定は 📌 チップ。どちらもクリックで編集に入る。
+      const chip = el("span", {
+        class: "chip mk-clickable",
+        text: r.conflict ? "⚠ " + it.at + " に食い込み" : "📌 " + it.at,
+        title: "クリックで開始時刻を変更（空で解除）",
+      });
+      chip.addEventListener("click", () => editPin(null));
+      pinSlot.appendChild(chip);
+    }
+    // returnTo: Esc で取り消したときにフォーカスを戻す先（⋯ から開いたときはその ⋯ ボタン）。
+    // 戻すノードを持たない経路（チップのクリック＝ポインタ操作）は null でよい ── チップは
+    // フォーカスを受けない span なので、戻す先がそもそも無い。
+    function editPin(returnTo) {
+      pinSlot.innerHTML = "";
+      const input = ui.input({ type: "time", value: it.at || "", onChange: (v) => { L().setAt(it.id, v); refreshSchedule(); } });
+      input.classList.add("mk-row-control");
+      input.title = "開始時刻を固定（空で解除）";
+      // 変えずに離れた／Esc なら元の表示へ戻す（変えた場合は onChange の再描画で行ごと作り直される）。
+      input.addEventListener("blur", paintPin);
+      input.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        e.preventDefault();
+        paintPin(); // 入力欄ごと捨てるので、フォーカスは呼び出し元へ戻す（放置すると body へ落ちる）
+        if (returnTo && returnTo.focus && document.body.contains(returnTo)) returnTo.focus();
+      });
+      pinSlot.appendChild(input);
+      input.focus();
+    }
+
     const srcLabel = it.source === "todo" ? "📥 ToDo" : it.source === "routine" ? "🔁 ルーチン" : "✍ 手書き";
-    chips.push(el("span", { class: "chip", text: srcLabel }));
-    // ピン（固定時刻）の状態を明示する。食い込み時は警告チップ、通常固定は 📌 チップ。
-    if (it.at) chips.push(el("span", { class: "chip", text: r.conflict ? "⚠ " + it.at + " に食い込み" : "📌 " + it.at }));
-    const grow = el("div", { class: "grow" }, [title, el("div", { class: "sub" }, chips)]);
+    const chips = el("div", { class: "sub" }, [el("span", { class: "chip", text: srcLabel }), pinSlot]);
+    paintPin();
+    const grow = el("div", { class: "grow" }, [title, chips]);
 
     // 分数変更は後続行の時刻・合計へ波及するため、スケジュール領域だけ差し替える（全再描画しない・§2.5-4）。
     // 幅は .mk-row-control に委ねる（内容幅へ縮める）。直書きの max-width:110px では
@@ -197,20 +256,43 @@
     const minSel = ui.select(minOptsFor(it.minutes), String(it.minutes), (v) => { L().setMinutes(it.id, Number(v)); refreshSchedule(); });
     minSel.classList.add("mk-row-control", "mk-row-select");
 
-    // 開始時刻の固定（ピン）。空にすると解除して流動へ戻す（setAt が normAt で null へ寄せる）。
-    // ピンの追加/解除は空き・食い込みを生むためスケジュール領域を差し替える（§2.5-4）。
-    const atInput = ui.input({ type: "time", value: it.at || "", onChange: (v) => { L().setAt(it.id, v); refreshSchedule(); } });
-    atInput.classList.add("mk-row-control");
-    atInput.title = "開始時刻を固定（空で解除）";
+    // 並べ替えは同日内の順番の付け替えなので、変わるのは時間割リストと合計だけ（日ナビ・追加行は
+    // 動かない）。全再描画せずスケジュール領域だけ差し替え、押していたボタンへフォーカスを戻す
+    // （§2.5-4。追加行の入力途中を消さない／キーボードで続けて並べ替えられるように）。
+    const moveOp = (op, fn) => { fn(); pendingFocus = { id: it.id, op: op }; refreshSchedule(); };
 
-    return el("li", { class: "mk-row mk-row-dense" }, [
-      cb, time, grow, minSel, atInput,
-      ui.button("↥", { variant: "btn-ghost", title: "先頭（朝イチ）へ移動", onClick: () => { L().moveItemToTop(it.id); render(); } }),
-      ui.button("↑", { variant: "btn-ghost", title: "1つ前へ移動", onClick: () => { L().moveItem(it.id, -1); render(); } }),
-      ui.button("↓", { variant: "btn-ghost", title: "1つ後ろへ移動", onClick: () => { L().moveItem(it.id, 1); render(); } }),
-      ui.button("↧", { variant: "btn-ghost", title: "末尾へ移動", onClick: () => { L().moveItemToEnd(it.id); render(); } }),
-      ui.button("✕", { variant: "btn-ghost", title: "デイリーから外す", onClick: () => removeItemWithUndo(it) }),
+    // 主操作＝時間の割当（＝並べ替え）なので 1つ前/1つ後ろは行に残す（§2.5-1）。ただし常時濃く
+    // 出すと行が騒がしいので、.mk-row-move が hover / focus のときだけ前面化する（wbs と同じ）。
+    const move = el("span", { class: "mk-row-move" }, [
+      iconBtn("↑", "1つ前へ移動", "up", () => moveOp("up", () => L().moveItem(it.id, -1))),
+      iconBtn("↓", "1つ後ろへ移動", "down", () => moveOp("down", () => L().moveItem(it.id, 1))),
     ]);
+    // 低頻度の操作（端への一括移動・固定時刻・削除）は ⋯ へ寄せる（Issue #266 の方針検討）。
+    const menuBtn = iconBtn("⋯", "その他の操作", "menu", () => {
+      ui.rowMenu(menuBtn, [
+        { label: "↥ 先頭（朝イチ）へ移動", onClick: () => moveOp("menu", () => L().moveItemToTop(it.id)) },
+        { label: "↧ 末尾へ移動", onClick: () => moveOp("menu", () => L().moveItemToEnd(it.id)) },
+        // 固定済みの行にも「変更」を残す ── チップのクリックだけにするとポインタ無しでは
+        // 「解除してから固定し直す」しか手が無くなる（spec §10.2 キーボードで到達可能）。
+        { label: it.at ? "📌 開始時刻を変更" : "📌 開始時刻を固定", onClick: () => editPin(menuBtn) },
+        it.at ? { label: "📌 固定を解除", onClick: () => { L().setAt(it.id, ""); refreshSchedule(); } } : null,
+        { label: "✕ デイリーから外す", danger: true, onClick: () => removeItemWithUndo(it) },
+      ]);
+    });
+
+    // data-id / data-op は差し替え後にフォーカスを戻すための目印（restorePendingFocus）。
+    return el("li", { class: "mk-row mk-row-dense", "data-id": it.id }, [cb, time, grow, minSel, move, menuBtn]);
+  }
+
+  // 記号だけのボタン。読み上げに何のボタンか伝わるよう title と同じ文言を aria-label にも入れる。
+  // op は行を作り直したあとに同じボタンを見つけるための目印（省略可）。
+  // クリックは止めない（stopPropagation しない）── 行に click ハンドラは無く、逆に止めると
+  // 開いている ⋯ メニューの「外側クリックで閉じる」（document 購読）に届かなくなる。
+  function iconBtn(label, title, op, onClick) {
+    const b = ui.button(label, { variant: "btn-ghost", title: title, onClick: onClick });
+    b.setAttribute("aria-label", title);
+    if (op) b.setAttribute("data-op", op);
+    return b;
   }
 
   // ピンの手前にできる空き時間を薄い行で見せる（Outlook のように固定予定まで間が空くのを可視化する）。
@@ -449,7 +531,7 @@
     mount(container) { date = MK.util.todayISO(); root = el("div"); container.appendChild(root); render(); },
     // 開きっぱなしのモーダルはシェルが離脱時に畳む（MK.ui.closeAllModals）。その close が
     // onClose を通すので、_modal / _routineBody はここへ来るまでに手放されている。
-    unmount() { root = null; listNode = null; footerNode = null; },
+    unmount() { ui.closeRowMenu(); root = null; listNode = null; footerNode = null; pendingFocus = null; },
     summary() { return L().summary(); },
     exportData() { return L().exportData(); },
     importData(data, mode) { L().importData(data, mode); },

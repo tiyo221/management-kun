@@ -344,3 +344,155 @@ test("ui.closeAllModals: onClose が投げても残りを閉じ切る（画面�
   eq(closedSecond, 1);
   eq(overlays().length, 0);
 });
+
+// ---- ui.rowMenu（行の ⋯ メニュー。wbs #156 / daily #266 が同じ器を使う）----
+// body 直下に浮くポップアップなので、閉じ忘れ＝画面に取り残しが出る。開閉の後始末だけを見張る。
+function rowMenus() {
+  return global.document.body.children.filter((n) => String(n.className) === "mk-row-menu");
+}
+function anchor() { return global.document.createElement("button"); }
+
+test("ui.rowMenu: 同時に開くのは1つだけ（別の行で開くと前のは閉じる）", (MK) => {
+  // 観点: 行ごとにハンドラを持つので、閉じずに開き直すと body にメニューが積み上がる
+  // 入力: 別々の anchor で2回開く
+  // 期待: body に残るのは1つ
+  resetDom();
+  MK.ui.rowMenu(anchor(), [{ label: "A" }]);
+  MK.ui.rowMenu(anchor(), [{ label: "B" }]);
+  eq(rowMenus().length, 1);
+  eq(rowMenus()[0].children[0].textContent, "B");
+  MK.ui.closeRowMenu();
+});
+
+test("ui.rowMenu: 項目を押すと先に閉じてから onClick が走る（null 項目は飛ばす）", (MK) => {
+  // 観点: onClick は再描画（自分の行の作り直し）を含むため、開いたままだと浮いたメニューが取り残される。
+  //       条件で出し分ける呼び出し側のために null を混ぜられることも契約（daily のピン解除/固定）
+  // 入力: [null, 項目] で開き、項目をクリック
+  // 期待: onClick の時点で既に閉じている（＝メニューは body に無い）
+  resetDom();
+  let openWhenClicked = null;
+  MK.ui.rowMenu(anchor(), [null, { label: "実行", onClick: () => { openWhenClicked = rowMenus().length; } }]);
+  eq(rowMenus()[0].children.length, 1); // null は項目にならない
+  fireEvent(rowMenus()[0].children[0], "click", {});
+  eq([openWhenClicked, rowMenus().length], [0, 0]);
+});
+
+test("ui.rowMenu: Esc と外側クリックで閉じ、購読も解除する", (MK) => {
+  // 観点: document へ張るリスナを解除し損ねると、閉じたあとのクリック/Esc が空振りのまま残り続ける
+  // 入力: 開く → タイマーを進めて購読させる → Esc → 再度 Esc/クリック
+  // 期待: 1回目で閉じ、以降は document のリスナが残っていない
+  resetDom();
+  MK.ui.rowMenu(anchor(), [{ label: "A" }]);
+  advanceTimers(0); // 購読は次のタスクで張られる（開いた瞬間のクリックで閉じないため）
+  fireEvent(global.document, "keydown", { key: "Escape" });
+  eq(rowMenus().length, 0);
+  eq((global.document._listeners.click || []).length, 0);
+  eq((global.document._listeners.keydown || []).length, 0);
+  // 外側クリックでも閉じる
+  MK.ui.rowMenu(anchor(), [{ label: "A" }]);
+  advanceTimers(0);
+  fireEvent(global.document, "click", {});
+  eq(rowMenus().length, 0);
+});
+
+test("ui.rowMenu: closeAllModals で畳まれる（ビュー切替の取り残しを防ぐ）", (MK) => {
+  // 観点: メニューは body 直下に fixed で浮くので、モジュールを離れても背後の差し替えでは消えない
+  // 入力: 開いた状態でシェルの一括クローズを呼ぶ
+  // 期待: body から消える
+  resetDom();
+  MK.ui.rowMenu(anchor(), [{ label: "A" }]);
+  MK.ui.closeAllModals();
+  eq(rowMenus().length, 0);
+});
+
+test("ui.closeRowMenu: 開いていなくても安全に呼べる（再描画・unmount の後始末から素通しで呼ぶ）", (MK) => {
+  // 観点: view は render() / unmount() の冒頭で無条件に呼ぶ（開いているか view は知らない）。
+  //       ここで投げると、メニューを使っていない画面の再描画まで巻き添えで死ぬ
+  // 入力: 開かずに2回呼ぶ／開いて閉じたあとにもう1回呼ぶ
+  // 期待: 例外なく、document のリスナも残らない
+  resetDom();
+  MK.ui.closeRowMenu();
+  MK.ui.closeRowMenu();
+  MK.ui.rowMenu(anchor(), [{ label: "A" }]);
+  advanceTimers(0);
+  MK.ui.closeRowMenu();
+  MK.ui.closeRowMenu();
+  eq(rowMenus().length, 0);
+  eq((global.document._listeners.click || []).length, 0);
+});
+
+// フォーカス可能な起点ボタン（スタブに focus は無いので、呼ばれたことを記録する口を足す）。
+function focusableAnchor() {
+  const n = global.document.createElement("button");
+  n.focus = () => { setActiveElement(n); n._focused = (n._focused || 0) + 1; };
+  global.document.body.appendChild(n);
+  return n;
+}
+
+test("ui.rowMenu: 閉じるときフォーカスは戻すが、外側の入力へ移っていたら奪わない", (MK) => {
+  // 観点: 外側クリックで閉じる経路では、利用者が押した先（インライン編集の入力欄など）に既に
+  //       フォーカスがある。そこへ割り込むと開いた入力が即 blur して編集が閉じる（#321 レビュー）
+  // 入力: (1) メニュー内にフォーカスがある状態で閉じる (2) 外側の入力へ移った状態で閉じる
+  // 期待: (1) 起点ボタンへ戻す (2) 戻さない
+  resetDom();
+  const a1 = focusableAnchor();
+  MK.ui.rowMenu(a1, [{ label: "A" }]);
+  setActiveElement(rowMenus()[0].children[0]); // メニュー内にフォーカス
+  MK.ui.closeRowMenu();
+  eq(a1._focused || 0, 1);
+
+  const a2 = focusableAnchor();
+  MK.ui.rowMenu(a2, [{ label: "A" }]);
+  const outside = global.document.createElement("input");
+  global.document.body.appendChild(outside);
+  setActiveElement(outside); // 外側の入力へフォーカスが移った状態で閉じる
+  MK.ui.closeRowMenu();
+  eq([a2._focused || 0, global.document.activeElement === outside], [0, true]);
+});
+
+test("ui.rowMenu: ↑↓ で項目を移れる（role=menu の操作契約・端で折り返す）", (MK) => {
+  // 観点: キーボードだけでメニューを使えること（spec §10.2）。role="menu" は ↑↓ を期待させる
+  // 入力: 3項目で開き（先頭にフォーカス）、↓↓↓ と ↑
+  // 期待: ↓ で 2→3→1（折り返し）、↑ で 3 番目へ戻る
+  resetDom();
+  const a = focusableAnchor();
+  const items = [{ label: "A" }, { label: "B" }, { label: "C" }];
+  MK.ui.rowMenu(a, items);
+  advanceTimers(0); // keydown の購読は次のタスク
+  const menu = rowMenus()[0];
+  menu.children.forEach((c) => { c.focus = () => setActiveElement(c); });
+  setActiveElement(menu.children[0]);
+  // ノードそのものを eq に渡すと循環参照で比較できないので、位置（インデックス）で見る。
+  const at = () => menu.children.indexOf(global.document.activeElement);
+  const key = (k) => fireEvent(global.document, "keydown", { key: k });
+  key("ArrowDown"); eq(at(), 1);
+  key("ArrowDown"); eq(at(), 2);
+  key("ArrowDown"); eq(at(), 0); // 端で折り返す
+  key("ArrowUp"); eq(at(), 2);
+  MK.ui.closeRowMenu();
+});
+
+test("ui.rowMenu: Tab では閉じて通常のフォーカス移動に委ねる（購読を残さない）", (MK) => {
+  // 観点: 開いたまま Tab で外へ出られると ↑↓ の購読が残り、背後のスクロールや select を奪う
+  // 入力: 開いて購読させたあと Tab
+  // 期待: 閉じ、document のリスナも残らない（preventDefault はしない＝移動は素通し）
+  resetDom();
+  MK.ui.rowMenu(focusableAnchor(), [{ label: "A" }, { label: "B" }]);
+  advanceTimers(0);
+  const e = fireEvent(global.document, "keydown", { key: "Tab" });
+  eq(rowMenus().length, 0);
+  eq(e.defaultPrevented, false);
+  eq((global.document._listeners.keydown || []).length, 0);
+});
+
+test("ui.rowMenu: 起点ボタンに aria-haspopup / aria-expanded を持たせる", (MK) => {
+  // 観点: 読み上げでは「ボタンを押した結果メニューが開いた」ことが状態として伝わらない
+  // 入力: 開く → 閉じる
+  // 期待: 開いている間は aria-expanded="true"、閉じたら "false"
+  resetDom();
+  const a = focusableAnchor();
+  MK.ui.rowMenu(a, [{ label: "A" }]);
+  eq([a.getAttribute("aria-haspopup"), a.getAttribute("aria-expanded")], ["menu", "true"]);
+  MK.ui.closeRowMenu();
+  eq(a.getAttribute("aria-expanded"), "false");
+});

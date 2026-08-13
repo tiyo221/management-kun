@@ -165,6 +165,7 @@
   }
   ui.closeAllModals = function () {
     closeEach(Array.from(openModals).filter((m) => !m.persistent));
+    closeRowMenu(); // 行メニューは document.body 直下に浮くので、離脱時に一緒に畳む
   };
 
   // テスト専用: persistent も含めて全部閉じ、台帳を空にする（テスト間の分離）。view からは呼ばない。
@@ -173,7 +174,117 @@
   ui._resetModals = function () {
     closeEach(Array.from(openModals));
     openModals.clear();
+    closeRowMenu();
   };
+
+  // ---- 行の操作メニュー（⋯）。Issue #156（wbs）/ #266（daily）----
+  // 一覧行に並べると密度が上がる低頻度操作を1つのボタンへ寄せるための小さなポップアップ。
+  // 同時に開けるのは1つだけ（別の行で開いたら前のは閉じる）。外側クリック・Esc でも閉じる。
+  // モーダル（overlay を敷いて背後を止める）ではないので openModals の台帳には載せず、
+  // ここで1つだけ参照を持つ ── 代わりにビュー切替では closeAllModals から畳む（上）。
+  const ROW_MENU_W = 168; // 幅を測れない環境（offsetWidth を持たない）での代替値（min-width 156 ＋ 余白）
+  const ROW_MENU_GAP = 4; // 起点のボタンとの隙間
+  let rowMenuNode = null;
+  let rowMenuAnchor = null;
+  // Esc で閉じる／↑↓ で項目を移る（role="menu" が読み上げ側に期待させる操作。spec §10.2）。
+  // 端では折り返す（項目数が少ないので、行き止まりより回るほうが速い）。
+  function onRowMenuKey(e) {
+    if (e.key === "Escape") { closeRowMenu(); return; }
+    // Tab は横取りせず、閉じてから通常のフォーカス移動に委ねる（role="menu" の一般的な契約）。
+    // 開いたまま外へ出られると、↑↓ の購読が残って背後のスクロールや select の操作を奪う。
+    if (e.key === "Tab") { closeRowMenu(); return; }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    if (!rowMenuNode) return;
+    const items = rowMenuNode.children;
+    if (!items.length) return;
+    e.preventDefault();
+    let i = Array.prototype.indexOf.call(items, document.activeElement);
+    if (i < 0) i = e.key === "ArrowDown" ? -1 : 0;
+    const next = items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1) + items.length) % items.length];
+    if (next && next.focus) next.focus();
+  }
+  function closeRowMenu() {
+    if (!rowMenuNode) return;
+    const anchor = rowMenuAnchor;
+    // 開いたときにメニュー内へフォーカスを移しているので、閉じたら呼び出し元のボタンへ戻す
+    // （戻さないとフォーカスが body へ落ち、キーボードだけで次の行へ進めなくなる。spec §10.2）。
+    // ただし戻すのは「フォーカスがまだメニュー内か、どこにも無いとき」だけ ── 外側クリックで
+    // 閉じる経路では、利用者がいま押した先（タイトルのインライン編集の入力欄など）へ既に
+    // フォーカスが移っている。そこへ割り込むと開いた入力が即 blur して編集が閉じる。
+    const active = document.activeElement;
+    const hadFocus = !active || active === document.body || rowMenuNode.contains(active);
+    rowMenuNode.remove();
+    rowMenuNode = null;
+    rowMenuAnchor = null;
+    document.removeEventListener("click", closeRowMenu);
+    document.removeEventListener("keydown", onRowMenuKey);
+    if (typeof window !== "undefined" && window.removeEventListener) {
+      window.removeEventListener("scroll", closeRowMenu, true);
+      window.removeEventListener("resize", closeRowMenu);
+    }
+    // 開いていないことを起点のボタンにも書き戻す（読み上げの状態表示）。
+    if (anchor && anchor.setAttribute) anchor.setAttribute("aria-expanded", "false");
+    // 操作の結果その行ごと消える／作り直されることがあるため、まだ画面にあるときだけ戻す。
+    // preventScroll で戻す ── スクロールで閉じる経路（下）ではフォーカスが必ずメニュー内にあり、
+    // 素の focus() だと起点の行が画面内へ引き戻されて、利用者のホイール操作を打ち消してしまう。
+    if (hadFocus && anchor && anchor.focus && document.body.contains(anchor)) anchor.focus({ preventScroll: true });
+  }
+  // anchor: 起点のボタン（この直下に開く）
+  // items : [{ label, onClick, danger }]。null を混ぜてよい（条件で出し分ける呼び出し側のため）。
+  //         onClick はメニューを閉じたあとに呼ぶ（再描画で自分の DOM を消しても安全なように）。
+  ui.rowMenu = function (anchor, items) {
+    closeRowMenu();
+    const menu = el("div", { class: "mk-row-menu", role: "menu" });
+    (items || []).forEach((it) => {
+      if (!it) return;
+      const b = el("button", { class: "mk-row-menu-item" + (it.danger ? " danger" : ""), text: it.label, role: "menuitem" });
+      b.addEventListener("click", (e) => { e.stopPropagation(); closeRowMenu(); if (it.onClick) it.onClick(); });
+      menu.appendChild(b);
+    });
+    const rect = anchor.getBoundingClientRect();
+    const vw = (typeof window !== "undefined" && window.innerWidth) || 0;
+    const vh = (typeof window !== "undefined" && window.innerHeight) || 0;
+    // 起点の直下に開く。左は画面右端からはみ出さない位置へ寄せる（メニュー幅＝.mk-row-menu の
+    // min-width ＋ 余白ぶん）。
+    menu.style.top = (rect.bottom + ROW_MENU_GAP) + "px";
+    menu.style.left = rect.left + "px";
+    document.body.appendChild(menu);
+    // 幅・高さは挿入しないと測れない。置いてから測り、画面に収まらない向きだけ寄せ直す
+    // （日本語のラベルは長さの幅があり、min-width から見積もると 375px で右へはみ出す）。
+    const w = menu.offsetWidth || ROW_MENU_W;
+    if (vw) menu.style.left = Math.max(0, Math.min(rect.left, vw - w)) + "px";
+    // 画面下端に近い行では下に収まらず、項目が見切れて押せない（daily の時間割は行数が多い）。
+    const h = menu.offsetHeight || 0;
+    if (vh && h && rect.bottom + ROW_MENU_GAP + h > vh) {
+      menu.style.top = Math.max(0, rect.top - h - ROW_MENU_GAP) + "px";
+    }
+    rowMenuNode = menu;
+    rowMenuAnchor = anchor;
+    // 起点のボタンに「メニューを持つ／いま開いている」ことを持たせる（読み上げでは押した結果が
+    // 分からないため）。呼び出し側に書かせず器の側で面倒を見る。
+    if (anchor.setAttribute) { anchor.setAttribute("aria-haspopup", "menu"); anchor.setAttribute("aria-expanded", "true"); }
+    const first = menu.children[0];
+    if (first && first.focus) first.focus(); // キーボードでも項目へ到達できるように（spec §10.2）
+    // 購読は次のタスクへ回す ── いま処理中のクリックがそのまま document まで上がって、
+    // 開いた瞬間に閉じるのを避ける。
+    setTimeout(() => {
+      if (rowMenuNode !== menu) return; // その間に閉じ直されていたら購読しない（解除漏れになる）
+      document.addEventListener("click", closeRowMenu);
+      document.addEventListener("keydown", onRowMenuKey);
+      // 位置は開いた瞬間の矩形を焼くので、スクロール・リサイズには追従しない。追い掛けるより
+      // 閉じる（起点から離れて画面に貼り付くのを避ける）。scroll は capture でないと
+      // 内側のスクロール容器（一覧・ガント）から拾えない。
+      if (typeof window !== "undefined" && window.addEventListener) {
+        window.addEventListener("scroll", closeRowMenu, true);
+        window.addEventListener("resize", closeRowMenu);
+      }
+    }, 0);
+    // ハンドルは返さない ── 開けるのは常に1つなので、閉じる口は ui.closeRowMenu() に一本化する
+    // （「その時点で開いている1つ」を閉じるハンドルを持ち回れると、別の行のメニューを閉じられる）。
+  };
+  // 開いていれば閉じる（開いていなければ何もしない）。再描画・unmount の後始末から呼ぶ ──
+  // 起点のボタンごと作り直されると、浮いたメニューだけが宙に残る。
+  ui.closeRowMenu = closeRowMenu;
 
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}], onClose(), persistent }
   // onClose は「どう閉じても」1度だけ呼ばれる（アクション／Esc／overlay クリック／closeAllModals）。
