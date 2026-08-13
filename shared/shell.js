@@ -24,7 +24,7 @@
   MK.bus.on("masters:changed", () => {
     const rerender = MASTER_VIEWS[S.current];
     if (rerender) {
-      S.clearMain(); // 畳んで組み直す経路の後始末（モーダルを畳んでから main を空にする。Issue #265）
+      S.clearMain(); // 一覧を組み直すだけ。開いているモーダルは畳まない（入力途中を守る。Issue #265）
       rerender();
     } else if (MK.modules[S.current] && MK.scope.dimOf(MK.modules[S.current].scope)) { route(S.current); }
   });
