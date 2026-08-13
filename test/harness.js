@@ -54,6 +54,9 @@ function makeNode(tag) {
     },
     remove() { if (this.parentNode) this.parentNode.removeChild(this); },
     contains(other) { for (let n = other; n; n = n.parentNode) if (n === this) return true; return false; },
+    // childNodes は children の別名（このスタブはテキストノードも children に積むため区別が無い）。
+    // 実物と同じ名前で「子がいるか」を見るコード（ui.modal のフッタ）をそのまま動かすために置く。
+    get childNodes() { return this.children; },
     addEventListener(type, fn) { (this._listeners[type] || (this._listeners[type] = [])).push(fn); },
     removeEventListener(type, fn) {
       const arr = this._listeners[type]; if (!arr) return;
@@ -181,6 +184,11 @@ function setup(opts) {
 // （退避はクロージャに載るので localStorage を消しても残り、undo せずに終わったテストの1件が
 //  次のテストのストアへ復活しうる。全データ初期化と同じ後始末＝MK.forgetAllUndo）
 function reset(MK) {
+  // モーダルの台帳を先に空にする（resetDom を呼ぶテストだけでなく既定で分離する）。残すと、後続
+  // テストの closeAllModals が前のテストの onClose を発火させ、原因の追いにくい失敗になる
+  // （ハンドルと document の keydown が漏れる）。データのクリアより先なのは、onClose が後始末で
+  // ストアへ書く実装を許すため ── 後に回すと、消したはずのデータが onClose で復活する。
+  if (MK.ui && MK.ui._resetModals) MK.ui._resetModals();
   global.localStorage.clear();
   MK.store._cache = {};
   MK.forgetAllUndo();
@@ -201,6 +209,7 @@ function setActiveElement(node) { global.document.activeElement = node || null; 
 // DOM/タイマーの状態をテスト間で分離する（body の子・document のリスナ・activeElement・時計をクリア）。
 function resetDom() {
   const doc = global.document; if (!doc) return;
+  // モーダルの台帳は reset()（全 test の先頭で走る）が空にするので、ここでは触らない。
   doc.body.children.slice().forEach((c) => c.remove());
   doc.body._listeners = {}; doc._listeners = {}; doc.activeElement = null;
   if (CLOCK) CLOCK.reset();

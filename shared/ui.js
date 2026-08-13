@@ -144,7 +144,41 @@
     ui.undoDeleteToast(message, () => api.undoRemove(), onChanged);
   };
 
-  // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}] }
+  // 開いているモーダルの台帳（Issue #265）。閉じ忘れの後始末をモジュールごとの手書きに任せず、
+  // ここで一括して畳めるようにする（開いたまま離脱すると overlay だけが残り、背後は差し替わって
+  // いるため操作が宙に浮く）。close() 時に自分で抜けるので、閉じたものは残らない。
+  const openModals = new Set();
+
+  // 開いているモーダルを全て閉じる。シェルのビュー切替（unmount の直前）から呼ぶ。
+  // persistent なモーダル（画面に紐づかない案内。保存失敗の警告など）は残す ── 保存の失敗は
+  // その保存が起こした再描画（masters:changed）と同じ流れで案内が出るため、ここで一緒に畳むと
+  // 「未保存のままバックアップを取れ」という肝心の案内が読まれる前に消える。
+  // 走査はスナップショット（onClose の中で新しく開いたモーダルは、この掃除では畳まれない）。
+  // onClose は「参照を手放す場所」であって、そこからモーダルを開かない。
+  // 1枚ずつ例外を隔離する ── onClose はモジュール側が書くコールバックなので、投げないとは
+  // 言い切れない。素通しにすると走査が止まり、例外が呼び出し元（route）まで抜けて、残りの
+  // モーダルが開いたまま画面遷移だけが死ぬ。
+  function closeEach(list) {
+    list.forEach((m) => {
+      try { m.close(); } catch (e) { console.error("モーダルの後始末に失敗:", e); }
+    });
+  }
+  ui.closeAllModals = function () {
+    closeEach(Array.from(openModals).filter((m) => !m.persistent));
+  };
+
+  // テスト専用: persistent も含めて全部閉じ、台帳を空にする（テスト間の分離）。view からは呼ばない。
+  // closeAllModals と分けるのは、persistent の除外がシェルのビュー切替の都合であって
+  // 「後始末」の意味ではないため ── 同じ関数を共用すると、片方の都合が他方を縛る。
+  ui._resetModals = function () {
+    closeEach(Array.from(openModals));
+    openModals.clear();
+  };
+
+  // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}], onClose(), persistent }
+  // onClose は「どう閉じても」1度だけ呼ばれる（アクション／Esc／overlay クリック／closeAllModals）。
+  // モーダルの寿命に紐づく参照（表示中の本体ノード等）を手放すのに使う。
+  // persistent は「ビュー切替で畳まない」指定（既定 false）。閉じるのは利用者の操作だけになる。
   ui.modal = function (opts) {
     opts = opts || {};
     const overlay = el("div", { class: "mk-modal-overlay" });
@@ -155,8 +189,26 @@
     else if (opts.body) body.appendChild(opts.body);
     const foot = el("div", { class: "mk-modal-foot" });
 
-    function close() { overlay.remove(); document.removeEventListener("keydown", onKey); }
-    function onKey(e) { if (e.key === "Escape") close(); }
+    // close() は何度呼ばれても1回だけ効く（アクションで閉じてから Esc、閉じ済みのハンドルへ
+    // closeAllModals、等が普通に起きる。onClose の二重発火を防ぐ）。
+    let closed = false;
+    function close() {
+      if (closed) return;
+      closed = true;
+      openModals.delete(handle);
+      overlay.remove();
+      document.removeEventListener("keydown", onKey);
+      if (typeof opts.onClose === "function") opts.onClose();
+    }
+    // Esc は最前面の1枚だけ閉じる（台帳は挿入順＝重なり順なので末尾が最前面）。ハンドラは
+    // モーダルごとに document へ張るため、素直に close() すると開いている全部が一度に畳まれ、
+    // 背後に残す約束の persistent（保存失敗の案内）まで巻き込む。
+    function onKey(e) {
+      if (e.key !== "Escape") return;
+      const top = Array.from(openModals).pop();
+      if (top === handle) close(); // 利用者の操作なので persistent でも閉じてよい
+    }
+    const handle = { close, body, persistent: !!opts.persistent };
 
     (opts.actions || []).forEach((a) => {
       foot.appendChild(el("button", {
@@ -173,6 +225,8 @@
     overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
     document.addEventListener("keydown", onKey);
     document.body.appendChild(overlay);
+    openModals.add(handle);
+    // 台帳のエントリそのものは返さない（呼び出し側が persistent を後から書き換えられないように）。
     return { close, body };
   };
 
@@ -181,9 +235,14 @@
       ui.modal({
         title: "確認",
         body: el("p", { text: message }),
+        // 「閉じた＝キャンセル」で必ず決着させる。Esc・overlay クリック・一括クローズで閉じたとき、
+        // 解決しないままだと待っている呼び出し側が永久に止まる（await の先が動かない）。
+        onClose: () => resolve(false),
+        // 各アクションは close() より先に resolve する ── close() が onClose を同期で呼ぶため、
+        // 後に回すと「先に効いた resolve(false)」に負けて OK が伝わらない（Promise は初回で確定）。
         actions: [
-          { label: "キャンセル", variant: "btn-secondary", onClick: (close) => { close(); resolve(false); } },
-          { label: "OK", variant: "btn-primary", onClick: (close) => { close(); resolve(true); } },
+          { label: "キャンセル", variant: "btn-secondary", onClick: (close) => { resolve(false); close(); } },
+          { label: "OK", variant: "btn-primary", onClick: (close) => { resolve(true); close(); } },
         ],
       });
     });

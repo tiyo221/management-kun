@@ -184,11 +184,24 @@
   }
 
   // ---- ルーティング ----
+  // 同じビューを組み直す経路（masters:changed の再描画・マスタ画面内の絞り込み切替）の後始末。
+  // ここでは**モーダルを畳まない**（Issue #265）── 一覧が作り直されるだけで画面は同じであり、
+  // 畳むと編集モーダルの入力途中が消える（削除の undo を Ctrl+Z で戻すと masters:changed が飛ぶ）。
+  // モーダルを畳むのはビュー切替＝route() だけ。
+  function clearMain() {
+    main.innerHTML = "";
+  }
+
   // 各ビューの描画関数は別ファイル（home/masters/settings/nav）にあるため S 経由で遅延解決する。
   function route(view) {
     // 配布プロファイルに載っていないビュー（例: 自分配布での master-people / master-projects）と
     // 非表示モジュール（Issue #35）は先頭ゾーンの表示中モジュールへ退避
     if (!ALLOWED[view] || isHiddenModule(view)) view = firstView();
+    // 開きっぱなしのモーダルを畳むのはここだけ（ビュー切替。Issue #265）。残すと overlay だけが
+    // 画面に残り、背後は差し替わっているため操作が宙に浮く／破棄済みのノードへ書き込む。
+    // unmount より先に呼ぶ（モジュールが持つ参照が生きているうちに閉じる）ため、この2行は
+    // clearMain() にまとめず並びを保つ。
+    MK.ui.closeAllModals();
     if (S.mountedModule && typeof S.mountedModule.unmount === "function") S.mountedModule.unmount();
     S.mountedModule = null;
     main.innerHTML = "";
@@ -419,6 +432,7 @@
   // 開いている人詳細の personId。null なら一覧。masters:changed 再描画をまたいで保持する（Issue #83）。
   S.peopleDetailId = null;
   S.route = route;
+  S.clearMain = clearMain;
   S.getSettings = getSettings;
   S.setSettings = setSettings;
   S.isHiddenModule = isHiddenModule;

@@ -201,3 +201,146 @@ test("ui.countBadges: 同じ key で make し直すと新しい要素を覚え�
   eq(second.textContent, "8");
   eq(first.textContent, "1");
 });
+
+// ---- モーダルのライフサイクル（Issue #265）----
+// 開いているモーダルは ui 側の台帳で持ち、離脱時にシェルが一括で畳む。閉じ忘れると overlay だけが
+// 残り、背後は差し替わっているため操作が宙に浮く（todo の詳細モーダルで実際に起きていた）。
+
+// body 直下の overlay（ui.modal は document.body へ挿す）。util.el は class を className へ入れるため、
+// スタブでも実物でも読める className で拾う。
+function overlays() {
+  return global.document.body.children.filter((n) => String(n.className) === "mk-modal-overlay");
+}
+
+test("ui.closeAllModals: 開いている全モーダルを閉じ、onClose を通す（離脱時の一括クローズ）", (MK) => {
+  // 観点: モジュールが unmount で手書きに閉じなくても、シェルの1呼び出しで overlay が残らない
+  // 入力: 2つ開いて closeAllModals
+  // 期待: body から overlay が消え、それぞれの onClose が1度ずつ呼ばれる
+  resetDom();
+  let closedA = 0, closedB = 0;
+  MK.ui.modal({ title: "A", onClose: () => { closedA++; } });
+  MK.ui.modal({ title: "B", onClose: () => { closedB++; } });
+  eq(overlays().length, 2);
+  MK.ui.closeAllModals();
+  eq(overlays().length, 0);
+  eq([closedA, closedB], [1, 1]);
+});
+
+test("ui.modal: close は何度呼んでも onClose は1回だけ（閉じ済みは台帳にも残らない）", (MK) => {
+  // 観点: アクションで閉じたあとに Esc や一括クローズが来るのは普通に起きる。二重発火すると
+  //       onClose で参照を捨てる側が「開き直した新しいモーダル」の参照まで消しかねない
+  // 入力: close() を2回 → さらに closeAllModals
+  // 期待: onClose は1回だけ
+  resetDom();
+  let closed = 0;
+  const m = MK.ui.modal({ title: "A", onClose: () => { closed++; } });
+  m.close();
+  m.close();
+  MK.ui.closeAllModals();
+  eq(closed, 1);
+});
+
+test("ui.modal: Esc・overlay クリックで閉じても onClose が呼ばれる（どう閉じても後始末が走る）", (MK) => {
+  // 観点: 後始末をアクションのハンドラに書くと、Esc や overlay クリックの経路で漏れる
+  // 入力: Esc で閉じる／別のモーダルは overlay クリックで閉じる
+  // 期待: どちらも onClose が呼ばれ、overlay が body から外れる
+  resetDom();
+  let byEsc = 0, byOverlay = 0;
+  MK.ui.modal({ title: "A", onClose: () => { byEsc++; } });
+  fireEvent(global.document, "keydown", { key: "Escape" });
+  eq(byEsc, 1);
+  eq(overlays().length, 0);
+
+  MK.ui.modal({ title: "B", onClose: () => { byOverlay++; } });
+  const ov = overlays()[0];
+  fireEvent(ov, "click", { target: ov });
+  eq(byOverlay, 1);
+  eq(overlays().length, 0);
+});
+
+test("ui.modal: 閉じたあとの Esc は残ったモーダルだけに効く（keydown の解除漏れ防止）", (MK) => {
+  // 観点: close() で document の keydown を外す約束。外し漏れると閉じ済みのモーダルの onClose が
+  //       あとから走る（undoToast の解除漏れと同じ壊れ方）
+  // 入力: A を閉じてから B を開き、Esc
+  // 期待: B だけが閉じ、A の onClose は増えない
+  resetDom();
+  let a = 0, b = 0;
+  const mA = MK.ui.modal({ title: "A", onClose: () => { a++; } });
+  mA.close();
+  MK.ui.modal({ title: "B", onClose: () => { b++; } });
+  fireEvent(global.document, "keydown", { key: "Escape" });
+  eq([a, b], [1, 1]);
+  eq(overlays().length, 0);
+});
+
+test("ui.closeAllModals: persistent なモーダルは畳まない（保存失敗の案内が消えない）", (MK) => {
+  // 観点: 書込失敗の案内は、保存を起こした操作と同じ流れで再描画（masters:changed / route）を
+  //       呼ぶため、ビュー切替の一括クローズに巻き込むと読まれる前に消える（§10.1 の導線が失われる）
+  // 入力: 通常のモーダルと persistent なモーダルを開いて closeAllModals
+  // 期待: 通常だけ閉じ、persistent は残る（閉じるのは利用者の操作＝close() だけ）
+  resetDom();
+  let closedNormal = 0, closedPersistent = 0;
+  MK.ui.modal({ title: "通常", onClose: () => { closedNormal++; } });
+  const keep = MK.ui.modal({ title: "保存領域が上限に達しました", persistent: true, onClose: () => { closedPersistent++; } });
+  MK.ui.closeAllModals();
+  eq([closedNormal, closedPersistent], [1, 0]);
+  eq(overlays().length, 1);
+  keep.close(); // 利用者の操作では閉じる
+  eq(closedPersistent, 1);
+  eq(overlays().length, 0);
+});
+
+// ui.confirm は Promise を返すため、この2件だけ非同期テスト（test が返した Promise をランナーが待つ）。
+// 検証するのは手元に控えた解決値だけで、DOM は見ない（続きは全テストの本体が走ったあとに動くため）。
+test("ui.confirm: OK は true で決着する（onClose の resolve(false) に負けない）", (MK) => {
+  // 観点: close() が onClose を同期で呼ぶので、アクション側は resolve を close より先に呼ぶ必要がある
+  //       （逆順に戻すとここが false になる＝この順序依存の見張り）
+  // 入力: confirm を出して OK ボタン（フッタの btn-primary）を押す
+  // 期待: true
+  resetDom();
+  const p = MK.ui.confirm("よろしいですか");
+  const foot = overlays()[0].children[0].children[2]; // overlay > box > [head, body, foot]
+  foot.children[1]._listeners.click[0]({}); // OK
+  return p.then((ok) => { assert(ok === true, "OK は true で決着する（got " + ok + "）"); });
+});
+
+test("ui.confirm: 一括クローズで閉じたら false で決着する（呼び出し側が止まらない）", (MK) => {
+  // 観点: Esc / overlay / 一括クローズで閉じたとき決着しないと、await している側が永久に進まない
+  // 入力: confirm を出して closeAllModals
+  // 期待: false（＝キャンセル扱い。全呼び出し側が false で早期 return する）
+  resetDom();
+  const p = MK.ui.confirm("よろしいですか");
+  MK.ui.closeAllModals();
+  return p.then((ok) => { assert(ok === false, "閉じたら false で決着する（got " + ok + "）"); });
+});
+
+test("ui.modal: Esc は最前面の1枚だけ閉じる（背後の persistent を巻き込まない）", (MK) => {
+  // 観点: keydown ハンドラはモーダルごとに document へ張るため、素直に閉じると Esc 1回で全部畳まれ、
+  //       「ビュー切替でも残す」約束の persistent（保存失敗の案内）まで消える
+  // 入力: persistent を出し、その上に通常モーダルを重ねて Esc を2回
+  // 期待: 1回目で上の1枚だけ閉じる。2回目で残った persistent が閉じる（利用者の操作では閉じてよい）
+  resetDom();
+  let closedKeep = 0, closedTop = 0;
+  MK.ui.modal({ title: "保存領域が上限に達しました", persistent: true, onClose: () => { closedKeep++; } });
+  MK.ui.modal({ title: "通常", onClose: () => { closedTop++; } });
+  fireEvent(global.document, "keydown", { key: "Escape" });
+  eq([closedTop, closedKeep], [1, 0]);
+  eq(overlays().length, 1);
+  fireEvent(global.document, "keydown", { key: "Escape" });
+  eq(closedKeep, 1);
+  eq(overlays().length, 0);
+});
+
+test("ui.closeAllModals: onClose が投げても残りを閉じ切る（画面遷移を巻き込まない）", (MK) => {
+  // 観点: onClose はモジュール側が書くコールバック。素通しにすると走査が止まり、例外が route() まで
+  //       抜けて unmount も main のクリアも走らない（残ったモーダルの上で遷移だけが死ぬ）
+  // 入力: 1枚目の onClose が例外を投げる状態で closeAllModals
+  // 期待: 例外は外へ出ず、2枚目も閉じて overlay が残らない
+  resetDom();
+  let closedSecond = 0;
+  MK.ui.modal({ title: "投げる", onClose: () => { throw new Error("onClose の失敗"); } });
+  MK.ui.modal({ title: "後続", onClose: () => { closedSecond++; } });
+  MK.ui.closeAllModals();
+  eq(closedSecond, 1);
+  eq(overlays().length, 0);
+});

@@ -322,7 +322,8 @@
     const b = el("button", { class: "pill-tab" + (productFilter === key ? " active" : "") }, [
       label + " ", el("span", { class: "badge badge-count", text: String(count || 0) }),
     ]);
-    b.addEventListener("click", () => { productFilter = key; main.innerHTML = ""; renderProductsView(); });
+    // 絞り込みの切替も同じビューの組み直し。後始末は S.clearMain に通す（モーダルは畳まない）。
+    b.addEventListener("click", () => { productFilter = key; S.clearMain(); renderProductsView(); });
     return b;
   }
   function productStatusLabel(key) {

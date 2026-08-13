@@ -10,10 +10,36 @@ let pass = 0, fail = 0;
 const fails = [];
 
 global.MK = MK;
+// 非同期テスト（Promise を返す test）は結果を pending へ積み、全ファイルの読込後にまとめて待つ。
+// 対象は Promise の決着そのものを見るもの（ui.confirm）だけ ── 続きは全テストの本体が走り終えた
+// あとのマイクロタスクで動くため、DOM のような共有状態ではなく手元に控えた値だけを検証する。
+// 決着しない Promise は必ず落とす（待ちっぱなしだとイベントループが空になった時点で Node が
+// 終了コード 0・サマリ未出力のまま抜け、「無言の成功」になる）。タイマーは harness が差し替える
+// グローバルではなく本物を使い（差し替え後の時計はテストが手で進めるため発火しない）、決着したら
+// 解除して通常の実行を遅らせない。
+// 既定を失敗にしておく（サマリを出さずに抜けた＝異常終了を緑と読み違えないため。正常に集計できた
+// ときだけ最後に 0 へ戻す）。テストファイルの読込中に落ちる経路にも効かせたいので、require より前に置く。
+process.exitCode = 1;
+const timers = require("timers");
+const ASYNC_TIMEOUT_MS = 5000;
+function withTimeout(p, name) {
+  return new Promise((resolve, reject) => {
+    const t = timers.setTimeout(() => reject(new Error("timeout: " + ASYNC_TIMEOUT_MS + "ms 以内に Promise が決着しない — " + name)), ASYNC_TIMEOUT_MS);
+    p.then((v) => { timers.clearTimeout(t); resolve(v); }, (e) => { timers.clearTimeout(t); reject(e); });
+  });
+}
+const pending = [];
+function record(name, e) {
+  if (e) { fail++; fails.push(name + " — " + (e && e.message ? e.message : e)); process.stdout.write("x"); }
+  else { pass++; process.stdout.write("."); }
+}
 global.test = function (name, fn) {
   reset(MK);
-  try { fn(MK); pass++; process.stdout.write("."); }
-  catch (e) { fail++; fails.push(name + " — " + (e && e.message ? e.message : e)); process.stdout.write("x"); }
+  try {
+    const r = fn(MK);
+    if (r && typeof r.then === "function") { pending.push(withTimeout(r, name).then(() => record(name), (e) => record(name, e))); return; }
+    record(name);
+  } catch (e) { record(name, e); }
 };
 global.assert = function (cond, msg) { if (!cond) throw new Error(msg || "assert failed"); };
 global.eq = function (a, b, msg) {
@@ -27,6 +53,8 @@ fs.readdirSync(__dirname)
   .sort()
   .forEach((f) => require(path.join(__dirname, f)));
 
-console.log("\n" + pass + " passed, " + fail + " failed");
-fails.forEach((f) => console.log("  ✗ " + f));
-process.exit(fail ? 1 : 0);
+Promise.all(pending).then(() => {
+  console.log("\n" + pass + " passed, " + fail + " failed");
+  fails.forEach((f) => console.log("  ✗ " + f));
+  process.exit(fail ? 1 : 0);
+});
