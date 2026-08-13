@@ -15,11 +15,20 @@
 
   // マスタ変更時、マスタ管理画面表示中なら再描画。scoped モジュール表示中は
   // スイッチャ/現在対象がマスタに連動するため再マウントする（対象の増減・削除に追随。§3.7.2/3）。
+  const MASTER_VIEWS = {
+    "master-people": renderPeopleView,
+    "master-projects": renderProjectsView,
+    "master-products": renderProductsView,
+  };
   MK.bus.on("masters:changed", () => {
-    if (S.current === "master-people") { S.main.innerHTML = ""; renderPeopleView(); }
-    else if (S.current === "master-projects") { S.main.innerHTML = ""; renderProjectsView(); }
-    else if (S.current === "master-products") { S.main.innerHTML = ""; renderProductsView(); }
-    else if (MK.modules[S.current] && MK.scope.dimOf(MK.modules[S.current].scope)) { route(S.current); }
+    const rerender = MASTER_VIEWS[S.current];
+    if (rerender) {
+      // ここもビューを畳んで組み直す経路なので、route() と同じ後始末をする（開きっぱなしの
+      // モーダルを残すと、作り直した一覧の上に古いモーダルが浮いたままになる。Issue #265）。
+      MK.ui.closeAllModals();
+      S.main.innerHTML = "";
+      rerender();
+    } else if (MK.modules[S.current] && MK.scope.dimOf(MK.modules[S.current].scope)) { route(S.current); }
   });
 
   // ---- 起動 ----

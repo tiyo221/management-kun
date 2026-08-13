@@ -204,6 +204,10 @@ function setActiveElement(node) { global.document.activeElement = node || null; 
 // DOM/タイマーの状態をテスト間で分離する（body の子・document のリスナ・activeElement・時計をクリア）。
 function resetDom() {
   const doc = global.document; if (!doc) return;
+  // 開きっぱなしのモーダルは ui の台帳に残る（body の子を消しても台帳は空にならない）。
+  // 残すと次のテストの closeAllModals が前のテストの onClose を発火させる（Issue #265）。
+  const MK = global.window && global.window.MK;
+  if (MK && MK.ui && MK.ui.closeAllModals) MK.ui.closeAllModals();
   doc.body.children.slice().forEach((c) => c.remove());
   doc.body._listeners = {}; doc._listeners = {}; doc.activeElement = null;
   if (CLOCK) CLOCK.reset();
