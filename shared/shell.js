@@ -15,11 +15,12 @@
 
   // マスタ変更時、マスタ管理画面表示中なら再描画。scoped モジュール表示中は
   // スイッチャ/現在対象がマスタに連動するため再マウントする（対象の増減・削除に追随。§3.7.2/3）。
-  const MASTER_VIEWS = {
+  // プロトタイプを持たない辞書にする（"constructor" 等の view 名で関数を引き当てないように）。
+  const MASTER_VIEWS = Object.assign(Object.create(null), {
     "master-people": renderPeopleView,
     "master-projects": renderProjectsView,
     "master-products": renderProductsView,
-  };
+  });
   MK.bus.on("masters:changed", () => {
     const rerender = MASTER_VIEWS[S.current];
     if (rerender) {
@@ -57,6 +58,9 @@
     if (info && info.quota) {
       MK.ui.modal({
         title: "保存領域が上限に達しました",
+        // ビュー切替の一括クローズで畳まない（Issue #265）。書込失敗は保存を起こした操作と同じ流れで
+        // 再描画（masters:changed / route）を呼ぶため、畳むと案内が読まれる前に消える。
+        persistent: true,
         body: el("div", {}, [
           el("p", { text: "データを保存できませんでした（ブラウザ保存領域の容量超過）。直近の変更はこの画面には反映されていますが、まだ保存されていません。" }),
           el("p", { text: "全体バックアップ（JSON）を書き出して退避したうえで、不要なデータを整理してください。" }),

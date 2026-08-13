@@ -150,13 +150,17 @@
   const openModals = new Set();
 
   // 開いているモーダルを全て閉じる。シェルのビュー切替（unmount の直前）から呼ぶ。
+  // persistent なモーダル（画面に紐づかない案内。保存失敗の警告など）は残す ── 保存の失敗は
+  // その保存が起こした再描画（masters:changed）と同じ流れで案内が出るため、ここで一緒に畳むと
+  // 「未保存のままバックアップを取れ」という肝心の案内が読まれる前に消える。
   ui.closeAllModals = function () {
-    Array.from(openModals).forEach((m) => m.close());
+    Array.from(openModals).forEach((m) => { if (!m.persistent) m.close(); });
   };
 
-  // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}], onClose() }
+  // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}], onClose(), persistent }
   // onClose は「どう閉じても」1度だけ呼ばれる（アクション／Esc／overlay クリック／closeAllModals）。
   // モーダルの寿命に紐づく参照（表示中の本体ノード等）を手放すのに使う。
+  // persistent は「ビュー切替で畳まない」指定（既定 false）。閉じるのは利用者の操作だけになる。
   ui.modal = function (opts) {
     opts = opts || {};
     const overlay = el("div", { class: "mk-modal-overlay" });
@@ -179,7 +183,7 @@
       if (typeof opts.onClose === "function") opts.onClose();
     }
     function onKey(e) { if (e.key === "Escape") close(); }
-    const handle = { close, body };
+    const handle = { close, body, persistent: !!opts.persistent };
 
     (opts.actions || []).forEach((a) => {
       foot.appendChild(el("button", {
