@@ -190,6 +190,9 @@
   // 端では折り返す（項目数が少ないので、行き止まりより回るほうが速い）。
   function onRowMenuKey(e) {
     if (e.key === "Escape") { closeRowMenu(); return; }
+    // Tab は横取りせず、閉じてから通常のフォーカス移動に委ねる（role="menu" の一般的な契約）。
+    // 開いたまま外へ出られると、↑↓ の購読が残って背後のスクロールや select の操作を奪う。
+    if (e.key === "Tab") { closeRowMenu(); return; }
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     if (!rowMenuNode) return;
     const items = rowMenuNode.children;
@@ -215,6 +218,12 @@
     rowMenuAnchor = null;
     document.removeEventListener("click", closeRowMenu);
     document.removeEventListener("keydown", onRowMenuKey);
+    if (typeof window !== "undefined" && window.removeEventListener) {
+      window.removeEventListener("scroll", closeRowMenu, true);
+      window.removeEventListener("resize", closeRowMenu);
+    }
+    // 開いていないことを起点のボタンにも書き戻す（読み上げの状態表示）。
+    if (anchor && anchor.setAttribute) anchor.setAttribute("aria-expanded", "false");
     // 操作の結果その行ごと消える／作り直されることがあるため、まだ画面にあるときだけ戻す。
     if (hadFocus && anchor && anchor.focus && document.body.contains(anchor)) anchor.focus();
   }
@@ -249,6 +258,9 @@
     }
     rowMenuNode = menu;
     rowMenuAnchor = anchor;
+    // 起点のボタンに「メニューを持つ／いま開いている」ことを持たせる（読み上げでは押した結果が
+    // 分からないため）。呼び出し側に書かせず器の側で面倒を見る。
+    if (anchor.setAttribute) { anchor.setAttribute("aria-haspopup", "menu"); anchor.setAttribute("aria-expanded", "true"); }
     const first = menu.children[0];
     if (first && first.focus) first.focus(); // キーボードでも項目へ到達できるように（spec §10.2）
     // 購読は次のタスクへ回す ── いま処理中のクリックがそのまま document まで上がって、
@@ -257,6 +269,13 @@
       if (rowMenuNode !== menu) return; // その間に閉じ直されていたら購読しない（解除漏れになる）
       document.addEventListener("click", closeRowMenu);
       document.addEventListener("keydown", onRowMenuKey);
+      // 位置は開いた瞬間の矩形を焼くので、スクロール・リサイズには追従しない。追い掛けるより
+      // 閉じる（起点から離れて画面に貼り付くのを避ける）。scroll は capture でないと
+      // 内側のスクロール容器（一覧・ガント）から拾えない。
+      if (typeof window !== "undefined" && window.addEventListener) {
+        window.addEventListener("scroll", closeRowMenu, true);
+        window.addEventListener("resize", closeRowMenu);
+      }
     }, 0);
     // ハンドルは返さない ── 開けるのは常に1つなので、閉じる口は ui.closeRowMenu() に一本化する
     // （「その時点で開いている1つ」を閉じるハンドルを持ち回れると、別の行のメニューを閉じられる）。

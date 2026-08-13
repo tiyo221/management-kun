@@ -471,3 +471,28 @@ test("ui.rowMenu: ↑↓ で項目を移れる（role=menu の操作契約・端
   key("ArrowUp"); eq(at(), 2);
   MK.ui.closeRowMenu();
 });
+
+test("ui.rowMenu: Tab では閉じて通常のフォーカス移動に委ねる（購読を残さない）", (MK) => {
+  // 観点: 開いたまま Tab で外へ出られると ↑↓ の購読が残り、背後のスクロールや select を奪う
+  // 入力: 開いて購読させたあと Tab
+  // 期待: 閉じ、document のリスナも残らない（preventDefault はしない＝移動は素通し）
+  resetDom();
+  MK.ui.rowMenu(focusableAnchor(), [{ label: "A" }, { label: "B" }]);
+  advanceTimers(0);
+  const e = fireEvent(global.document, "keydown", { key: "Tab" });
+  eq(rowMenus().length, 0);
+  eq(e.defaultPrevented, false);
+  eq((global.document._listeners.keydown || []).length, 0);
+});
+
+test("ui.rowMenu: 起点ボタンに aria-haspopup / aria-expanded を持たせる", (MK) => {
+  // 観点: 読み上げでは「ボタンを押した結果メニューが開いた」ことが状態として伝わらない
+  // 入力: 開く → 閉じる
+  // 期待: 開いている間は aria-expanded="true"、閉じたら "false"
+  resetDom();
+  const a = focusableAnchor();
+  MK.ui.rowMenu(a, [{ label: "A" }]);
+  eq([a.getAttribute("aria-haspopup"), a.getAttribute("aria-expanded")], ["menu", "true"]);
+  MK.ui.closeRowMenu();
+  eq(a.getAttribute("aria-expanded"), "false");
+});
