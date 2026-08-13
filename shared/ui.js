@@ -153,8 +153,18 @@
   // persistent なモーダル（画面に紐づかない案内。保存失敗の警告など）は残す ── 保存の失敗は
   // その保存が起こした再描画（masters:changed）と同じ流れで案内が出るため、ここで一緒に畳むと
   // 「未保存のままバックアップを取れ」という肝心の案内が読まれる前に消える。
+  // 走査はスナップショット（onClose の中で新しく開いたモーダルは、この掃除では畳まれない）。
+  // onClose は「参照を手放す場所」であって、そこからモーダルを開かない。
   ui.closeAllModals = function () {
     Array.from(openModals).forEach((m) => { if (!m.persistent) m.close(); });
+  };
+
+  // テスト専用: persistent も含めて全部閉じ、台帳を空にする（テスト間の分離）。
+  // closeAllModals と分けるのは、persistent の除外がシェルのビュー切替の都合であって
+  // 「後始末」の意味ではないため ── 同じ関数を共用すると、片方の都合が他方を縛る。
+  ui._resetModals = function () {
+    Array.from(openModals).forEach((m) => m.close());
+    openModals.clear();
   };
 
   // opts: { title, body(string|Node), actions:[{label, variant, onClick(close)}], onClose(), persistent }
@@ -201,7 +211,8 @@
     document.addEventListener("keydown", onKey);
     document.body.appendChild(overlay);
     openModals.add(handle);
-    return handle;
+    // 台帳のエントリそのものは返さない（呼び出し側が persistent を後から書き換えられないように）。
+    return { close, body };
   };
 
   ui.confirm = function (message) {
