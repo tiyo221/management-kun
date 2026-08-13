@@ -420,3 +420,54 @@ test("ui.closeRowMenu: 開いていなくても安全に呼べる（再描画・
   eq(rowMenus().length, 0);
   eq((global.document._listeners.click || []).length, 0);
 });
+
+// フォーカス可能な起点ボタン（スタブに focus は無いので、呼ばれたことを記録する口を足す）。
+function focusableAnchor() {
+  const n = global.document.createElement("button");
+  n.focus = () => { setActiveElement(n); n._focused = (n._focused || 0) + 1; };
+  global.document.body.appendChild(n);
+  return n;
+}
+
+test("ui.rowMenu: 閉じるときフォーカスは戻すが、外側の入力へ移っていたら奪わない", (MK) => {
+  // 観点: 外側クリックで閉じる経路では、利用者が押した先（インライン編集の入力欄など）に既に
+  //       フォーカスがある。そこへ割り込むと開いた入力が即 blur して編集が閉じる（#321 レビュー）
+  // 入力: (1) メニュー内にフォーカスがある状態で閉じる (2) 外側の入力へ移った状態で閉じる
+  // 期待: (1) 起点ボタンへ戻す (2) 戻さない
+  resetDom();
+  const a1 = focusableAnchor();
+  MK.ui.rowMenu(a1, [{ label: "A" }]);
+  setActiveElement(rowMenus()[0].children[0]); // メニュー内にフォーカス
+  MK.ui.closeRowMenu();
+  eq(a1._focused || 0, 1);
+
+  const a2 = focusableAnchor();
+  MK.ui.rowMenu(a2, [{ label: "A" }]);
+  const outside = global.document.createElement("input");
+  global.document.body.appendChild(outside);
+  setActiveElement(outside); // 外側の入力へフォーカスが移った状態で閉じる
+  MK.ui.closeRowMenu();
+  eq([a2._focused || 0, global.document.activeElement === outside], [0, true]);
+});
+
+test("ui.rowMenu: ↑↓ で項目を移れる（role=menu の操作契約・端で折り返す）", (MK) => {
+  // 観点: キーボードだけでメニューを使えること（spec §10.2）。role="menu" は ↑↓ を期待させる
+  // 入力: 3項目で開き（先頭にフォーカス）、↓↓↓ と ↑
+  // 期待: ↓ で 2→3→1（折り返し）、↑ で 3 番目へ戻る
+  resetDom();
+  const a = focusableAnchor();
+  const items = [{ label: "A" }, { label: "B" }, { label: "C" }];
+  MK.ui.rowMenu(a, items);
+  advanceTimers(0); // keydown の購読は次のタスク
+  const menu = rowMenus()[0];
+  menu.children.forEach((c) => { c.focus = () => setActiveElement(c); });
+  setActiveElement(menu.children[0]);
+  // ノードそのものを eq に渡すと循環参照で比較できないので、位置（インデックス）で見る。
+  const at = () => menu.children.indexOf(global.document.activeElement);
+  const key = (k) => fireEvent(global.document, "keydown", { key: k });
+  key("ArrowDown"); eq(at(), 1);
+  key("ArrowDown"); eq(at(), 2);
+  key("ArrowDown"); eq(at(), 0); // 端で折り返す
+  key("ArrowUp"); eq(at(), 2);
+  MK.ui.closeRowMenu();
+});

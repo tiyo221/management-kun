@@ -480,6 +480,11 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 .mk-row-move button { padding: 2px 5px; font-size: 13px; line-height: 1.2; color: var(--color-steel); }
 .mk-row:hover .mk-row-move, .mk-row:focus-within .mk-row-move,
 .wbs-grid tr:hover .mk-row-move, .wbs-grid tr:focus-within .mk-row-move { opacity: 1; }
+/* hover の無い端末（タッチ）では前面化のきっかけが無いので、常に濃く出す。
+   薄いままだと、主操作（daily の並べ替え）が最も読みにくい要素になる。 */
+@media (hover: none) {
+  .mk-row-move { opacity: 1; }
+}
 /* 行の低頻度操作を寄せる ⋯ メニュー（MK.ui.rowMenu）。body 直下に fixed で浮かせる
    （行はスクロール容器の中にあり、はみ出すと切れるため）。 */
 .mk-row-menu { position: fixed; z-index: 600; background: var(--color-canvas); border: 1px solid var(--color-hairline); border-radius: var(--rounded-md); box-shadow: rgba(15,15,15,.16) 0 8px 24px -6px; padding: 4px; min-width: 156px; }

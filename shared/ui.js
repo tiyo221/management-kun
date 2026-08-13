@@ -182,23 +182,41 @@
   // 同時に開けるのは1つだけ（別の行で開いたら前のは閉じる）。外側クリック・Esc でも閉じる。
   // モーダル（overlay を敷いて背後を止める）ではないので openModals の台帳には載せず、
   // ここで1つだけ参照を持つ ── 代わりにビュー切替では closeAllModals から畳む（上）。
-  const ROW_MENU_W = 168; // 画面端でのはみ出し判定に使う想定幅（.mk-row-menu の min-width 156 ＋ 余白）
+  const ROW_MENU_W = 168; // 幅を測れない環境（offsetWidth を持たない）での代替値（min-width 156 ＋ 余白）
   const ROW_MENU_GAP = 4; // 起点のボタンとの隙間
   let rowMenuNode = null;
   let rowMenuAnchor = null;
-  function onRowMenuKey(e) { if (e.key === "Escape") closeRowMenu(); }
+  // Esc で閉じる／↑↓ で項目を移る（role="menu" が読み上げ側に期待させる操作。spec §10.2）。
+  // 端では折り返す（項目数が少ないので、行き止まりより回るほうが速い）。
+  function onRowMenuKey(e) {
+    if (e.key === "Escape") { closeRowMenu(); return; }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    if (!rowMenuNode) return;
+    const items = rowMenuNode.children;
+    if (!items.length) return;
+    e.preventDefault();
+    let i = Array.prototype.indexOf.call(items, document.activeElement);
+    if (i < 0) i = e.key === "ArrowDown" ? -1 : 0;
+    const next = items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1) + items.length) % items.length];
+    if (next && next.focus) next.focus();
+  }
   function closeRowMenu() {
     if (!rowMenuNode) return;
     const anchor = rowMenuAnchor;
+    // 開いたときにメニュー内へフォーカスを移しているので、閉じたら呼び出し元のボタンへ戻す
+    // （戻さないとフォーカスが body へ落ち、キーボードだけで次の行へ進めなくなる。spec §10.2）。
+    // ただし戻すのは「フォーカスがまだメニュー内か、どこにも無いとき」だけ ── 外側クリックで
+    // 閉じる経路では、利用者がいま押した先（タイトルのインライン編集の入力欄など）へ既に
+    // フォーカスが移っている。そこへ割り込むと開いた入力が即 blur して編集が閉じる。
+    const active = document.activeElement;
+    const hadFocus = !active || active === document.body || rowMenuNode.contains(active);
     rowMenuNode.remove();
     rowMenuNode = null;
     rowMenuAnchor = null;
     document.removeEventListener("click", closeRowMenu);
     document.removeEventListener("keydown", onRowMenuKey);
-    // 開いたときにメニュー内へフォーカスを移しているので、閉じたら呼び出し元のボタンへ戻す
-    // （戻さないとフォーカスが body へ落ち、キーボードだけで次の行へ進めなくなる。spec §10.2）。
     // 操作の結果その行ごと消える／作り直されることがあるため、まだ画面にあるときだけ戻す。
-    if (anchor && anchor.focus && document.body.contains(anchor)) anchor.focus();
+    if (hadFocus && anchor && anchor.focus && document.body.contains(anchor)) anchor.focus();
   }
   // anchor: 起点のボタン（この直下に開く）
   // items : [{ label, onClick, danger }]。null を混ぜてよい（条件で出し分ける呼び出し側のため）。
@@ -218,10 +236,13 @@
     // 起点の直下に開く。左は画面右端からはみ出さない位置へ寄せる（メニュー幅＝.mk-row-menu の
     // min-width ＋ 余白ぶん）。
     menu.style.top = (rect.bottom + ROW_MENU_GAP) + "px";
-    menu.style.left = (vw ? Math.min(rect.left, vw - ROW_MENU_W) : rect.left) + "px";
+    menu.style.left = rect.left + "px";
     document.body.appendChild(menu);
+    // 幅・高さは挿入しないと測れない。置いてから測り、画面に収まらない向きだけ寄せ直す
+    // （日本語のラベルは長さの幅があり、min-width から見積もると 375px で右へはみ出す）。
+    const w = menu.offsetWidth || ROW_MENU_W;
+    if (vw) menu.style.left = Math.max(0, Math.min(rect.left, vw - w)) + "px";
     // 画面下端に近い行では下に収まらず、項目が見切れて押せない（daily の時間割は行数が多い）。
-    // 高さは挿入しないと測れないので、置いてから測って足りなければ起点の上へ反転する。
     const h = menu.offsetHeight || 0;
     if (vh && h && rect.bottom + ROW_MENU_GAP + h > vh) {
       menu.style.top = Math.max(0, rect.top - h - ROW_MENU_GAP) + "px";
