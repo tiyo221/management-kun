@@ -225,7 +225,9 @@
     // 開いていないことを起点のボタンにも書き戻す（読み上げの状態表示）。
     if (anchor && anchor.setAttribute) anchor.setAttribute("aria-expanded", "false");
     // 操作の結果その行ごと消える／作り直されることがあるため、まだ画面にあるときだけ戻す。
-    if (hadFocus && anchor && anchor.focus && document.body.contains(anchor)) anchor.focus();
+    // preventScroll で戻す ── スクロールで閉じる経路（下）ではフォーカスが必ずメニュー内にあり、
+    // 素の focus() だと起点の行が画面内へ引き戻されて、利用者のホイール操作を打ち消してしまう。
+    if (hadFocus && anchor && anchor.focus && document.body.contains(anchor)) anchor.focus({ preventScroll: true });
   }
   // anchor: 起点のボタン（この直下に開く）
   // items : [{ label, onClick, danger }]。null を混ぜてよい（条件で出し分ける呼び出し側のため）。

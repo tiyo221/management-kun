@@ -222,17 +222,25 @@
         text: r.conflict ? "⚠ " + it.at + " に食い込み" : "📌 " + it.at,
         title: "クリックで開始時刻を変更（空で解除）",
       });
-      chip.addEventListener("click", editPin);
+      chip.addEventListener("click", () => editPin(null));
       pinSlot.appendChild(chip);
     }
-    function editPin() {
+    // returnTo: Esc で取り消したときにフォーカスを戻す先（⋯ から開いたときはその ⋯ ボタン）。
+    // 戻すノードを持たない経路（チップのクリック＝ポインタ操作）は null でよい ── チップは
+    // フォーカスを受けない span なので、戻す先がそもそも無い。
+    function editPin(returnTo) {
       pinSlot.innerHTML = "";
       const input = ui.input({ type: "time", value: it.at || "", onChange: (v) => { L().setAt(it.id, v); refreshSchedule(); } });
       input.classList.add("mk-row-control");
       input.title = "開始時刻を固定（空で解除）";
       // 変えずに離れた／Esc なら元の表示へ戻す（変えた場合は onChange の再描画で行ごと作り直される）。
       input.addEventListener("blur", paintPin);
-      input.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); paintPin(); } });
+      input.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        e.preventDefault();
+        paintPin(); // 入力欄ごと捨てるので、フォーカスは呼び出し元へ戻す（放置すると body へ落ちる）
+        if (returnTo && returnTo.focus && document.body.contains(returnTo)) returnTo.focus();
+      });
       pinSlot.appendChild(input);
       input.focus();
     }
@@ -266,7 +274,7 @@
         { label: "↧ 末尾へ移動", onClick: () => moveOp("menu", () => L().moveItemToEnd(it.id)) },
         // 固定済みの行にも「変更」を残す ── チップのクリックだけにするとポインタ無しでは
         // 「解除してから固定し直す」しか手が無くなる（spec §10.2 キーボードで到達可能）。
-        { label: it.at ? "📌 開始時刻を変更" : "📌 開始時刻を固定", onClick: editPin },
+        { label: it.at ? "📌 開始時刻を変更" : "📌 開始時刻を固定", onClick: () => editPin(menuBtn) },
         it.at ? { label: "📌 固定を解除", onClick: () => { L().setAt(it.id, ""); refreshSchedule(); } } : null,
         { label: "✕ デイリーから外す", danger: true, onClick: () => removeItemWithUndo(it) },
       ]);
