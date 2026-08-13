@@ -591,6 +591,9 @@ textarea.text-input { min-height: 80px; resize: vertical; }
 /* 移動・インデントボタン（Issue #156）と ⋯ メニューの見た目は共通クラス（.mk-row-move /
    .mk-row-menu）が持つ。ここは wbs だけの都合＝隣の ⋯ との間隔だけ。 */
 .wbs-ops .mk-row-move { margin-right: 4px; }
+/* 移動ボタンは隣の ⋯ より一回り小さい。`.wbs-ops button`（0,1,1）と `.mk-row-move button`（0,1,1）は
+   同じ詳細度で、共通クラスを先に宣言しているぶん後者が負けるので、ここで明示して戻す。 */
+.wbs-ops .mk-row-move button { padding: 2px 5px; font-size: 13px; }
 .wbs-grid tr:focus { outline: 2px solid var(--color-primary); outline-offset: -2px; }
 .wbs-num { color: var(--color-steel); font-variant-numeric: tabular-nums; }
 .wbs-dep-chip { display: inline-block; font-size: 11px; padding: 0 5px; border-radius: var(--rounded-sm); background: var(--tint-sky); color: var(--color-charcoal); cursor: pointer; margin-right: 3px; }

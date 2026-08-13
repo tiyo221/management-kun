@@ -242,9 +242,10 @@
       ui.rowMenu(menuBtn, [
         { label: "↥ 先頭（朝イチ）へ移動", onClick: () => { L().moveItemToTop(it.id); render(); } },
         { label: "↧ 末尾へ移動", onClick: () => { L().moveItemToEnd(it.id); render(); } },
-        it.at
-          ? { label: "📌 開始時刻の固定を解除", onClick: () => { L().setAt(it.id, ""); refreshSchedule(); } }
-          : { label: "📌 開始時刻を固定", onClick: editPin },
+        // 固定済みの行にも「変更」を残す ── チップのクリックだけにするとポインタ無しでは
+        // 「解除してから固定し直す」しか手が無くなる（spec §10.2 キーボードで到達可能）。
+        { label: it.at ? "📌 開始時刻を変更" : "📌 開始時刻を固定", onClick: editPin },
+        it.at ? { label: "📌 固定を解除", onClick: () => { L().setAt(it.id, ""); refreshSchedule(); } } : null,
         { label: "✕ デイリーから外す", danger: true, onClick: () => removeItemWithUndo(it) },
       ]);
     });

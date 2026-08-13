@@ -182,6 +182,8 @@
   // 同時に開けるのは1つだけ（別の行で開いたら前のは閉じる）。外側クリック・Esc でも閉じる。
   // モーダル（overlay を敷いて背後を止める）ではないので openModals の台帳には載せず、
   // ここで1つだけ参照を持つ ── 代わりにビュー切替では closeAllModals から畳む（上）。
+  const ROW_MENU_W = 168; // 画面端でのはみ出し判定に使う想定幅（.mk-row-menu の min-width 156 ＋ 余白）
+  const ROW_MENU_GAP = 4; // 起点のボタンとの隙間
   let rowMenuNode = null;
   let rowMenuAnchor = null;
   function onRowMenuKey(e) { if (e.key === "Escape") closeRowMenu(); }
@@ -212,9 +214,18 @@
     });
     const rect = anchor.getBoundingClientRect();
     const vw = (typeof window !== "undefined" && window.innerWidth) || 0;
-    menu.style.top = (rect.bottom + 4) + "px";
-    menu.style.left = (vw ? Math.min(rect.left, vw - 168) : rect.left) + "px";
+    const vh = (typeof window !== "undefined" && window.innerHeight) || 0;
+    // 起点の直下に開く。左は画面右端からはみ出さない位置へ寄せる（メニュー幅＝.mk-row-menu の
+    // min-width ＋ 余白ぶん）。
+    menu.style.top = (rect.bottom + ROW_MENU_GAP) + "px";
+    menu.style.left = (vw ? Math.min(rect.left, vw - ROW_MENU_W) : rect.left) + "px";
     document.body.appendChild(menu);
+    // 画面下端に近い行では下に収まらず、項目が見切れて押せない（daily の時間割は行数が多い）。
+    // 高さは挿入しないと測れないので、置いてから測って足りなければ起点の上へ反転する。
+    const h = menu.offsetHeight || 0;
+    if (vh && h && rect.bottom + ROW_MENU_GAP + h > vh) {
+      menu.style.top = Math.max(0, rect.top - h - ROW_MENU_GAP) + "px";
+    }
     rowMenuNode = menu;
     rowMenuAnchor = anchor;
     const first = menu.children[0];
@@ -226,7 +237,8 @@
       document.addEventListener("click", closeRowMenu);
       document.addEventListener("keydown", onRowMenuKey);
     }, 0);
-    return { close: closeRowMenu };
+    // ハンドルは返さない ── 開けるのは常に1つなので、閉じる口は ui.closeRowMenu() に一本化する
+    // （「その時点で開いている1つ」を閉じるハンドルを持ち回れると、別の行のメニューを閉じられる）。
   };
   // 開いていれば閉じる（開いていなければ何もしない）。再描画・unmount の後始末から呼ぶ ──
   // 起点のボタンごと作り直されると、浮いたメニューだけが宙に残る。
