@@ -707,7 +707,7 @@ test("§2.5-4: view が部分更新で掴んだノードを unmount() で手放�
   //       （#298 で2回・#300）、レビューではなく機械で見張る。
   // 入力: 全モジュールの view.js のモジュールスコープ宣言（`root` / `…Node` / `…Host` / `…El` /
   //   `…ById` / `ui.countBadges()` の束）と、その `unmount()` 本体
-  // 期待: すべて null / {} / [] 代入か .clear() で手放されている。手放さないのが正しい持ち方
+  // 期待: すべて null / undefined / {} / [] 代入か .clear() で手放されている。手放さないのが正しい持ち方
   //   （モーダルの寿命に紐づく参照）は、宣言行に `// unmount 不要: 理由` を書いて外す。
   const bad = [];
   moduleFiles("view").forEach((f) => bad.push(...unmountLeaksOf(f.rel, read(f.rel))));
@@ -718,17 +718,24 @@ test("§2.5-4: ノード参照の走査が痩せていない（無効化の番�
   // 観点: 名前で拾う検査なので、拾い方が壊れると「1件も見つからない＝違反ゼロ」で静かに緑になる。
   //       実測（12 view で 30 件前後）に対して下限を置き、対象ファイルの本数も併せて固定する。
   // 入力: 全モジュールの view.js
-  // 期待: 走査対象が10本以上、拾えたノード参照が合計25件以上、unmount() を解析できない view がゼロ
+  // 期待: 走査対象が10本以上、拾えたノード参照が合計25件以上、unmount() を解析できない view がゼロ。
+  //   **合計だけでなく view ごとにも1件以上を要求する** ── 合計の下限は、1本が丸ごと走査から
+  //   外れても他の本数で埋まってしまう（#318 で塞いだのと同じ形の穴）。全 view が器の `root` を
+  //   持つので、0件になるのは拾い方が壊れたときだけ。
   const views = moduleFiles("view");
   assert(views.length >= 10, "view.js の走査対象が少ない: " + views.length);
   let refs = 0;
   const noUnmount = [];
+  const noRefs = [];
   views.forEach((f) => {
     const src = read(f.rel);
-    refs += nodeRefsOf(src).length;
+    const n = nodeRefsOf(src).length;
+    refs += n;
+    if (n === 0) noRefs.push(f.rel);
     if (unmountBodyOf(src) === null) noUnmount.push(f.rel);
   });
   assert(refs >= 25, "ノード参照を拾えていない（拾い方の破損を疑う）: " + refs);
+  eq(noRefs, [], "ノード参照を1件も拾えない view（器の root すら拾えていない）");
   eq(noUnmount, [], "unmount() を解析できない view");
 });
 
@@ -756,6 +763,7 @@ test("§2.5-4: 手放し漏れの検出器が実際に違反へ当たる（無�
   eq(leaks(wrap(["const badges = ui.countBadges();"], "root = null;")),
     ["badges を unmount() で手放していない"], "countBadges の束を手放していない");
   eq(leaks(wrap(["let sideById = {};"], "sideById = {};")), [], "{} 代入で手放している");
+  eq(leaks(wrap(["let tailNode = null;"], "tailNode = undefined;")), [], "undefined 代入で手放している");
   eq(leaks(wrap(["let rowEls = [];"], "rowEls = [];")), [], "[] 代入で手放している");
   eq(leaks(wrap(["let cardNode = null; // unmount 不要: モーダルの寿命に紐づき onClose で手放す"], "")),
     [], "理由付きの逃げ道は外れる");
