@@ -263,6 +263,54 @@ test("spec §5: 各モジュールに個別仕様 spec/modules/<id>.md があり
   });
 });
 
+/* `## 主操作`（CONVENTIONS §2.5-1）がまだ書かれていないモジュール。§5 手順5 が
+   「既存モジュールへの遡及記入は求めない（触ったときに書き足す）」としているため、
+   検査の導入時点の欠落はここに明示して対象から外す（埋めるのは #324）。
+   **含有ではなく厳密一致**で突き合わせる ── 「この一覧に載っていれば通す」だと、
+   文面を埋めたあとに行を消し忘れた例外が黙って居座り、次の新規モジュールで同じ穴を通す。 */
+const MAIN_ACTION_PENDING = ["dashboard", "resource", "wbs"];
+
+/** md に `## 主操作` の節があり、中身が空でないか。見出しだけ置いた素通りを通さない。 */
+function hasMainActionSection(md) {
+  const lines = stripCodeFences(md).body.split("\n");
+  // 見出しは `## 主操作`（後ろに補足の丸括弧は許す）。`## 主操作の考え方` のような別節では満たさない。
+  const idx = lines.findIndex((l) => /^##[ \t]+主操作[ \t]*(?:（[^\n]*）)?[ \t]*$/.test(l));
+  if (idx < 0) return false;
+  for (let i = idx + 1; i < lines.length; i++) {
+    if (/^#{1,6}[ \t]/.test(lines[i])) break; // 次の見出しまでが節の中身
+    if (lines[i].trim() !== "") return true;
+  }
+  return false;
+}
+
+test("spec: 各モジュールの個別仕様に `## 主操作` がある（CONVENTIONS §2.5-1・#322）", () => {
+  // 観点: 「一番多く繰り返す操作を1つ決めて個別仕様に明記する」（§2.5-1）は、レビューで毎回
+  //       初めて見つけていた型（#314 / #321）。md を読めば機械で判定できるのでここへ落とす。
+  // 入力: manifest カタログの id 集合と、その spec/modules/<id>.md の見出し
+  // 期待: `## 主操作` の節があり中身が空でない。導入時点の欠落（MAIN_ACTION_PENDING）だけが
+  //   例外で、その集合と**厳密に一致**する（埋めたら一覧から消す＝例外が残り続けない）。
+  //   退役モジュールの記録 spec/modules/workload.md（#167）はカタログに無いので対象外。
+  const missing = sorted(implementedModules()).filter((id) => {
+    const abs = path.join(rootDir, "spec/modules/" + id + ".md");
+    if (!fs.existsSync(abs)) return true; // ファイル自体の欠落は上の検査が名指しするが、ここでも欠落扱い
+    return !hasMainActionSection(fs.readFileSync(abs, "utf8"));
+  });
+  eq(missing, MAIN_ACTION_PENDING.slice().sort(),
+    "`## 主操作` の欠落（埋めたら MAIN_ACTION_PENDING からも消す）");
+});
+
+test("hasMainActionSection(): 見出しだけ・別節・フェンス内を満たしと見なさない（#322）", () => {
+  // 観点: 検査の土台。ここが緩むと「見出しを置くだけ」「説明文に書くだけ」で通り、番人の意味が消える。
+  // 入力: 中身のある節／見出しだけの節／別名の節／コードフェンス内の見出し／補足付きの見出し
+  // 期待: 中身のある節と補足付き見出しだけが true
+  assert(hasMainActionSection("## 主操作\n\nInbox の仕分け。\n"), "中身のある節");
+  assert(hasMainActionSection("## 主操作（1アクション）\n本文\n"), "丸括弧の補足付き見出し");
+  assert(!hasMainActionSection("## 主操作\n\n## 次の節\n本文\n"), "見出しだけで中身が無い");
+  assert(!hasMainActionSection("## 主操作の考え方\n本文\n"), "別名の節では満たさない");
+  assert(!hasMainActionSection("```\n## 主操作\n本文\n```\n"), "フェンス内の見出しは数えない");
+  assert(!hasMainActionSection("### 主操作\n本文\n"), "見出しレベルが違う");
+});
+
 test("md の相対リンクがリンク切れしていない（#241）", () => {
   // 観点: ドキュメント間の相対リンクが、ファイルの移動・改名で切れていないか
   // 入力: リポジトリ内の全 .md（コードフェンス内を除く）の `](path)` 形式リンク
