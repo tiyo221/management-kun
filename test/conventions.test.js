@@ -591,6 +591,209 @@ test("§2.5-3: undo 退避を持つ logic に forgetUndo がある（#312）", (
   eq(bad, [], "undo 退避を持つのに forgetUndo が無い");
 });
 
+// ---- §2.5-4 部分更新で掴んだノードの手放し ----
+
+/* 部分更新のために view のモジュールスコープで保持しているノード参照を拾う（#322）。
+   §2.5-4 の「部分更新のために掴んだノードは `unmount()` で全部手放す」は、レビューで
+   繰り返し初めて見つけていた型（#298 で2回・#300）なので静的検査へ落とす。
+
+   **拾い方**は名前で決める（値が DOM ノードかは静的には分からないため）。このリポジトリの
+   view は掴んだノードを `…Node` / `…Host` / `…El` / `…ById`（id→ノードの対応表）で揃えて
+   命名しており、そこに `root`（器そのもの）と `ui.countBadges()` の束を足したものが対象。
+   **走査はモジュールスコープ（IIFE 直下＝行頭2スペース）の宣言だけ**に掛ける ── 関数の中の
+   ローカル変数はその関数を抜ければ消えるので、手放し漏れという概念が無い。
+
+   **逃げ道**は宣言行の行末コメントに `unmount 不要:` ＋理由を書くこと。`unmount()` で手放すのが
+   **誤り**になる持ち方が実在するため ── モーダルの寿命に紐づく参照は、シェルの一括クローズが
+   通す `onClose` で自分を手放す（#265。modules/daily/view.js の `_modal` がその形。あちらは
+   名前が上のパターンに掛からないので現に印は要らないが、`…Node` と名付けた瞬間に要る）。
+   理由を必須にしているのは、無言で外せる印にすると検査ごと空洞化するから。 */
+/* 接尾辞は**このリポジトリに実例のある命名だけ**を挙げる（`Elem` のような実例の無い綴りを
+   足すと、一度も当たらない枝が増えて発火確認の意味が薄れる・#312）。ここを増やしたら
+   下のトリップワイヤにも1行足す（全ての枝を発火させる）。 */
+const NODE_REF_NAME = /(?:Nodes?|Hosts?|Els?|Elements?|ById)$/;
+const EXEMPT_MARK = /unmount 不要[:：][ \t]*\S/;
+
+/** src（view.js）のモジュールスコープにあるノード参照の宣言 [{ name, line, exempt }]。 */
+function nodeRefsOf(src) {
+  const parts = split(src);
+  const codeLines = parts.code.split(/\r?\n/); // 文字列・コメントを落とした姿で宣言を探す
+  const textLines = parts.text.split(/\r?\n/); // コメントだけが落ちた姿（逃げ道の印の位置決めに使う）
+  const rawLines = src.split(/\r?\n/);
+  const out = [];
+  codeLines.forEach((line, i) => {
+    // 初期化子は省略可（`let listHost;`）、宣言子は複数可（`let a = null, b = null;`）。
+    // `=` 必須・単一宣言子だけを見ると、どちらも自然に書かれる形なのに素通りする。
+    const m = /^ {2}(?:let|const)[ \t]+([A-Za-z_$][\w$]*[^\n]*?);?[ \t]*$/.exec(line);
+    if (!m) return;
+    // 逃げ道の印は「本当にコメントの中にある」ことまで見る。text 側（コメントだけが落ちた姿）で
+    // 空白になっている位置＝コメントなので、そこの生テキストだけを見る。生行へ素で掛けると
+    // 文字列リテラルに書いた印でも検査が外れる ── 検査を外す唯一の口をそこまで緩くしない。
+    const raw = rawLines[i] || "";
+    const text = textLines[i] || "";
+    const comment = raw.split("").filter((_, k) => text[k] === " ").join("");
+    const exempt = EXEMPT_MARK.test(comment);
+    // 宣言子ごとに見る。分割はトップレベルのカンマ（初期化子の中の `,` を割らない）で行う。
+    splitDeclarators(m[1]).forEach((d) => {
+      const nm = /^([A-Za-z_$][\w$]*)[ \t]*(?:=[ \t]*([\s\S]*))?$/.exec(d.trim());
+      if (!nm) return;
+      const name = nm[1];
+      const init = nm[2] || "";
+      if (!(name === "root" || NODE_REF_NAME.test(name) || /\bcountBadges\s*\(/.test(init))) return;
+      out.push({ name, line: i + 1, exempt });
+    });
+  });
+  return out;
+}
+
+/** 宣言子リストをトップレベルのカンマで分割する（括弧・角括弧の中のカンマでは割らない）。 */
+function splitDeclarators(s) {
+  const out = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of s) {
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") depth--;
+    if (ch === "," && depth === 0) { out.push(cur); cur = ""; continue; }
+    cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+/* src の `unmount()` の本体（`{` の内側）を code の姿で返す。見つからなければ null。
+   本体のテキストしか見ないので、`unmount() { reset(); }` のようにヘルパへ委ねる書き方は
+   偽陽性になる（現状そう書いている view は無い）。そうしたくなったら、逃げ道
+   （`unmount 不要:` ＝「手放さないのが正しい」の意味）を曲げて使わず、この関数の側を直す。 */
+function unmountBodyOf(src) {
+  const code = codeOf(src);
+  const m = /\bunmount[ \t]*(?:\([^)]*\)|:[ \t]*function[ \t]*\([^)]*\))[ \t]*\{/.exec(code);
+  if (!m) return null;
+  let depth = 1;
+  let i = m.index + m[0].length;
+  const start = i;
+  while (i < code.length && depth > 0) {
+    if (code[i] === "{") depth++;
+    else if (code[i] === "}") depth--;
+    i++;
+  }
+  return depth === 0 ? code.slice(start, i - 1) : null; // 閉じない＝解析できていない
+}
+
+/* unmount 本体で name を手放しているか（null / {} / [] への代入、または .clear()）。
+   左境界に `.` を含めるのが肝 ── `\b` だけだと `state.root = null;` が `root` の手放しとして
+   通り、モジュールスコープの参照が残ったまま緑になる（偽陰性）。 */
+function releasesRef(body, name) {
+  const n = name.replace(/\$/g, "\\$");
+  const left = "(?:^|[^\\w$.])";
+  return new RegExp(left + n + "[ \\t]*=[ \\t]*(?:null|undefined|\\{\\s*\\}|\\[\\s*\\])").test(body)
+    || new RegExp(left + n + "\\.clear\\s*\\(").test(body);
+}
+
+/** view.js 1本を検査して違反メッセージの配列を返す。**本番と発火確認はこの関数を共有する。** */
+function unmountLeaksOf(rel, src) {
+  const refs = nodeRefsOf(src).filter((r) => !r.exempt);
+  if (!refs.length) return [];
+  const body = unmountBodyOf(src);
+  // ノードを掴んでいるのに unmount が無い／解析できないのは、素通りさせず違反として出す。
+  if (body === null) return [rel + " → ノード参照があるのに unmount() を解析できない"];
+  return refs.filter((r) => !releasesRef(body, r.name))
+    .map((r) => rel + ":" + r.line + " → " + r.name + " を unmount() で手放していない");
+}
+
+test("§2.5-4: view が部分更新で掴んだノードを unmount() で手放す（#322）", () => {
+  // 観点: 掴んだノードを1つでも残すと、インライン編集中にモジュールを切り替えたとき blur の確定が
+  //       走り、画面に無いノードへ書き込む（§2.5-4）。ノードを1つ増やすたびに再発する型なので
+  //       （#298 で2回・#300）、レビューではなく機械で見張る。
+  // 入力: 全モジュールの view.js のモジュールスコープ宣言（`root` / `…Node` / `…Host` / `…El` /
+  //   `…ById` / `ui.countBadges()` の束）と、その `unmount()` 本体
+  // 期待: すべて null / undefined / {} / [] 代入か .clear() で手放されている。手放さないのが正しい持ち方
+  //   （モーダルの寿命に紐づく参照）は、宣言行に `// unmount 不要: 理由` を書いて外す。
+  const bad = [];
+  moduleFiles("view").forEach((f) => bad.push(...unmountLeaksOf(f.rel, read(f.rel))));
+  eq(bad, [], "部分更新のノードを手放していない");
+});
+
+test("§2.5-4: ノード参照の走査が痩せていない（無効化の番人・#322）", () => {
+  // 観点: 名前で拾う検査なので、拾い方が壊れると「1件も見つからない＝違反ゼロ」で静かに緑になる。
+  //       実測（12 view で 30 件前後）に対して下限を置き、対象ファイルの本数も併せて固定する。
+  // 入力: 全モジュールの view.js
+  // 期待: 走査対象が10本以上、拾えたノード参照が合計25件以上、unmount() を解析できない view がゼロ。
+  //   **合計だけでなく view ごとにも1件以上を要求する** ── 合計の下限は、1本が丸ごと走査から
+  //   外れても他の本数で埋まってしまう（#318 で塞いだのと同じ形の穴）。全 view が器の `root` を
+  //   持つので、0件になるのは拾い方が壊れたときだけ。
+  const views = moduleFiles("view");
+  assert(views.length >= 10, "view.js の走査対象が少ない: " + views.length);
+  let refs = 0;
+  const noUnmount = [];
+  const noRefs = [];
+  views.forEach((f) => {
+    const src = read(f.rel);
+    const n = nodeRefsOf(src).length;
+    refs += n;
+    if (n === 0) noRefs.push(f.rel);
+    if (unmountBodyOf(src) === null) noUnmount.push(f.rel);
+  });
+  assert(refs >= 25, "ノード参照を拾えていない（拾い方の破損を疑う）: " + refs);
+  eq(noRefs, [], "ノード参照を1件も拾えない view（器の root すら拾えていない）");
+  eq(noUnmount, [], "unmount() を解析できない view");
+});
+
+test("§2.5-4: 手放し漏れの検出器が実際に違反へ当たる（無検出で緑になる罠を塞ぐ・#322）", () => {
+  // 観点: 上の検査は「違反ゼロ」を主張するものなので、検出器が何にも当たらなくなっても同じ緑になる。
+  //       合成した違反コードで発火を固定する。**本番と同じ unmountLeaksOf() を通す**（正規表現を
+  //       ここへ書き写すと、本番にはあるが発火確認されていない枝が静かに増える・#312 レビュー）。
+  // 入力: 手放し漏れ／各種の手放し方／逃げ道／unmount 欠落／関数内ローカルの合成ソース
+  // 期待: 漏れているものだけが違反として出る
+  const wrap = (decls, unmountBody) => [
+    "(function () {", '  "use strict";',
+    ...decls.map((d) => "  " + d),
+    "  MK.registerModule(\"x\", {",
+    "    mount(c) {},",
+    "    unmount() { " + unmountBody + " },",
+    "  });", "})();",
+  ].join("\n");
+  const leaks = (src) => unmountLeaksOf("x.js", src).map((s) => s.replace(/^x\.js:\d+ → /, ""));
+
+  eq(leaks(wrap(["let listHost = null;"], "root = null;")),
+    ["listHost を unmount() で手放していない"], "掴んだ器を手放していない");
+  eq(leaks(wrap(["let root = null;", "let statsNode = null;"], "root = null; statsNode = null;")),
+    [], "null 代入で手放している");
+  eq(leaks(wrap(["const badges = ui.countBadges();"], "badges.clear();")), [], ".clear() で手放している");
+  eq(leaks(wrap(["const badges = ui.countBadges();"], "root = null;")),
+    ["badges を unmount() で手放していない"], "countBadges の束を手放していない");
+  eq(leaks(wrap(["let sideById = {};"], "sideById = {};")), [], "{} 代入で手放している");
+  eq(leaks(wrap(["let tailNode = null;"], "tailNode = undefined;")), [], "undefined 代入で手放している");
+  eq(leaks(wrap(["let rowEls = [];"], "rowEls = [];")), [], "[] 代入で手放している");
+  eq(leaks(wrap(["let cardNode = null; // unmount 不要: モーダルの寿命に紐づき onClose で手放す"], "")),
+    [], "理由付きの逃げ道は外れる");
+  eq(leaks(wrap(["let cardNode = null; // unmount 不要"], "")),
+    ["cardNode を unmount() で手放していない"], "理由の無い逃げ道は効かない");
+  eq(leaks(wrap(['let cardNode = "unmount 不要: 文字列の中";'], "")),
+    ["cardNode を unmount() で手放していない"], "文字列の中の印では外れない");
+  eq(leaks(wrap(["let count = 0;", "let filter = \"all\";"], "")), [], "ノードでない状態は対象外");
+  eq(leaks(wrap(["let listHost;"], "")),
+    ["listHost を unmount() で手放していない"], "初期化子の無い宣言も拾う");
+  eq(leaks(wrap(["let root = null, listHost = null;"], "root = null;")),
+    ["listHost を unmount() で手放していない"], "複数宣言子の2つ目以降も拾う");
+  eq(leaks(wrap(["let rows = new Map(), tailNode = null;"], "")),
+    ["tailNode を unmount() で手放していない"], "初期化子の中のカンマで宣言子を割らない");
+  eq(leaks(wrap(["let listHost = null;"], "state.listHost = null;")),
+    ["listHost を unmount() で手放していない"], "別オブジェクトのプロパティ代入は手放しでない");
+  // NODE_REF_NAME の枝を全部発火させる（本番にはあるが発火確認されていない枝を作らない・#312）。
+  ["barNode", "barNodes", "barHost", "barHosts", "barEl", "barEls", "barElement", "barElements", "barById"]
+    .forEach((name) => eq(leaks(wrap(["let " + name + " = null;"], "")),
+      [name + " を unmount() で手放していない"], "接尾辞の枝が発火する: " + name));
+  eq(leaks("(function () {\n  function f() {\n    let listHost = null;\n  }\n})();"),
+    [], "関数内のローカルは対象外");
+  eq(unmountLeaksOf("x.js", "(function () {\n  let listHost = null;\n})();"),
+    ["x.js → ノード参照があるのに unmount() を解析できない"], "unmount が無ければ違反");
+  // コメント・文字列の中の宣言らしき記述で誤爆しない（codeOf の土台に載っていることの確認）。
+  eq(leaks(wrap(["let root = null;"], "root = null;")).concat(
+    leaks("(function () {\n  // let listHost = null;\n  const s = `  let barNode = null;`;\n})();")),
+    [], "コメント・文字列の中は宣言と見なさない");
+});
+
 // ---- §1.1.1-(2) 振る舞いがテストで固定されている ----
 
 test("§1.1.1-(2): 全モジュールに test/<id>.test.js がある（#312）", () => {

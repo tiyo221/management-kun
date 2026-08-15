@@ -319,7 +319,10 @@
       if (!document.getElementById("mk-people-list")) document.body.appendChild(el("datalist", { id: "mk-people-list" }));
       refreshPeopleDatalist(); render();
     },
-    unmount() { ui.closeRowMenu(); root = null; statsNode = null; },
+    // ガントの参照（ganttHost / ganttMeta）は対で持つので対で捨てる（§2.5-4）。再訪時は mount →
+    // render が必ず両方を差し替える（gantt なら新ノード・table なら null）ので機能不全は起きないが、
+    // 離れている間だけ画面に無いノードを掴み続ける状態を残さない。
+    unmount() { ui.closeRowMenu(); root = null; statsNode = null; ganttHost = null; ganttMeta = null; },
     summary() { return L().summary(); },
     // 全 PJ 横断（§3.7.4）: 検索・人単位サマリーは表示中 PJ に限らず全 PJ を走査する。
     searchItems() { return L().searchItems(); },
