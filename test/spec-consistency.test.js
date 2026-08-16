@@ -268,7 +268,7 @@ test("spec §5: 各モジュールに個別仕様 spec/modules/<id>.md があり
    検査の導入時点の欠落はここに明示して対象から外す（埋めるのは #324）。
    **含有ではなく厳密一致**で突き合わせる ── 「この一覧に載っていれば通す」だと、
    文面を埋めたあとに行を消し忘れた例外が黙って居座り、次の新規モジュールで同じ穴を通す。 */
-const MAIN_ACTION_PENDING = ["dashboard", "resource", "wbs"];
+const MAIN_ACTION_PENDING = ["resource", "wbs"];
 
 /** md に `## 主操作` の節があり、中身が空でないか。見出しだけ置いた素通りを通さない。 */
 function hasMainActionSection(md) {
