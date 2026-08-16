@@ -179,6 +179,8 @@
   }
   /**
    * 項目の由来 todo タスクを引く。todo 由来でない・todo 未搭載・実体が消えている場合は null。
+   * 線形探索のまま（索引・byId マップは持たない）。性能のためだけに daily↔todo の結合と
+   * 同期対象を増やさない判断で、再最適化は実害が観測されたときに検討する（spec.md §9.7）。
    * @param {DailyItem} it - 対象項目
    * @returns {Object|null} 由来の todo タスク（無ければ null）
    */
