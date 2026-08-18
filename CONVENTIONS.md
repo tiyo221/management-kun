@@ -129,7 +129,7 @@ modules/
 - `uid(prefix)` / `nowISO()` / `todayISO()` / `fmtDate(d)` / `addDays(iso,n)` / `daysBetween(a,b)` / `mondayOf(iso)`
 - `normalizeKey(name)`（名寄せ照合キー）/ `escapeHtml(s)`
 - `mergeById(current, incoming)`（id 一致でアップサートした配列を返す純関数。importData の merge 分岐で使う。Issue #186）
-- `statusSet(statuses, {fallback, byLabel})→{ label(key), normalize(v), counts(items, getKey) }`（`[{key,label}]` 定義から「ラベル解決 / 未知値の寄せ / 件数集計」を作る。ステータスを持つモジュール・マスタはこれを使い、3点を各自で書かない。追加キーや絞り込みは呼び出し側で足す。Issue #188）
+- `statusSet(statuses, {fallback, byLabel})→{ label(key), normalize(v), counts(items, getKey) }`（`[{key,label}]` 形の**列挙**（ステータスに限らず種別・方向・リング等も含む。例: `metrics` の `KINDS` / `DIRECTIONS`、`techstack` の `RINGS`）から「ラベル解決 / 未知値の寄せ / 件数集計」を作る。列挙を持つモジュール・マスタはこれを使い、3点を各自で書かない。追加キーや絞り込みは呼び出し側で足す。Issue #188）
 
 ### データ層（logic から使う）
 - `MK.store.scope("module:<id>")` → `{ get(), set(v) }`。破損時も個別 try/parse で他へ波及させない。
